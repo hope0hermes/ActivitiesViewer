@@ -1,0 +1,14 @@
+# Commit Linting Workflow
+#
+# Validates that commit messages follow conventional commit format.
+# Runs only on pull requests to ensure clean commit history.
+
+name: Lint Commit Messages
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  commitlint:
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-commitlint.yml@main

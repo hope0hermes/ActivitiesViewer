@@ -1,0 +1,20 @@
+# Create Release Workflow
+#
+# Creates GitHub releases from version tags.
+# Extracts changelog for the release and creates release notes.
+#
+# Triggers: Push to main (after version bump PR is merged)
+# Actions:
+#   - Detects version changes
+#   - Creates GitHub release with changelog
+#   - Tags the release
+
+name: Create Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  create-release:
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-create-release.yml@main

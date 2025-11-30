@@ -1,0 +1,26 @@
+# Release Workflow
+#
+# Automated semantic versioning and changelog management.
+# Analyzes conventional commits and creates version bump PRs.
+#
+# Triggers: Every push to main
+# Actions:
+#   - Analyzes commits since last version
+#   - Determines version bump type (major/minor/patch)
+#   - Creates PR with version bump and changelog update
+#
+# Requires: PAT_TOKEN secret for PR creation
+
+name: Release
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  release:
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-release.yml@main
+    with:
+      package-path: "src/activities_viewer/__init__.py"
+    secrets:
+      PAT_TOKEN: ${{ secrets.PAT_TOKEN }}
