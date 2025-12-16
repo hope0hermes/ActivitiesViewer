@@ -14,6 +14,7 @@ from activities_viewer.pages.components.activity_detail_components import (
     render_overview_tab,
     render_power_hr_tab,
     render_durability_tab,
+    render_training_load_tab,
 )
 
 st.set_page_config(page_title="Activity Detail", page_icon="🚴", layout="wide")
@@ -106,6 +107,47 @@ HELP_TEXTS = {
         "• Pyramidal: Z1 > Z2 > Z3\n"
         "• Threshold: Z2 dominant"
     ),
+    # Longitudinal Training Load Metrics
+    "chronic_training_load": (
+        "CTL - Chronic Training Load. 42-day exponential moving average of TSS. "
+        "Represents aerobic fitness/adaptation level. Higher values indicate accumulated training stress and fitness gains."
+    ),
+    "acute_training_load": (
+        "ATL - Acute Training Load. 7-day exponential moving average of TSS. "
+        "Represents short-term fatigue/stress. High ATL relative to CTL indicates overtraining risk."
+    ),
+    "training_stress_balance": (
+        "TSB = CTL - ATL. Balance between fitness and fatigue:\n"
+        "• >20: Well-rested, good for intensity\n"
+        "• 0-20: Optimal training zone\n"
+        "• -10 to 0: Productive training, elevated fatigue\n"
+        "• -50 to -10: Overreached, needs recovery"
+    ),
+    "acwr": (
+        "ACWR - Acute:Chronic Workload Ratio = ATL / CTL. Injury risk indicator:\n"
+        "• 0.8-1.3: Optimal for adaptation\n"
+        "• >1.5: High injury/overtraining risk\n"
+        "• <0.5: Insufficient training stimulus"
+    ),
+    # Critical Power Metrics
+    "cp": (
+        "Critical Power (watts). Maximum sustainable power for extended efforts (>10min). "
+        "Asymptote of power-duration curve. Computed from 90-day rolling power curve of this activity."
+    ),
+    "w_prime": (
+        "W-prime (joules). Anaerobic work capacity above critical power. "
+        "Depletes during intense efforts, recovers during rest. Computed from 90-day rolling power curve."
+    ),
+    "cp_r_squared": (
+        "R² of CP model fit (0-1). Goodness of power-duration curve fit:\n"
+        "• >0.95: Excellent fit\n"
+        "• 0.85-0.95: Good fit\n"
+        "• <0.85: Consider model quality"
+    ),
+    "aei": (
+        "AEI - Anaerobic Energy Index (J/kg). W-prime normalized to body weight. "
+        "Higher = greater anaerobic capacity per kg. Compare over time for phenotype shifts."
+    ),
 }
 
 # Helper functions (kept from original, needed by components)
@@ -157,8 +199,8 @@ def main():
     st.divider()
 
     # Render tabs with components
-    tab_overview, tab_power_hr, tab_durability = st.tabs(
-        ["🗺️ Overview", "⚡ Power & Heart Rate", "🔋 Durability & Fatigue"]
+    tab_overview, tab_power_hr, tab_durability, tab_training = st.tabs(
+        ["🗺️ Overview", "⚡ Power & Heart Rate", "🔋 Durability & Fatigue", "📊 Training Load & Power Profile"]
     )
 
     with tab_overview:
@@ -169,6 +211,9 @@ def main():
 
     with tab_durability:
         render_durability_tab(activity, metric_view, HELP_TEXTS)
+
+    with tab_training:
+        render_training_load_tab(activity, metric_view, HELP_TEXTS)
 
 
 if __name__ == "__main__":

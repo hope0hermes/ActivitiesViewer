@@ -73,11 +73,12 @@ def get_metric(df: pd.DataFrame, column: str, agg: str = "sum") -> float:
         return series.max()
     return 0
 
-def calculate_weekly_tid(df: pd.DataFrame, prefix: str = "moving_") -> dict:
+def calculate_weekly_tid(df: pd.DataFrame, metric_view: str = "Moving Time") -> dict:
     """Calculate time-weighted TID across multiple activities."""
-    z1_col = f"{prefix}power_tid_z1_percentage"
-    z2_col = f"{prefix}power_tid_z2_percentage"
-    z3_col = f"{prefix}power_tid_z3_percentage"
+    # Note: Column names no longer have prefixes (raw and moving are in separate files)
+    z1_col = "power_tid_z1_percentage"
+    z2_col = "power_tid_z2_percentage"
+    z3_col = "power_tid_z3_percentage"
 
     if not all(col in df.columns for col in [z1_col, z2_col, z3_col, "moving_time"]):
         return {"z1": 0, "z2": 0, "z3": 0}
@@ -111,7 +112,14 @@ def main():
     service: ActivityService = st.session_state.activity_service
     settings = st.session_state.get("settings", None)
 
-    # Get all activities
+    # Week selector (includes metric_view selector)
+    available_weeks = []
+    available_sports = []
+    selected_week = None
+    metric_view = "Moving Time"
+    selected_sports = []
+
+    # Get all activities (will be filtered by metric_view later in render function)
     df_activities = service.get_all_activities()
     if df_activities.empty:
         st.warning("No activities found.")
@@ -137,6 +145,18 @@ def main():
     # Week selector
     selected_week, metric_view, selected_sports = render_week_selector(
         available_weeks, available_sports
+    )
+
+    # Reload activities with selected metric_view
+    df_activities = service.get_all_activities(metric_view)
+    df_activities["start_date_local"] = pd.to_datetime(
+        df_activities["start_date_local"], utc=True
+    )
+    df_activities["week_start"] = (
+        df_activities["start_date_local"]
+        .dt.tz_localize(None)
+        .dt.to_period("W-MON")
+        .dt.start_time
     )
 
     # Filter data for selected week

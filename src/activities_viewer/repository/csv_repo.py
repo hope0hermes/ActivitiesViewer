@@ -12,11 +12,10 @@ from activities_viewer.domain.models import Activity, YearSummary
 from activities_viewer.repository.base import ActivityRepository
 
 
-@st.cache_data(ttl=3600)
 def _load_activities_df(file_path: Path) -> pd.DataFrame:
     """
     Load and preprocess the activities CSV.
-    Cached by Streamlit to avoid reloading on every interaction.
+    No caching - loads fresh from disk on every call.
     """
     if not file_path.exists():
         raise FileNotFoundError(f"Activities file not found: {file_path}")
@@ -31,7 +30,8 @@ def _load_activities_df(file_path: Path) -> pd.DataFrame:
     # Ensure numeric columns are correct types (handling potential NaNs)
     numeric_cols = [
         'distance', 'moving_time', 'elapsed_time', 'total_elevation_gain',
-        'moving_normalized_power', 'moving_training_stress_score'
+        'average_watts', 'normalized_power', 'training_stress_score',
+        'chronic_training_load', 'acute_training_load', 'training_stress_balance'
     ]
     for col in numeric_cols:
         if col in df.columns:
@@ -45,29 +45,119 @@ def _load_activities_df(file_path: Path) -> pd.DataFrame:
 
 class CSVActivityRepository(ActivityRepository):
     """
-    Repository that reads from a local CSV file (exported by StravaAnalyzer).
+    Repository that reads from local CSV files (exported by StravaAnalyzer).
+    Supports both new dual-file format (raw/moving) and legacy single-file format.
     """
 
-    def __init__(self, file_path: Path):
-        self.file_path = file_path
-        # We load the DF lazily or on init.
-        # Since _load_activities_df is cached, calling it here is cheap after first run.
-        self._df = _load_activities_df(self.file_path)
+    def __init__(self, raw_file_path: Path, moving_file_path: Path | None = None):
+        """Initialize with dual-file paths (new format) or fallback to single file (legacy)."""
+        self.raw_file_path = raw_file_path
+        self.moving_file_path = moving_file_path
+
+        # Store file paths but reload data on each access (no instance-level caching)
+        # This ensures fresh data is loaded even when session_state persists the repository
+
+    def _ensure_data_loaded(self) -> None:
+        """Load data if not already loaded in this request."""
+        # Load raw data (or fallback to enriched file if moving not provided)
+        self._df_raw = _load_activities_df(self.raw_file_path)
+
+        # Load moving data if available
+        if self.moving_file_path and self.moving_file_path.exists():
+            self._df_moving = _load_activities_df(self.moving_file_path)
+        else:
+            # Fallback: use raw data as moving data if not available
+            self._df_moving = self._df_raw.copy()
 
     def get_activity(self, activity_id: int) -> Optional[Activity]:
-        row = self._df[self._df['id'] == activity_id]
+        """Get activity from raw dataset (default)."""
+        self._ensure_data_loaded()
+        row = self._df_raw[self._df_raw['id'] == activity_id]
         if row.empty:
             return None
 
         return Activity(**row.iloc[0].to_dict())
+
+    def get_activity_raw(self, activity_id: int) -> Optional[Activity]:
+        """Get activity from raw dataset (all data points)."""
+        self._ensure_data_loaded()
+        row = self._df_raw[self._df_raw['id'] == activity_id]
+        if row.empty:
+            return None
+
+        return Activity(**row.iloc[0].to_dict())
+
+    def get_activity_moving(self, activity_id: int) -> Optional[Activity]:
+        """Get activity from moving dataset (motion only)."""
+        self._ensure_data_loaded()
+        row = self._df_moving[self._df_moving['id'] == activity_id]
+        if row.empty:
+            return None
+
+        return Activity(**row.iloc[0].to_dict())
+
+    @property
+    def all_activities(self) -> List[Activity]:
+        """Get all activities from raw dataset."""
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_raw)
+
+    @property
+    def all_activities_raw(self) -> List[Activity]:
+        """Get all activities from raw dataset."""
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_raw)
+
+    @property
+    def all_activities_moving(self) -> List[Activity]:
+        """Get all activities from moving dataset."""
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_moving)
 
     def get_activities(
         self,
         start_date: Optional[date] = None,
         end_date: Optional[date] = None
     ) -> List[Activity]:
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_raw, start_date, end_date)
 
-        df_filtered = self._df
+    def get_activities_raw(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> List[Activity]:
+        """Get activities from raw (all data points) dataset."""
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_raw, start_date, end_date)
+
+    def get_activities_moving(
+        self,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> List[Activity]:
+        """Get activities from moving (motion only) dataset."""
+        self._ensure_data_loaded()
+        return self._get_activities_from_df(self._df_moving, start_date, end_date)
+
+    def get_dataframe_raw(self) -> pd.DataFrame:
+        """Get raw activities dataframe (all data points)."""
+        self._ensure_data_loaded()
+        return self._df_raw.copy()
+
+    def get_dataframe_moving(self) -> pd.DataFrame:
+        """Get moving activities dataframe (motion only)."""
+        self._ensure_data_loaded()
+        return self._df_moving.copy()
+
+    def _get_activities_from_df(
+        self,
+        df: pd.DataFrame,
+        start_date: Optional[date] = None,
+        end_date: Optional[date] = None
+    ) -> List[Activity]:
+        """Helper to get activities from a specific dataframe."""
+        df_filtered = df
 
         if start_date:
             df_filtered = df_filtered[df_filtered['start_date_local'].dt.date >= start_date]
@@ -81,7 +171,8 @@ class CSVActivityRepository(ActivityRepository):
         return [Activity(**record) for record in df_filtered.to_dict('records')]
 
     def get_year_summary(self, year: int) -> YearSummary:
-        df_year = self._df[self._df['start_date_local'].dt.year == year]
+        self._ensure_data_loaded()
+        df_year = self._df_raw[self._df_raw['start_date_local'].dt.year == year]
 
         if df_year.empty:
             return YearSummary(
@@ -98,8 +189,8 @@ class CSVActivityRepository(ActivityRepository):
             total_time=df_year['moving_time'].sum(),
             total_elevation=df_year['total_elevation_gain'].sum(),
             activity_count=len(df_year),
-            avg_power=df_year['moving_normalized_power'].mean(),
-            total_tss=df_year['moving_training_stress_score'].sum()
+            avg_power=df_year['normalized_power'].mean() if 'normalized_power' in df_year.columns else None,
+            total_tss=df_year['training_stress_score'].sum() if 'training_stress_score' in df_year.columns else None
         )
 
     def get_activity_stream(self, activity_id: int) -> pd.DataFrame:
@@ -107,16 +198,9 @@ class CSVActivityRepository(ActivityRepository):
         Load stream data for a specific activity.
         Assumes streams are stored in a 'Streams' directory relative to the data file.
         """
-        # Assuming file_path is .../data_enriched/activities_enriched.csv
+        # Assuming raw_file_path is .../data_enriched/activities_raw.csv
         # And streams are in .../data/Streams/stream_{id}.csv
-        # We need to navigate from data_enriched to data/Streams
-
-        # This path logic depends on the project structure.
-        # Based on workspace info:
-        # dev/data/Streams/
-        # dev/data_enriched/activities_enriched.csv
-
-        streams_dir = self.file_path.parent.parent / "data" / "Streams"
+        streams_dir = self.raw_file_path.parent.parent / "data" / "Streams"
         stream_file = streams_dir / f"stream_{activity_id}.csv"
 
         if not stream_file.exists():

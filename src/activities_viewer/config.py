@@ -37,9 +37,19 @@ class Settings(BaseSettings):
         default=Path("data"),
         description="Path to data directory containing activities CSV and streams",
     )
+    # New dual-file format (StravaAnalyzer output)
+    activities_raw_file: Path = Field(
+        default=Path("activities_raw.csv"),
+        description="Filename of raw activities CSV (all data points, relative to data_dir)",
+    )
+    activities_moving_file: Path = Field(
+        default=Path("activities_moving.csv"),
+        description="Filename of moving activities CSV (movement only, relative to data_dir)",
+    )
+    # Backward compatibility: single enriched file
     activities_enriched_file: Path = Field(
         default=Path("activities_enriched.csv"),
-        description="Filename of enriched activities CSV (relative to data_dir)",
+        description="Filename of enriched activities CSV (legacy, relative to data_dir)",
     )
     activity_summary_file: Path = Field(
         default=Path("activity_summary.json"),
@@ -140,7 +150,19 @@ class Settings(BaseSettings):
         if not self.data_dir.is_absolute():
             self.data_dir = self.data_dir.resolve()
 
-        # Resolve activities_enriched_file
+        # Resolve activities_raw_file (new format)
+        if not self.activities_raw_file.is_absolute():
+            self.activities_raw_file = self.data_dir / self.activities_raw_file
+        else:
+            self.activities_raw_file = self.activities_raw_file.resolve()
+
+        # Resolve activities_moving_file (new format)
+        if not self.activities_moving_file.is_absolute():
+            self.activities_moving_file = self.data_dir / self.activities_moving_file
+        else:
+            self.activities_moving_file = self.activities_moving_file.resolve()
+
+        # Resolve activities_enriched_file (legacy format)
         if not self.activities_enriched_file.is_absolute():
             self.activities_enriched_file = self.data_dir / self.activities_enriched_file
         else:
@@ -169,12 +191,29 @@ class Settings(BaseSettings):
     def validate_files(self) -> None:
         """Validate that all required data files exist.
 
+        Supports both new dual-file format (activities_raw.csv, activities_moving.csv)
+        and legacy single-file format (activities_enriched.csv).
         Note: Streams directory is optional as it may be populated later.
         """
         errors = []
 
-        if not self.activities_enriched_file.exists():
-            errors.append(f"Activities file not found: {self.activities_enriched_file}")
+        # Check for new dual-file format
+        has_raw = self.activities_raw_file.exists()
+        has_moving = self.activities_moving_file.exists()
+        has_enriched = self.activities_enriched_file.exists() if self.activities_enriched_file else False
+
+        # Require at least raw file (moving file is optional, will use raw as fallback)
+        if not has_raw and not has_enriched:
+            errors.append(
+                f"Activities files not found. Need either:\n"
+                f"    - {self.activities_raw_file} (new format), or\n"
+                f"    - {self.activities_enriched_file} (legacy format)"
+            )
+        elif has_raw and not has_moving:
+            logger.warning(
+                f"Moving activities file not found: {self.activities_moving_file} "
+                f"(will use raw data for both views)"
+            )
 
         if not self.activity_summary_file.exists():
             errors.append(f"Summary file not found: {self.activity_summary_file}")

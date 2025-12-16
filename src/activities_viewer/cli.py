@@ -167,12 +167,22 @@ def validate(config: Path) -> None:
         for key, value in settings.to_dict_for_display().items():
             logger.info(f"  {key}: {value}")
 
-        # Check activities file
+        # Check activities file (support both dual-file and legacy single-file formats)
         try:
-            activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", low_memory=False)
+            if settings.activities_raw_file.exists():
+                activities_df = pd.read_csv(settings.activities_raw_file, sep=";", low_memory=False)
+                source_file = settings.activities_raw_file.name
+            elif settings.activities_enriched_file and settings.activities_enriched_file.exists():
+                activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", low_memory=False)
+                source_file = settings.activities_enriched_file.name
+            else:
+                raise FileNotFoundError("No activities file found")
         except UnicodeDecodeError:
-            activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", encoding="latin-1", low_memory=False)
-        logger.info(f"\n  Activities loaded: {len(activities_df)} records")
+            if settings.activities_raw_file.exists():
+                activities_df = pd.read_csv(settings.activities_raw_file, sep=";", encoding="latin-1", low_memory=False)
+            else:
+                activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", encoding="latin-1", low_memory=False)
+        logger.info(f"\n  Activities loaded: {len(activities_df)} records from {source_file}")
         logger.info(f"  Columns: {len(activities_df.columns)}")
 
         # Check summary file

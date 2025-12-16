@@ -62,11 +62,11 @@ HR_ZONE_COLORS = [
 def get_help_text(metric_key: str, help_texts: dict) -> str:
     """
     Get help text for a metric by its key.
-    
+
     Args:
         metric_key: The metric key (e.g., "avg_power", "fatigue_index")
         help_texts: Dictionary mapping metric keys to help text
-    
+
     Returns:
         Help text string, or empty string if not found
     """
@@ -99,7 +99,7 @@ def render_metric(column, label: str, value: str, help_text: str = None) -> None
     """
     Render a metric with responsive sizing that doesn't get truncated.
     Uses custom HTML instead of st.metric() for better control.
-    
+
     Args:
         column: Streamlit column to render in
         label: Metric label (e.g., "Average Power")
@@ -268,21 +268,29 @@ def render_activity_selector(
             help="Choose which activity to analyze",
         )
 
-    # Get selected activity
+    # Metric view selector - use session state to persist selection (BEFORE loading activity)
+    col1, col2 = st.columns(2)
+    with col1:
+        # Initialize session state if not present
+        if "metric_view_selection" not in st.session_state:
+            st.session_state.metric_view_selection = "Moving Time"
+
+        metric_view = st.radio(
+            "View:",
+            ("Moving Time", "Raw Time"),
+            horizontal=True,
+            label_visibility="collapsed",
+            key="metric_view_selection",
+        )
+    with col2:
+        st.caption("Choose between moving time or total time metrics")
+
+    # Get selected activity with metric_view
     selected_row = df_for_selection[
         df_for_selection["name"] == selected_activity_name
     ].iloc[0]
     activity_id = selected_row["id"]
-    activity = service.get_activity(activity_id)
-
-    # Metric view selector
-    col1, col2 = st.columns(2)
-    with col1:
-        metric_view = st.radio(
-            "View:", ("Moving", "Total"), horizontal=True, label_visibility="collapsed"
-        )
-    with col2:
-        st.caption("Choose between moving time or total time metrics")
+    activity = service.get_activity(activity_id, metric_view)
 
     return activity, activity_id, metric_view
 
@@ -312,9 +320,9 @@ def get_workout_type_info(workout_type: float | None) -> tuple[str, str]:
     return WORKOUT_TYPES.get(int(workout_type), ("Ride", "🚴"))
 
 
-def render_overview_tab(activity: Activity, service: ActivityService, metric_view: str = "Moving", help_texts: dict = None) -> None:
+def render_overview_tab(activity: Activity, service: ActivityService, metric_view: str = "Moving Time", help_texts: dict = None) -> None:
     """Render the Overview tab with summary metrics, map, and time-series plots.
-    
+
     Args:
         activity: Activity object to display
         service: ActivityService for data fetching
@@ -323,10 +331,6 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
     """
     if help_texts is None:
         help_texts = {}
-
-    # Determine field prefix based on metric view
-    # "Moving" uses "moving_" prefix, "Total" uses "raw_" prefix
-    prefix = "moving_" if metric_view == "Moving" else "raw_"
 
     # ─────────────────────────────────────────────────────────────────────────
     # ACTIVITY SUMMARY
@@ -347,31 +351,33 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
         distance_km = distance_km / 1000
     render_metric(col1, "🛣️ Distance", f"{distance_km:.1f} km" if distance_km else "-")
 
-    # Duration (moving time)
-    moving_time = get_metric(activity, "moving_time")
-    if moving_time:
-        hours = int(moving_time // 3600)
-        minutes = int((moving_time % 3600) // 60)
+    # Duration - use moving_time or elapsed_time based on selection
+    time_field = "moving_time" if metric_view == "Moving Time" else "elapsed_time"
+    time_label = "⏱️ Moving Time" if metric_view == "Moving Time" else "⏱️ Total Time"
+    duration = get_metric(activity, time_field)
+    if duration:
+        hours = int(duration // 3600)
+        minutes = int((duration % 3600) // 60)
         duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
     else:
         duration_str = "-"
-    render_metric(col2, "⏱️ Moving Time", duration_str)
+    render_metric(col2, time_label, duration_str)
 
     # Elevation
     elevation = get_metric(activity, "total_elevation_gain")
     render_metric(col3, "⛰️ Elevation", f"{elevation:.0f} m" if elevation else "-")
 
-    # Average Speed - try prefixed first, then base average_speed, then compute from distance/moving_time
-    avg_speed = get_metric(activity, f"{prefix}average_speed")
+    # Average Speed - try average_speed, then compute from distance/time
+    avg_speed = get_metric(activity, "average_speed")
     if avg_speed is None or pd.isna(avg_speed):
-        # Try base average_speed from Strava API
-        avg_speed = get_metric(activity, "average_speed")
+        # Try computing from distance and time
+        pass
     if avg_speed is None or pd.isna(avg_speed):
-        # Compute from distance and moving_time if available
+        # Compute from distance and time if available (use moving_time or elapsed_time based on selection)
         distance = get_metric(activity, "distance")
-        moving_time = get_metric(activity, "moving_time")
-        if distance and moving_time and moving_time > 0:
-            avg_speed = distance / moving_time  # In m/s
+        time_value = get_metric(activity, time_field)  # Use the same time_field from above
+        if distance and time_value and time_value > 0:
+            avg_speed = distance / time_value  # In m/s
         else:
             avg_speed = None
 
@@ -387,39 +393,42 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
     # Row 2: Power & HR metrics (if available)
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    # Average Power - use prefix
-    avg_power = get_metric(activity, f"{prefix}average_power")
+    # Average Power
+    avg_power = get_metric(activity, "average_power")
     render_metric(col1, "⚡ Avg Power", f"{avg_power:.0f} W" if avg_power else "-", get_help_text("avg_power", help_texts))
 
-    # Normalized Power - use prefix
-    np_val = get_metric(activity, f"{prefix}normalized_power")
+    # Normalized Power
+    np_val = get_metric(activity, "normalized_power")
     render_metric(col2, "📊 Norm Power", f"{np_val:.0f} W" if np_val else "-", get_help_text("normalized_power", help_texts))
 
-    # TSS - use prefix
-    tss = get_metric(activity, f"{prefix}training_stress_score")
+    # TSS
+    tss = get_metric(activity, "training_stress_score")
     render_metric(col3, "📈 TSS", f"{tss:.0f}" if tss else "-", get_help_text("tss", help_texts))
 
-    # Average HR - use prefix
-    avg_hr = get_metric(activity, f"{prefix}average_hr")
+    # Average HR
+    avg_hr = get_metric(activity, "average_hr")
     render_metric(col4, "❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
 
-    # Max HR - use prefix
-    max_hr = get_metric(activity, f"{prefix}max_hr")
+    # Max HR
+    max_hr = get_metric(activity, "max_hr")
     render_metric(col5, "💓 Max HR", f"{max_hr:.0f} bpm" if max_hr else "-")
 
     # Row 3: Additional metrics
     col1, col2, col3, col4, col5 = st.columns(5)
 
-    # Intensity Factor - use prefix
-    if_val = get_metric(activity, f"{prefix}intensity_factor")
+    # Intensity Factor
+    if_val = get_metric(activity, "intensity_factor")
     render_metric(col1, "🎯 IF", f"{if_val:.2f}" if if_val else "-", get_help_text("intensity_factor", help_texts))
 
-    # Efficiency Factor - use prefix
-    ef = get_metric(activity, f"{prefix}efficiency_factor")
+    # Efficiency Factor
+    ef = get_metric(activity, "efficiency_factor")
     render_metric(col2, "⚙️ EF", f"{ef:.2f}" if ef else "-", get_help_text("efficiency_factor", help_texts))
 
-    # Average Cadence - use base field (no prefixed variants exist)
+    # Average Cadence
     avg_cadence = get_metric(activity, "average_cadence")
+    if avg_cadence is None or pd.isna(avg_cadence):
+        # Fall back if not available
+        avg_cadence = get_metric(activity, "average_cadence")
     render_metric(col3, "🔄 Cadence", f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-")
 
     # Calories
@@ -733,8 +742,6 @@ def render_power_hr_tab(
     """Render the Power & Heart Rate analysis tab."""
     st.subheader(f"Power & Heart Rate Analysis ({metric_view})")
 
-    prefix = "moving_" if metric_view == "Moving" else "raw_"
-
     # ===== SECTION 1: POWER CURVE (spans both columns) =====
     render_power_curve(activity, service, help_texts)
 
@@ -746,17 +753,17 @@ def render_power_hr_tab(
     with col_power:
         st.markdown("#### ⚡ Power Metrics")
         c1, c2, c3 = st.columns(3)
-        avg_pwr = get_metric(activity, f"{prefix}average_power")
-        np_val = get_metric(activity, f"{prefix}normalized_power")
-        max_pwr = get_metric(activity, f"{prefix}max_power")
+        avg_pwr = get_metric(activity, "average_power")
+        np_val = get_metric(activity, "normalized_power")
+        max_pwr = get_metric(activity, "max_power")
         render_metric(c1, "Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-", get_help_text("avg_power", help_texts))
         render_metric(c2, "Norm Power", f"{np_val:.0f} W" if np_val else "-", get_help_text("normalized_power", help_texts))
         render_metric(c3, "Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
 
         c1, c2, c3 = st.columns(3)
-        w_kg = get_metric(activity, f"{prefix}power_per_kg")
-        if_val = get_metric(activity, f"{prefix}intensity_factor")
-        tss_val = get_metric(activity, f"{prefix}training_stress_score")
+        w_kg = get_metric(activity, "power_per_kg")
+        if_val = get_metric(activity, "intensity_factor")
+        tss_val = get_metric(activity, "training_stress_score")
         render_metric(c1, "W/kg", f"{w_kg:.2f}" if w_kg else "-")
         render_metric(c2, "IF", f"{if_val:.2f}" if if_val else "-", get_help_text("intensity_factor", help_texts))
         render_metric(c3, "TSS", f"{tss_val:.0f}" if tss_val else "-", get_help_text("tss", help_texts))
@@ -764,17 +771,17 @@ def render_power_hr_tab(
     with col_hr:
         st.markdown("#### ❤️ Heart Rate Metrics")
         c1, c2, c3 = st.columns(3)
-        avg_hr = get_metric(activity, f"{prefix}average_hr")
-        max_hr = get_metric(activity, f"{prefix}max_hr")
-        hr_tss = get_metric(activity, f"{prefix}hr_training_stress")
+        avg_hr = get_metric(activity, "average_hr")
+        max_hr = get_metric(activity, "max_hr")
+        hr_tss = get_metric(activity, "hr_training_stress")
         render_metric(c1, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
         render_metric(c2, "Max HR", f"{max_hr:.0f} bpm" if max_hr else "-")
         render_metric(c3, "HR TSS", f"{hr_tss:.0f}" if hr_tss else "-")
 
         c1, c2, c3 = st.columns(3)
-        ef = get_metric(activity, f"{prefix}efficiency_factor")
-        decoupling = get_metric(activity, f"{prefix}power_hr_decoupling")
-        hr_type = get_metric(activity, f"{prefix}hr_tid_classification")
+        ef = get_metric(activity, "efficiency_factor")
+        decoupling = get_metric(activity, "power_hr_decoupling")
+        hr_type = get_metric(activity, "hr_tid_classification")
         render_metric(c1, "EF", f"{ef:.2f}" if ef else "-", get_help_text("efficiency_factor", help_texts))
         render_metric(c2, "Decoupling", f"{decoupling:.1f}%" if decoupling else "-", get_help_text("decoupling", help_texts))
         render_metric(c3, "Type", hr_type if hr_type else "-")
@@ -782,7 +789,7 @@ def render_power_hr_tab(
     st.divider()
 
     # ===== SECTION 3: Zone Distributions (two columns, aligned) =====
-    render_zone_distributions(activity, prefix, help_texts)
+    render_zone_distributions(activity, help_texts)
 
 
 def render_power_curve(activity: Activity, service: ActivityService, help_texts: dict) -> None:
@@ -876,19 +883,19 @@ def render_power_curve(activity: Activity, service: ActivityService, help_texts:
         st.info("No power curve data available.")
 
 
-def render_zone_distributions(activity: Activity, prefix: str, help_texts: dict) -> None:
+def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
     """Render zone distributions side by side (aligned)."""
 
     # ===== POWER ZONES =====
     power_zones = []
     for i in range(1, 8):
-        val = get_metric(activity, f"{prefix}power_z{i}_percentage")
+        val = get_metric(activity, f"power_z{i}_percentage")
         power_zones.append(float(val) if val else 0)
 
     # ===== HR ZONES =====
     hr_zones = []
     for i in range(1, 6):
-        val = get_metric(activity, f"{prefix}hr_z{i}_percentage")
+        val = get_metric(activity, f"hr_z{i}_percentage")
         hr_zones.append(float(val) if val else 0)
 
     power_total = sum(power_zones)
@@ -957,8 +964,8 @@ def render_zone_distributions(activity: Activity, prefix: str, help_texts: dict)
     with col_power_tid:
         st.markdown("##### Power Training Intensity Distribution")
         col_a, col_b = st.columns(2)
-        pol_idx = get_metric(activity, f"{prefix}power_polarization_index")
-        tdr = get_metric(activity, f"{prefix}power_tdr")
+        pol_idx = get_metric(activity, "power_polarization_index")
+        tdr = get_metric(activity, "power_tdr")
         col_a.metric(
             "Polarization Index",
             f"{pol_idx:.2f}" if pol_idx else "-",
@@ -997,8 +1004,8 @@ def render_zone_distributions(activity: Activity, prefix: str, help_texts: dict)
     with col_hr_tid:
         st.markdown("##### HR Training Intensity Distribution")
         col_a, col_b = st.columns(2)
-        hr_pol_idx = get_metric(activity, f"{prefix}hr_polarization_index")
-        hr_tdr = get_metric(activity, f"{prefix}hr_tdr")
+        hr_pol_idx = get_metric(activity, "hr_polarization_index")
+        hr_tdr = get_metric(activity, "hr_tdr")
         col_a.metric(
             "HR Polarization",
             f"{hr_pol_idx:.2f}" if hr_pol_idx else "-",
@@ -1035,24 +1042,24 @@ def render_zone_distributions(activity: Activity, prefix: str, help_texts: dict)
             st.plotly_chart(fig_hr_tid, use_container_width=True)
 
 
-def render_power_metrics_section(activity: Activity, prefix: str, help_texts: dict) -> None:
+def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
     """Render power metrics and distributions."""
     st.markdown("#### ⚡ Power Metrics")
 
     # Power Summary Stats
     c1, c2, c3 = st.columns(3)
-    avg_pwr = get_metric(activity, f"{prefix}average_power")
-    np_val = get_metric(activity, f"{prefix}normalized_power")
-    max_pwr = get_metric(activity, f"{prefix}max_power")
+    avg_pwr = get_metric(activity, "average_power")
+    np_val = get_metric(activity, "normalized_power")
+    max_pwr = get_metric(activity, "max_power")
 
     c1.metric("Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-")
     c2.metric("Norm Power", f"{np_val:.0f} W" if np_val else "-")
     c3.metric("Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
 
     c1, c2, c3 = st.columns(3)
-    w_kg = get_metric(activity, f"{prefix}power_per_kg")
-    if_val = get_metric(activity, f"{prefix}intensity_factor")
-    tss_val = get_metric(activity, f"{prefix}training_stress_score")
+    w_kg = get_metric(activity, "power_per_kg")
+    if_val = get_metric(activity, "intensity_factor")
+    tss_val = get_metric(activity, "training_stress_score")
 
     c1.metric("W/kg", f"{w_kg:.2f}" if w_kg else "-")
     c2.metric("IF", f"{if_val:.2f}" if if_val else "-")
@@ -1064,7 +1071,7 @@ def render_power_metrics_section(activity: Activity, prefix: str, help_texts: di
     st.markdown("##### Power Zone Distribution")
     power_zones = []
     for i in range(1, 8):
-        val = get_metric(activity, f"{prefix}power_z{i}_percentage")
+        val = get_metric(activity, f"power_z{i}_percentage")
         power_zones.append(float(val) if val else 0)
 
     power_total = sum(power_zones)
@@ -1096,8 +1103,8 @@ def render_power_metrics_section(activity: Activity, prefix: str, help_texts: di
         # Power TID Metrics
         st.markdown("##### Power Training Intensity Distribution")
         col_a, col_b = st.columns(2)
-        pol_idx = get_metric(activity, f"{prefix}power_polarization_index")
-        tdr = get_metric(activity, f"{prefix}power_tdr")
+        pol_idx = get_metric(activity, "power_polarization_index")
+        tdr = get_metric(activity, "power_tdr")
         col_a.metric(
             "Polarization Index",
             f"{pol_idx:.2f}" if pol_idx else "-",
@@ -1146,15 +1153,13 @@ def render_durability_tab(
     """Render the Durability & Fatigue analysis tab."""
     st.subheader(f"Durability & Fatigue Analysis ({metric_view})")
 
-    prefix = "moving_" if metric_view == "Moving" else "raw_"
-
     col1, col2 = st.columns(2)
 
     # --- Left Column: Power Fatigue ---
     with col1:
         st.markdown("#### ⚡ Power Fatigue")
 
-        fatigue_idx = get_metric(activity, f"{prefix}fatigue_index")
+        fatigue_idx = get_metric(activity, "fatigue_index")
         decay_rate = get_metric(activity, "interval_300s_decay_rate")
 
         c1, c2 = st.columns(2)
@@ -1165,7 +1170,7 @@ def render_durability_tab(
         first_power = get_metric(activity, "interval_300s_first_power")
         last_power = get_metric(activity, "interval_300s_last_power")
         power_trend = get_metric(activity, "interval_300s_power_trend")
-        
+
         if first_power and last_power and first_power > 0:
             power_drop_pct = ((first_power - last_power) / first_power) * 100
         else:
@@ -1181,9 +1186,20 @@ def render_durability_tab(
     with col2:
         st.markdown("#### ❤️ Heart Rate Fatigue")
 
-        # Note: No prefixed HR fatigue metrics exist in the CSV
-        # Only showing info message
-        st.info("Not enough interval data for HR decay analysis.")
+        # HR fatigue metrics from effort distribution
+        hr_decoupling = get_metric(activity, "power_hr_decoupling")
+        hr_tss = get_metric(activity, "hr_training_stress")
+        first_half_ef = get_metric(activity, "first_half_ef")
+        second_half_ef = get_metric(activity, "second_half_ef")
+
+        c1, c2 = st.columns(2)
+        render_metric(c1, "HR Decoupling", f"{hr_decoupling:.1f}%" if hr_decoupling is not None else "-", get_help_text("power_hr_decoupling", help_texts))
+        render_metric(c2, "HR TSS", f"{hr_tss:.0f}" if hr_tss else "-", get_help_text("hr_training_stress", help_texts))
+
+        st.markdown("##### Effort Distribution")
+        col_a, col_b = st.columns(2)
+        render_metric(col_a, "First Half EF", f"{first_half_ef:.2f}" if first_half_ef else "-", get_help_text("first_half_ef", help_texts))
+        render_metric(col_b, "Second Half EF", f"{second_half_ef:.2f}" if second_half_ef else "-", get_help_text("second_half_ef", help_texts))
 
     st.divider()
 
@@ -1203,4 +1219,180 @@ def render_durability_tab(
 
     with col2:
         st.markdown("##### HR Intervals")
-        st.info("No HR interval data available.")
+
+        # HR TID metrics
+        hr_tid_z1 = get_metric(activity, "hr_tid_z1_percentage")
+        hr_tid_z2 = get_metric(activity, "hr_tid_z2_percentage")
+        hr_tid_z3 = get_metric(activity, "hr_tid_z3_percentage")
+        hr_polarization = get_metric(activity, "hr_polarization_index")
+
+        col_a, col_b = st.columns(2)
+        render_metric(col_a, "Polarization Index", f"{hr_polarization:.2f}" if hr_polarization else "-", get_help_text("hr_polarization_index", help_texts))
+
+        st.markdown("**HR Zone Distribution (TID):**")
+        col_x, col_y, col_z = st.columns(3)
+        render_metric(col_x, "Z1 %", f"{hr_tid_z1:.1f}%" if hr_tid_z1 else "-", get_help_text("hr_tid_z1_percentage", help_texts))
+        render_metric(col_y, "Z2 %", f"{hr_tid_z2:.1f}%" if hr_tid_z2 else "-", get_help_text("hr_tid_z2_percentage", help_texts))
+        render_metric(col_z, "Z3 %", f"{hr_tid_z3:.1f}%" if hr_tid_z3 else "-", get_help_text("hr_tid_z3_percentage", help_texts))
+
+
+def render_training_load_tab(
+    activity: Activity, metric_view: str, help_texts: dict
+) -> None:
+    """
+    Render the Training Load & Power Profile tab.
+
+    Displays:
+    - Longitudinal training load metrics (CTL, ATL, TSB, ACWR)
+    - Critical Power model metrics (CP, W', R², AEI)
+
+    These metrics are computed separately for raw and moving data modes,
+    reflecting different training load assessments based on data source.
+    """
+    st.subheader(f"📊 Training Load & Power Profile ({metric_view})")
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 1: TRAINING LOAD METRICS
+    # ─────────────────────────────────────────────────────────────────────────
+    st.markdown("### Training Load State")
+    st.markdown("Time-weighted exponential averages as of this activity's date:")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    # CTL (Chronic Training Load)
+    ctl = get_metric(activity, "chronic_training_load")
+    render_metric(
+        col1,
+        "CTL (42d)",
+        f"{ctl:.1f}" if ctl else "-",
+        get_help_text("chronic_training_load", help_texts)
+    )
+
+    # ATL (Acute Training Load)
+    atl = get_metric(activity, "acute_training_load")
+    render_metric(
+        col2,
+        "ATL (7d)",
+        f"{atl:.1f}" if atl else "-",
+        get_help_text("acute_training_load", help_texts)
+    )
+
+    # TSB (Training Stress Balance)
+    tsb = get_metric(activity, "training_stress_balance")
+    tsb_color = "🟢" if tsb is not None and -10 <= tsb <= 20 else ("🟡" if tsb is not None and -50 <= tsb < -10 else "🔴")
+    render_metric(
+        col3,
+        "TSB",
+        f"{tsb_color} {tsb:.1f}" if tsb else "-",
+        get_help_text("training_stress_balance", help_texts)
+    )
+
+    # ACWR (Acute:Chronic Workload Ratio)
+    acwr = get_metric(activity, "acwr")
+    acwr_color = "🟢" if acwr is not None and 0.8 <= acwr <= 1.3 else ("🟡" if acwr is not None and acwr <= 1.5 else "🔴")
+    render_metric(
+        col4,
+        "ACWR",
+        f"{acwr_color} {acwr:.2f}" if acwr else "-",
+        get_help_text("acwr", help_texts)
+    )
+
+    # Training State Summary
+    if tsb is not None:
+        if tsb > 20:
+            state = "✅ Well-rested - Good for intensity work"
+            state_color = "green"
+        elif 0 <= tsb <= 20:
+            state = "🎯 Optimal zone - Productive training"
+            state_color = "blue"
+        elif -10 <= tsb < 0:
+            state = "⚠️ Elevated fatigue - Productive but stressed"
+            state_color = "orange"
+        elif tsb < -10:
+            state = "🔴 Overreached - Recovery needed"
+            state_color = "red"
+        else:
+            state = "❓ Unknown state"
+            state_color = "gray"
+
+        st.markdown(f"**Training State:** <span style='color:{state_color}'>{state}</span>", unsafe_allow_html=True)
+
+    st.divider()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # SECTION 2: CRITICAL POWER MODEL
+    # ─────────────────────────────────────────────────────────────────────────
+    st.markdown("### Critical Power Model")
+    st.markdown("Power-duration curve fit from 90-day rolling window:")
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    # CP (Critical Power)
+    cp = get_metric(activity, "cp")
+    render_metric(
+        col1,
+        "CP (W)",
+        f"{cp:.0f}" if cp else "-",
+        get_help_text("cp", help_texts)
+    )
+
+    # W' (W-prime)
+    w_prime = get_metric(activity, "w_prime")
+    render_metric(
+        col2,
+        "W' (kJ)",
+        f"{(w_prime/1000):.1f}" if w_prime else "-",
+        get_help_text("w_prime", help_texts)
+    )
+
+    # R² (Model fit quality)
+    r_squared = get_metric(activity, "cp_r_squared")
+    r_sq_color = "🟢" if r_squared is not None and r_squared > 0.95 else ("🟡" if r_squared is not None and r_squared > 0.85 else "🔴")
+    render_metric(
+        col3,
+        "R²",
+        f"{r_sq_color} {r_squared:.3f}" if r_squared else "-",
+        get_help_text("cp_r_squared", help_texts)
+    )
+
+    # AEI (Anaerobic Energy Index)
+    aei = get_metric(activity, "aei")
+    render_metric(
+        col4,
+        "AEI (J/kg)",
+        f"{aei:.1f}" if aei else "-",
+        get_help_text("aei", help_texts)
+    )
+
+    # Model details
+    st.markdown("#### Model Details")
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.markdown("**Hyperbolic Model:** P(t) = CP + W'/t")
+        if cp is not None:
+            st.markdown(f"""
+- **CP** = {cp:.0f}W - Sustainable power for extended efforts
+- **W'** = {w_prime/1000:.1f}kJ - Anaerobic work capacity
+- **AEI** = {aei:.1f}J/kg - Normalized anaerobic capacity
+            """)
+
+    with col2:
+        st.markdown("**Fit Quality:**")
+        if r_squared is not None:
+            fit_desc = "Excellent ✅" if r_squared > 0.95 else ("Good 👍" if r_squared > 0.85 else "Fair ⚠️")
+            st.markdown(f"""
+- **R²** = {r_squared:.3f} ({fit_desc})
+- **Window** = 90 days rolling
+- **Data Points** = Multiple durations in power curve
+            """)
+
+    st.markdown("---")
+    st.markdown("""
+**Notes:**
+- Metrics computed from 90-day rolling power curve (most recent 90 calendar days)
+- CP model evolves as fitness changes
+- R² > 0.95 indicates excellent model fit quality
+- Compare AEI over time to track anaerobic capacity changes
+""")
+

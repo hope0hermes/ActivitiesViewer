@@ -45,10 +45,15 @@ def configure_page(settings: Settings) -> None:
 def init_services(settings: Settings) -> ActivityService:
     """Initialize application services."""
     if settings.data_source_type == "csv":
-        repo = CSVActivityRepository(settings.activities_enriched_file)
+        # Use dual-file format (new) if available, fallback to enriched file (legacy)
+        raw_file = settings.activities_raw_file if hasattr(settings, 'activities_raw_file') else settings.activities_enriched_file
+        moving_file = settings.activities_moving_file if hasattr(settings, 'activities_moving_file') else None
+        repo = CSVActivityRepository(raw_file, moving_file)
     else:
         # Fallback or future SQL implementation
-        repo = CSVActivityRepository(settings.activities_enriched_file)
+        raw_file = settings.activities_raw_file if hasattr(settings, 'activities_raw_file') else settings.activities_enriched_file
+        moving_file = settings.activities_moving_file if hasattr(settings, 'activities_moving_file') else None
+        repo = CSVActivityRepository(raw_file, moving_file)
 
     return ActivityService(repo)
 

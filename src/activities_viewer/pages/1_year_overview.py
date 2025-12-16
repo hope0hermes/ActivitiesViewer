@@ -18,6 +18,7 @@ from activities_viewer.pages.components.year_overview_components import (
     render_kpi_section,
     render_power_curve_section,
     render_tid_section,
+    render_training_load_section,
     render_trends_tab,
     render_efficiency_tab,
     render_gear_tab,
@@ -107,11 +108,12 @@ def get_gear_name(gear_id: str | None, settings) -> str:
     return settings.gear_names.get(gear_id, gear_id)
 
 
-def calculate_time_weighted_tid(df: pd.DataFrame, prefix: str = "moving_") -> dict:
+def calculate_time_weighted_tid(df: pd.DataFrame, metric_view: str = "Moving Time") -> dict:
     """Calculate time-weighted TID percentages for a group of activities."""
-    z1_col = f"{prefix}power_tid_z1_percentage"
-    z2_col = f"{prefix}power_tid_z2_percentage"
-    z3_col = f"{prefix}power_tid_z3_percentage"
+    # Note: Column names no longer have prefixes (raw and moving are in separate files)
+    z1_col = "power_tid_z1_percentage"
+    z2_col = "power_tid_z2_percentage"
+    z3_col = "power_tid_z3_percentage"
 
     # Filter to activities that have TID data
     valid_df = df.dropna(subset=[z1_col, z2_col, z3_col])
@@ -157,7 +159,7 @@ def main():
     selected_year, metric_view = render_year_selector(available_years)
 
     # --- Data Loading ---
-    activities_current = service.get_activities_for_year(selected_year)
+    activities_current = service.get_activities_for_year(selected_year, metric_view)
     if not activities_current:
         st.info(f"No activities found for {selected_year}.")
         return
@@ -166,7 +168,7 @@ def main():
 
     # Previous Year (for comparison)
     prev_year = selected_year - 1
-    activities_prev = service.get_activities_for_year(prev_year)
+    activities_prev = service.get_activities_for_year(prev_year, metric_view)
     df_prev = (
         pd.DataFrame([a.model_dump() for a in activities_prev])
         if activities_prev
@@ -219,6 +221,10 @@ def main():
     )
     st.divider()
 
+    # Training Load Progression (CTL/ATL/TSB)
+    render_training_load_section(df)
+    st.divider()
+
     # Tabs for detailed analysis
     tab_trends, tab_efficiency, tab_gear, tab_dist, tab_weekday = st.tabs(
         [
@@ -234,10 +240,9 @@ def main():
         render_trends_tab(df, metric_view, safe_mean)
 
     with tab_efficiency:
-        # Pre-calculate metrics for efficiency tab
-        prefix = "moving_" if metric_view == "Moving Time" else "raw_"
-        avg_ef = safe_mean(df[f"{prefix}efficiency_factor"])
-        avg_fatigue = safe_mean(df[f"{prefix}fatigue_index"])
+        # Pre-calculate metrics for efficiency tab (columns no longer have prefixes)
+        avg_ef = safe_mean(df.get("efficiency_factor", pd.Series(dtype=float)))
+        avg_fatigue = safe_mean(df.get("fatigue_index", pd.Series(dtype=float)))
         render_efficiency_tab(df, metric_view, safe_mean, HELP_TEXTS, avg_ef, avg_fatigue)
 
     with tab_gear:

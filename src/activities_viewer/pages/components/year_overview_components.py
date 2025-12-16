@@ -79,7 +79,6 @@ def render_kpi_section(
         safe_mean_fn: Function to safely calculate mean
         safe_sum_fn: Function to safely calculate sum
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     st.subheader("📈 Key Performance Indicators")
 
@@ -97,11 +96,11 @@ def render_kpi_section(
     total_time = safe_sum_fn(df["moving_time"])
     total_elev = safe_sum_fn(df["total_elevation_gain"])
     count = len(df)
-    total_tss = safe_sum_fn(df[f"{prefix}training_stress_score"])
-    avg_np = safe_mean_fn(df[f"{prefix}normalized_power"])
-    avg_if = safe_mean_fn(df[f"{prefix}intensity_factor"])
-    avg_ef = safe_mean_fn(df[f"{prefix}efficiency_factor"])
-    avg_fatigue = safe_mean_fn(df[f"{prefix}fatigue_index"])
+    total_tss = safe_sum_fn(df["training_stress_score"])
+    avg_np = safe_mean_fn(df["normalized_power"])
+    avg_if = safe_mean_fn(df["intensity_factor"])
+    avg_ef = safe_mean_fn(df["efficiency_factor"])
+    avg_fatigue = safe_mean_fn(df["fatigue_index"])
 
     # Calculate deltas
     delta_dist = delta_time = delta_elev = delta_count = delta_tss = None
@@ -111,7 +110,7 @@ def render_kpi_section(
         prev_time = safe_sum_fn(df_prev["moving_time"])
         prev_elev = safe_sum_fn(df_prev["total_elevation_gain"])
         prev_count = len(df_prev)
-        prev_tss = safe_sum_fn(df_prev[f"{prefix}training_stress_score"])
+        prev_tss = safe_sum_fn(df_prev["training_stress_score"])
 
         delta_dist = f"{total_dist - prev_dist:+,.0f} km"
         delta_time = f"{(total_time - prev_time) / 3600:+,.0f} h"
@@ -138,6 +137,296 @@ def render_kpi_section(
         f"{avg_ef:.2f}" if avg_ef else "N/A",
         help=help_texts.get("efficiency_factor", ""),
     )
+
+    # Row 3: Training Load & Fitness visualization
+    st.divider()
+    st.markdown("#### 📊 Training Load State (End of Year)")
+
+    # Get latest activity metrics
+    if not df.empty:
+        latest_activity = df.sort_values("start_date", ascending=False).iloc[0]
+
+        ctl = latest_activity.get("chronic_training_load", None)
+        atl = latest_activity.get("acute_training_load", None)
+        tsb = latest_activity.get("training_stress_balance", None)
+        acwr = latest_activity.get("acwr", None)
+
+        # Create bar charts for training load metrics
+        from plotly.subplots import make_subplots
+        import plotly.graph_objects as go
+
+        fig = make_subplots(
+            rows=1, cols=4,
+            specs=[[{'type': 'bar'}, {'type': 'bar'}, {'type': 'bar'}, {'type': 'bar'}]],
+            subplot_titles=('CTL (Fitness)', 'ATL (Fatigue)', 'TSB (Form)', 'ACWR (Injury Risk)')
+        )
+
+        # CTL interpretation
+        ctl_interpretation = ""
+        if pd.notna(ctl):
+            if ctl < 50:
+                ctl_interpretation = "Low fitness (building phase)"
+                ctl_color = "lightgray"
+            elif ctl < 100:
+                ctl_interpretation = "Moderate fitness (consistent training)"
+                ctl_color = "lightblue"
+            elif ctl < 150:
+                ctl_interpretation = "High fitness (peak training)"
+                ctl_color = "lightgreen"
+            else:
+                ctl_interpretation = "Elite fitness (racing/peak)"
+                ctl_color = "darkgreen"
+        else:
+            ctl_color = "lightgray"
+
+        ctl_value = f"{ctl:.1f}" if pd.notna(ctl) else "0"
+        ctl_hover = f"<b>CTL (Chronic Training Load)</b><br>42-day fitness level<br>Value: {ctl_value}<br>Status: {ctl_interpretation}<br>Optimal: 80-120"
+        fig.add_trace(go.Bar(
+            x=['CTL'],
+            y=[ctl if pd.notna(ctl) else 0],
+            marker=dict(color=[ctl_color]),
+            hovertext=[ctl_hover],
+            hovertemplate='%{hovertext}<extra></extra>',
+            showlegend=False
+        ), row=1, col=1)
+
+        # ATL interpretation
+        atl_interpretation = ""
+        if pd.notna(atl):
+            if atl < 50:
+                atl_interpretation = "Fresh, low fatigue"
+                atl_color = "lightgray"
+            elif atl < 100:
+                atl_interpretation = "Moderate fatigue (normal training week)"
+                atl_color = "lightyellow"
+            else:
+                atl_interpretation = "High fatigue (accumulating load)"
+                atl_color = "lightcoral"
+        else:
+            atl_color = "lightgray"
+
+        atl_value = f"{atl:.1f}" if pd.notna(atl) else "0"
+        atl_hover = f"<b>ATL (Acute Training Load)</b><br>7-day fatigue level<br>Value: {atl_value}<br>Status: {atl_interpretation}<br>Optimal: 30-70"
+        fig.add_trace(go.Bar(
+            x=['ATL'],
+            y=[atl if pd.notna(atl) else 0],
+            marker=dict(color=[atl_color]),
+            hovertext=[atl_hover],
+            hovertemplate='%{hovertext}<extra></extra>',
+            showlegend=False
+        ), row=1, col=2)
+
+        # TSB interpretation
+        if pd.notna(tsb):
+            if tsb < -50:
+                tsb_interpretation = "Extremely exhausted - AVOID RACING"
+                tsb_color = "darkred"
+            elif tsb < -10:
+                tsb_interpretation = "Fatigued but building fitness"
+                tsb_color = "lightyellow"
+            elif tsb <= 20:
+                tsb_interpretation = "Fresh and race-ready (OPTIMAL)"
+                tsb_color = "lightgreen"
+            else:
+                tsb_interpretation = "Very fresh/detrained"
+                tsb_color = "lightyellow"
+        else:
+            tsb_color = "lightgray"
+            tsb_interpretation = "N/A"
+
+        tsb_value = f"{tsb:.1f}" if pd.notna(tsb) else "0"
+        tsb_hover = f"<b>TSB (Training Stress Balance)</b><br>Form & freshness (CTL - ATL)<br>Value: {tsb_value}<br>Status: {tsb_interpretation}<br>Optimal: -10 to +20"
+        fig.add_trace(go.Bar(
+            x=['TSB'],
+            y=[tsb if pd.notna(tsb) else 0],
+            marker=dict(color=[tsb_color]),
+            hovertext=[tsb_hover],
+            hovertemplate='%{hovertext}<extra></extra>',
+            showlegend=False
+        ), row=1, col=3)
+
+        # ACWR interpretation
+        if pd.notna(acwr):
+            if acwr < 0.8:
+                acwr_interpretation = "Undertraining (low injury risk)"
+                acwr_color = "lightyellow"
+            elif acwr <= 1.3:
+                acwr_interpretation = "Optimal zone (safe training)"
+                acwr_color = "lightgreen"
+            elif acwr <= 1.5:
+                acwr_interpretation = "Caution zone (moderate injury risk)"
+                acwr_color = "lightyellow"
+            else:
+                acwr_interpretation = "Danger zone (HIGH INJURY RISK)"
+                acwr_color = "lightcoral"
+        else:
+            acwr_color = "lightgray"
+            acwr_interpretation = "N/A"
+
+        acwr_value = f"{acwr:.2f}" if pd.notna(acwr) else "0"
+        acwr_hover = f"<b>ACWR (Acute:Chronic Workload Ratio)</b><br>Injury risk (ATL ÷ CTL)<br>Value: {acwr_value}<br>Status: {acwr_interpretation}<br>Optimal: 0.8-1.3"
+        fig.add_trace(go.Bar(
+            x=['ACWR'],
+            y=[acwr if pd.notna(acwr) else 0],
+            marker=dict(color=[acwr_color]),
+            hovertext=[acwr_hover],
+            hovertemplate='%{hovertext}<extra></extra>',
+            showlegend=False
+        ), row=1, col=4)
+
+        fig.update_yaxes(title_text="Value", row=1, col=1)
+        fig.update_layout(
+            height=300,
+            margin=dict(l=20, r=20, t=60, b=20),
+            showlegend=False
+        )
+
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Add help text below
+        with st.expander("ℹ️ Training Load Metrics Explained"):
+            st.markdown("""
+            - **CTL (Chronic Training Load)**: 42-day rolling average TSS. Your long-term fitness level. Higher = fitter.
+            - **ATL (Acute Training Load)**: 7-day rolling average TSS. Your recent fatigue level. Higher = more tired.
+            - **TSB (Training Stress Balance)**: CTL - ATL. Your current form/freshness.
+              - 🟢 -10 to +20: Fresh, race-ready
+              - 🟡 -50 to -10: Fatigued, high training load
+              - 🔴 <-50 or >+20: Extremely fatigued or detrained
+            - **ACWR (Acute:Chronic Workload Ratio)**: ATL / CTL. Injury risk indicator.
+              - 🟢 0.8-1.3: Optimal training zone
+              - 🟡 <0.8 or 1.3-1.5: Caution zone
+              - 🔴 >1.5: High injury risk
+            """)
+
+    # Row 4: CP Model & Durability visualization
+    st.divider()
+    st.markdown("#### 💪 Power Profile & Durability")
+
+    # CP model metrics (latest values)
+    if not df.empty:
+        latest_activity = df.sort_values("start_date", ascending=False).iloc[0]
+        cp = latest_activity.get("cp", None)
+        w_prime = latest_activity.get("w_prime", None)
+        r_squared = latest_activity.get("cp_r_squared", None)
+        aei = latest_activity.get("aei", None)
+
+        # Durability metrics (year average)
+        avg_sustainability = safe_mean_fn(df["power_sustainability_index"])
+        avg_variability = safe_mean_fn(df["variability_index"])
+        avg_fatigue_idx = safe_mean_fn(df["fatigue_index"])
+        avg_decoupling = safe_mean_fn(df["power_hr_decoupling"])
+
+        # Create two columns for visualizations
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            st.markdown("**Power Profile (Latest)**")
+            # CP Model bar chart
+            import plotly.graph_objects as go
+            fig_cp = go.Figure()
+
+            if pd.notna(cp) and pd.notna(w_prime):
+                # Create hover text for each metric
+                cp_hover = f"CP: {cp:.0f}W<br>Sustainable power threshold (~FTP)<br>Typical: 200-300W (fit), 300-400W (very fit), 400+W (elite)"
+                w_prime_hover = f"W': {w_prime/1000:.1f}kJ<br>Anaerobic capacity above CP<br>Typical: 15-25kJ (fit), 25-35kJ (very fit), 35+kJ (elite)"
+                r2_hover = f"R²: {r_squared:.3f}<br>Model fit quality<br>Target >0.95 (excellent), >0.90 (good), <0.80 (poor)"
+                aei_hover = f"AEI: {aei:.2f}<br>Aerobic efficiency (0-1 scale)<br>0.3-0.5 (sprinter), 0.5-0.7 (all-rounder), 0.7-0.95 (endurance)"
+
+                fig_cp.add_trace(go.Bar(
+                    x=['CP (W)', 'W\' (kJ)', 'R²', 'AEI'],
+                    y=[cp if pd.notna(cp) else 0,
+                       (w_prime / 1000) if pd.notna(w_prime) else 0,
+                       (r_squared * 100) if pd.notna(r_squared) else 0,
+                       (aei * 100) if pd.notna(aei) else 0],
+                    text=[f"{cp:.0f}" if pd.notna(cp) else "N/A",
+                          f"{w_prime/1000:.1f}" if pd.notna(w_prime) else "N/A",
+                          f"{r_squared:.3f}" if pd.notna(r_squared) else "N/A",
+                          f"{aei:.2f}" if pd.notna(aei) else "N/A"],
+                    textposition='auto',
+                    marker_color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'],
+                    hovertext=[cp_hover, w_prime_hover, r2_hover, aei_hover],
+                    hovertemplate='<b>%{x}</b><br>%{hovertext}<extra></extra>'
+                ))
+
+                fig_cp.update_layout(
+                    height=300,
+                    margin=dict(l=20, r=20, t=20, b=20),
+                    showlegend=False,
+                    yaxis_title="Value",
+                    hovermode='x'
+                )
+
+                st.plotly_chart(fig_cp, use_container_width=True)
+            else:
+                st.info("No CP model data available")
+
+        with col_right:
+            st.markdown("**Durability Metrics (Year Avg)**")
+            # Durability radar chart
+            fig_dur = go.Figure()
+
+            if any(pd.notna(x) for x in [avg_sustainability, avg_variability, avg_fatigue_idx, avg_decoupling]):
+                # Normalize values to 0-100 scale for radar chart
+                sustainability_norm = avg_sustainability if pd.notna(avg_sustainability) else 0
+                variability_norm = (2.0 - avg_variability) * 50 if pd.notna(avg_variability) else 0  # Invert: lower is better
+                fatigue_norm = 100 - avg_fatigue_idx if pd.notna(avg_fatigue_idx) else 0  # Invert: lower is better
+                decoupling_norm = 100 - (avg_decoupling * 2) if pd.notna(avg_decoupling) else 0  # Invert: lower is better
+
+                # Create hover text for each dimension
+                hover_text = [
+                    f"Power Sustainability: {avg_sustainability:.1f}%<br>Ability to maintain power<br>>90% = excellent, >75% = good, <75% = needs work",
+                    f"Variability (VI): {avg_variability:.2f}<br>Pacing consistency (1.0=perfect)<br>1.05-1.10 = steady, >1.15 = variable",
+                    f"Fatigue Index: {avg_fatigue_idx:.1f}%<br>Power drop over activity<br>0-5% = excellent, >15% = poor endurance",
+                    f"Power-HR Decoupling: {avg_decoupling:.1f}%<br>Aerobic fitness indicator<br>0-3% = excellent, >8% = poor aerobic base"
+                ]
+
+                fig_dur.add_trace(go.Scatterpolar(
+                    r=[sustainability_norm, variability_norm, fatigue_norm, decoupling_norm],
+                    theta=['Sustainability', 'Pacing', 'Endurance', 'Aerobic Fitness'],
+                    fill='toself',
+                    name='Durability',
+                    hovertext=hover_text,
+                    hovertemplate='<b>%{theta}</b><br>%{hovertext}<extra></extra>'
+                ))
+
+                fig_dur.update_layout(
+                    polar=dict(
+                        radialaxis=dict(
+                            visible=True,
+                            range=[0, 100]
+                        )
+                    ),
+                    height=300,
+                    margin=dict(l=40, r=40, t=20, b=20),
+                    showlegend=False
+                )
+
+                st.plotly_chart(fig_dur, use_container_width=True)
+            else:
+                st.info("No durability data available")
+
+        # Add detailed metrics below charts
+        with st.expander("ℹ️ Power Profile & Durability Explained"):
+            col_a, col_b = st.columns(2)
+            with col_a:
+                st.markdown("""
+                **Power Profile:**
+                - **CP**: Critical Power - sustainable threshold (~FTP)
+                - **W'**: Anaerobic capacity above CP (in kJ)
+                - **R²**: Model fit quality (>0.95 = excellent)
+                - **AEI**: Aerobic efficiency (higher = more aerobic)
+                """)
+            with col_b:
+                st.markdown(f"""
+                **Durability (Year Avg):**
+                - **Sustainability**: {avg_sustainability:.1f}% (higher = better)
+                - **Variability**: {avg_variability:.2f} (1.0 = steady, >1.05 = variable)
+                - **Fatigue**: {avg_fatigue_idx:.1f}% (lower = better endurance)
+                - **Decoupling**: {avg_decoupling:.1f}% (lower = better aerobic fitness)
+                """ if all(pd.notna(x) for x in [avg_sustainability, avg_variability, avg_fatigue_idx, avg_decoupling]) else """
+                **Durability (Year Avg):**
+                - Data not available for all metrics
+                """)
 
 
 def render_power_curve_section(df: pd.DataFrame, help_texts: dict) -> None:
@@ -244,7 +533,6 @@ def render_tid_section(
         help_texts: Dictionary of help text strings
         selected_year: Current year for display
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     st.subheader("🎯 Training Intensity Distribution")
 
@@ -333,7 +621,7 @@ def render_tid_section(
             st.plotly_chart(fig_monthly_tid, width="stretch")
 
     # Polarization metrics
-    avg_pol = safe_mean_fn(df[f"{prefix}power_polarization_index"])
+    avg_pol = safe_mean_fn(df["power_polarization_index"])
 
     pol_col1, pol_col2, pol_col3, pol_col4 = st.columns(4)
     pol_col1.metric(
@@ -352,6 +640,147 @@ def render_tid_section(
     )
 
 
+def render_training_load_section(df: pd.DataFrame) -> None:
+    """
+    Render CTL/ATL/TSB trends over the year showing fitness progression.
+
+    Args:
+        df: Year activities DataFrame
+    """
+    st.subheader("📊 Training Load Progression (CTL/ATL/TSB)")
+
+    with st.expander("ℹ️ Understanding Training Load Metrics", expanded=False):
+        st.markdown("""
+        **CTL (Chronic Training Load)** - Blue line
+        - 42-day rolling average of TSS
+        - Represents your long-term fitness
+        - Higher = more fit, but also more fatigue
+
+        **ATL (Acute Training Load)** - Red line
+        - 7-day rolling average of TSS
+        - Represents recent training stress/fatigue
+        - Spikes quickly with hard training
+
+        **TSB (Training Stress Balance)** - Yellow line
+        - Formula: CTL - ATL
+        - Positive = fresh/recovered
+        - Negative = fatigued
+        - Optimal race form: -10 to +5
+
+        **ACWR (Acute:Chronic Workload Ratio)** - Green dots
+        - Formula: ATL / CTL
+        - Sweet spot: 0.8 - 1.3
+        - >1.5 = high injury risk
+        - <0.8 = detraining risk
+        """)
+
+    # Filter to activities with CTL data
+    df_ctl = df[df["chronic_training_load"].notna()].copy()
+
+    if df_ctl.empty:
+        st.info("No training load data available for this year.")
+        return
+
+    # Sort by date
+    df_ctl = df_ctl.sort_values("start_date")
+
+    # Create figure with secondary y-axis
+    fig = make_subplots(
+        rows=2, cols=1,
+        subplot_titles=("CTL / ATL / TSB Trends", "ACWR (Acute:Chronic Ratio)"),
+        vertical_spacing=0.12,
+        row_heights=[0.7, 0.3]
+    )
+
+    # Plot CTL (Fitness)
+    fig.add_trace(
+        go.Scatter(
+            x=df_ctl["start_date"],
+            y=df_ctl["chronic_training_load"],
+            name="CTL (Fitness)",
+            line=dict(color="#3498db", width=2),
+            hovertemplate="<b>CTL</b>: %{y:.1f}<br>Date: %{x|%Y-%m-%d}<extra></extra>"
+        ),
+        row=1, col=1
+    )
+
+    # Plot ATL (Fatigue)
+    fig.add_trace(
+        go.Scatter(
+            x=df_ctl["start_date"],
+            y=df_ctl["acute_training_load"],
+            name="ATL (Fatigue)",
+            line=dict(color="#e74c3c", width=2),
+            hovertemplate="<b>ATL</b>: %{y:.1f}<br>Date: %{x|%Y-%m-%d}<extra></extra>"
+        ),
+        row=1, col=1
+    )
+
+    # Plot TSB (Form)
+    fig.add_trace(
+        go.Scatter(
+            x=df_ctl["start_date"],
+            y=df_ctl["training_stress_balance"],
+            name="TSB (Form)",
+            line=dict(color="#f39c12", width=2),
+            fill='tozeroy',
+            fillcolor='rgba(243, 156, 18, 0.1)',
+            hovertemplate="<b>TSB</b>: %{y:.1f}<br>Date: %{x|%Y-%m-%d}<extra></extra>"
+        ),
+        row=1, col=1
+    )
+
+    # Add TSB reference zones
+    fig.add_hrect(y0=-10, y1=20, line_width=0, fillcolor="green", opacity=0.05, row=1, col=1)
+    fig.add_hrect(y0=-50, y1=-10, line_width=0, fillcolor="orange", opacity=0.05, row=1, col=1)
+
+    # Plot ACWR
+    fig.add_trace(
+        go.Scatter(
+            x=df_ctl["start_date"],
+            y=df_ctl["acwr"],
+            name="ACWR",
+            mode='markers+lines',
+            marker=dict(color="#2ecc71", size=4),
+            line=dict(color="#2ecc71", width=1),
+            hovertemplate="<b>ACWR</b>: %{y:.2f}<br>Date: %{x|%Y-%m-%d}<extra></extra>"
+        ),
+        row=2, col=1
+    )
+
+    # Add ACWR reference zones
+    fig.add_hrect(y0=0.8, y1=1.3, line_width=0, fillcolor="green", opacity=0.1, row=2, col=1)
+    fig.add_hrect(y0=1.3, y1=2.0, line_width=0, fillcolor="red", opacity=0.1, row=2, col=1)
+    fig.add_hline(y=1.0, line_dash="dash", line_color="gray", opacity=0.5, row=2, col=1)
+
+    # Update layout
+    fig.update_xaxes(title_text="Date", row=2, col=1)
+    fig.update_yaxes(title_text="Load", row=1, col=1)
+    fig.update_yaxes(title_text="Ratio", row=2, col=1, range=[0, 2])
+
+    fig.update_layout(
+        height=600,
+        hovermode='x unified',
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Summary stats
+    col1, col2, col3, col4 = st.columns(4)
+
+    latest_ctl = df_ctl["chronic_training_load"].iloc[-1]
+    latest_atl = df_ctl["acute_training_load"].iloc[-1]
+    latest_tsb = df_ctl["training_stress_balance"].iloc[-1]
+    latest_acwr = df_ctl["acwr"].iloc[-1]
+
+    col1.metric("📈 End CTL", f"{latest_ctl:.1f}")
+    col2.metric("📉 End ATL", f"{latest_atl:.1f}")
+    col3.metric("⚖️ End TSB", f"{latest_tsb:.1f}")
+    col4.metric("🎯 End ACWR", f"{latest_acwr:.2f}")
+
+
 def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
     """
     Render the trends tab with monthly volume and intensity analysis.
@@ -361,7 +790,6 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
         metric_view: "Moving Time" or "Raw Time"
         safe_mean_fn: Function to safely calculate mean
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     col_left, col_right = st.columns([2, 1])
 
@@ -382,7 +810,7 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
                     "distance": "sum",
                     "total_elevation_gain": "sum",
                     "moving_time": "sum",
-                    f"{prefix}training_stress_score": "sum",
+                    "training_stress_score": "sum",
                 }
             )
             .reset_index()
@@ -405,7 +833,7 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
         fig_monthly.add_trace(
             go.Scatter(
                 x=monthly_stats["month_date"],
-                y=monthly_stats[f"{prefix}training_stress_score"],
+                y=monthly_stats["training_stress_score"],
                 name="TSS",
                 line=dict(color="#e74c3c", width=3),
                 mode="lines+markers",
@@ -463,8 +891,8 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
         df_copy.groupby("month_date")
         .agg(
             {
-                f"{prefix}normalized_power": "mean",
-                f"{prefix}intensity_factor": "mean",
+                "normalized_power": "mean",
+                "intensity_factor": "mean",
             }
         )
         .reset_index()
@@ -475,7 +903,7 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
     fig_intensity.add_trace(
         go.Scatter(
             x=monthly_intensity["month_date"],
-            y=monthly_intensity[f"{prefix}normalized_power"],
+            y=monthly_intensity["normalized_power"],
             name="Avg NP (W)",
             line=dict(color="#9b59b6", width=2),
             mode="lines+markers",
@@ -486,7 +914,7 @@ def render_trends_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -> None:
     fig_intensity.add_trace(
         go.Scatter(
             x=monthly_intensity["month_date"],
-            y=monthly_intensity[f"{prefix}intensity_factor"],
+            y=monthly_intensity["intensity_factor"],
             name="Avg IF",
             line=dict(color="#e67e22", width=2),
             mode="lines+markers",
@@ -518,7 +946,6 @@ def render_efficiency_tab(
         avg_ef: Average efficiency factor
         avg_fatigue: Average fatigue index
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     with st.expander("ℹ️ Understanding Efficiency & Fatigue", expanded=False):
         st.markdown(help_texts.get("efficiency_factor", ""))
@@ -538,16 +965,16 @@ def render_efficiency_tab(
         )
         monthly_ef = (
             df_copy.groupby("month_date")
-            .agg({f"{prefix}efficiency_factor": "mean"})
+            .agg({"efficiency_factor": "mean"})
             .reset_index()
         )
 
-        if monthly_ef[f"{prefix}efficiency_factor"].notna().any():
+        if monthly_ef["efficiency_factor"].notna().any():
             fig_ef = go.Figure()
             fig_ef.add_trace(
                 go.Scatter(
                     x=monthly_ef["month_date"],
-                    y=monthly_ef[f"{prefix}efficiency_factor"],
+                    y=monthly_ef["efficiency_factor"],
                     mode="lines+markers",
                     name="Avg EF",
                     line=dict(color="#2ecc71", width=3),
@@ -581,16 +1008,16 @@ def render_efficiency_tab(
         # Monthly Fatigue Index trend
         monthly_fatigue = (
             df_copy.groupby("month_date")
-            .agg({f"{prefix}fatigue_index": "mean"})
+            .agg({"fatigue_index": "mean"})
             .reset_index()
         )
 
-        if monthly_fatigue[f"{prefix}fatigue_index"].notna().any():
+        if monthly_fatigue["fatigue_index"].notna().any():
             fig_fatigue = go.Figure()
             fig_fatigue.add_trace(
                 go.Scatter(
                     x=monthly_fatigue["month_date"],
-                    y=monthly_fatigue[f"{prefix}fatigue_index"],
+                    y=monthly_fatigue["fatigue_index"],
                     mode="lines+markers",
                     name="Avg Fatigue Index",
                     line=dict(color="#e74c3c", width=3),
@@ -621,7 +1048,7 @@ def render_efficiency_tab(
 
     # Decoupling Analysis
     st.markdown("#### Power-HR Decoupling Analysis")
-    decoup_col = f"{prefix}power_hr_decoupling"
+    decoup_col = "power_hr_decoupling"
     if decoup_col in df.columns and df[decoup_col].notna().any():
         df_copy = df.copy()
         df_copy["month_date"] = (
@@ -757,13 +1184,12 @@ def render_distributions_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -
         metric_view: "Moving Time" or "Raw Time"
         safe_mean_fn: Function to safely calculate mean
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     col1, col2 = st.columns(2)
 
     with col1:
         # Power Distribution
-        np_col = f"{prefix}normalized_power"
+        np_col = "normalized_power"
         if np_col in df.columns and df[np_col].notna().any():
             fig_power = px.histogram(
                 df.dropna(subset=[np_col]),
@@ -793,7 +1219,7 @@ def render_distributions_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -
 
     # TSS vs Distance scatter
     st.markdown("#### Training Load Analysis")
-    tss_col = f"{prefix}training_stress_score"
+    tss_col = "training_stress_score"
     if tss_col in df.columns:
         df_scatter = df.dropna(subset=[tss_col]).copy()
         if not df_scatter.empty:
@@ -804,8 +1230,8 @@ def render_distributions_tab(df: pd.DataFrame, metric_view: str, safe_mean_fn) -
                 x="distance_km",
                 y=tss_col,
                 color="sport_type",
-                size=f"{prefix}normalized_power"
-                if f"{prefix}normalized_power" in df_scatter.columns
+                size="normalized_power"
+                if "normalized_power" in df_scatter.columns
                 else None,
                 hover_data=["name", "start_date_local"],
                 title="Distance vs TSS (Size = NP)",
@@ -825,7 +1251,6 @@ def render_patterns_tab(df: pd.DataFrame, metric_view: str) -> None:
         df: Year activities
         metric_view: "Moving Time" or "Raw Time"
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     col_w1, col_w2 = st.columns(2)
 
@@ -901,7 +1326,7 @@ def render_patterns_tab(df: pd.DataFrame, metric_view: str) -> None:
     time_stats = (
         df_copy.groupby("time_of_day")
         .agg(
-            {"id": "count", "distance": "sum", f"{prefix}normalized_power": "mean"}
+            {"id": "count", "distance": "sum", "normalized_power": "mean"}
         )
         .reset_index()
     )
@@ -946,7 +1371,6 @@ def render_extremes_section(df: pd.DataFrame, metric_view: str, format_duration_
         metric_view: "Moving Time" or "Raw Time"
         format_duration_fn: Function to format duration
     """
-    prefix = "moving_" if metric_view == "Moving Time" else "raw_"
 
     st.divider()
     st.subheader("🏆 Activity Extremes")
@@ -978,7 +1402,7 @@ def render_extremes_section(df: pd.DataFrame, metric_view: str, format_duration_
         )
 
     with col_e4:
-        np_col = f"{prefix}normalized_power"
+        np_col = "normalized_power"
         if np_col in df.columns and df[np_col].notna().any():
             highest_np = df.loc[df[np_col].idxmax()]
             st.metric(

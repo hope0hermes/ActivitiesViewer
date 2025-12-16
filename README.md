@@ -156,13 +156,35 @@ uv run pytest -v
 
 ActivitiesViewer displays a comprehensive set of cycling metrics:
 
-- **Power Metrics**: NP, IF, TSS, VI, power zones
+### Training Load Metrics
+- **CTL (Chronic Training Load)**: 42-day fitness level
+- **ATL (Acute Training Load)**: 7-day fatigue level
+- **TSB (Training Stress Balance)**: Current form/freshness
+- **ACWR (Acute:Chronic Workload Ratio)**: Injury risk indicator
+
+### Power Profile Metrics
+- **CP (Critical Power)**: Sustainable threshold power
+- **W' (W-prime)**: Anaerobic work capacity
+- **CP R²**: Model fit quality and reliability
+- **AEI (Aerobic Efficiency Index)**: Aerobic vs anaerobic split
+
+### Durability Metrics
+- **Power Sustainability**: Ability to maintain power over duration
+- **Variability Index (VI)**: Pacing consistency
+- **Fatigue Index**: Power fade during activity
+- **Power-HR Decoupling**: Aerobic fitness indicator
+
+### Standard Metrics
+- **Power**: NP, IF, TSS, power zones
 - **Heart Rate**: HR zones, HR-TSS, efficiency factor
-- **Training Load**: CTL, ATL, TSB, ACWR
-- **Advanced**: Power-HR decoupling, fatigue index, sustainability
 - **Comparative**: Week-over-week, month-over-month trends
 
-For detailed metric definitions, see [docs/METRICS_GLOSSARY.md](docs/METRICS_GLOSSARY.md).
+### Full Documentation
+📖 **[NEW_METRICS.md](docs/NEW_METRICS.md)** - Comprehensive guide including:
+- Detailed definitions of all training load, power profile, and durability metrics
+- Optimal ranges and interpretation guidelines
+- Usage examples and training decision trees
+- FAQ and technical details
 
 ## 🗺️ Roadmap
 
