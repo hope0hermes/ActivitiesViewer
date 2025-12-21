@@ -191,10 +191,29 @@ def main():
 
     service: ActivityService = st.session_state.activity_service
 
-    # Render activity selector
-    activity, activity_id, metric_view = render_activity_selector(service)
+    # Metric view selector in sidebar - always visible
+    with st.sidebar:
+        st.subheader("View Options")
+
+        # Initialize session state if not present
+        if "metric_view_selection" not in st.session_state:
+            st.session_state.metric_view_selection = "Moving Time"
+
+        metric_view = st.radio(
+            "Metric View:",
+            ("Moving Time", "Raw Time"),
+            key="metric_view_selection",
+            help="Moving Time: Metrics calculated only during movement\nRaw Time: Metrics calculated for total activity duration",
+        )
+
+    # Render activity selector with metric_view
+    activity, activity_id = render_activity_selector(service, metric_view)
     if activity is None:
         return
+
+    # Reload activity to ensure correct metric_view data is used
+    # (in case metric_view changed but activity selection didn't)
+    activity = service.get_activity(activity_id, metric_view)
 
     st.divider()
 

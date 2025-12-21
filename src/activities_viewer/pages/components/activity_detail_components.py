@@ -213,17 +213,22 @@ def render_metric(column, label: str, value: str, help_text: str = None) -> None
 
 def render_activity_selector(
     service: ActivityService,
-) -> tuple[Activity | None, str, str]:
+    metric_view: str,
+) -> tuple[Activity | None, str]:
     """
     Render activity selection UI with calendar and dropdown.
 
+    Args:
+        service: ActivityService instance
+        metric_view: Either "Moving Time" or "Raw Time"
+
     Returns:
-        Tuple of (selected_activity, activity_id, metric_view)
+        Tuple of (selected_activity, activity_id)
     """
-    df_activities = service.get_all_activities()
+    df_activities = service.get_all_activities(metric_view)
     if df_activities.empty:
         st.warning("No activities found.")
-        return None, "", ""
+        return None, ""
 
     # Ensure datetime (already sorted by date desc from repository)
     df_activities["start_date_local"] = pd.to_datetime(
@@ -268,23 +273,6 @@ def render_activity_selector(
             help="Choose which activity to analyze",
         )
 
-    # Metric view selector - use session state to persist selection (BEFORE loading activity)
-    col1, col2 = st.columns(2)
-    with col1:
-        # Initialize session state if not present
-        if "metric_view_selection" not in st.session_state:
-            st.session_state.metric_view_selection = "Moving Time"
-
-        metric_view = st.radio(
-            "View:",
-            ("Moving Time", "Raw Time"),
-            horizontal=True,
-            label_visibility="collapsed",
-            key="metric_view_selection",
-        )
-    with col2:
-        st.caption("Choose between moving time or total time metrics")
-
     # Get selected activity with metric_view
     selected_row = df_for_selection[
         df_for_selection["name"] == selected_activity_name
@@ -292,7 +280,7 @@ def render_activity_selector(
     activity_id = selected_row["id"]
     activity = service.get_activity(activity_id, metric_view)
 
-    return activity, activity_id, metric_view
+    return activity, activity_id
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
