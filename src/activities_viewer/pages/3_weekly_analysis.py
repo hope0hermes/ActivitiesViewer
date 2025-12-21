@@ -28,6 +28,7 @@ st.set_page_config(page_title="Weekly Analysis", page_icon="📅", layout="wide"
 # ═══════════════════════════════════════════════════════════════════════════════
 
 HELP_TEXTS = {
+    # Volume & Load Metrics
     "tss": (
         "Training Stress Score quantifies total training load. Weekly targets:\n"
         "• 300-400: Maintenance\n• 400-600: Building\n• 600-800: High load\n• 800+: Overreaching risk"
@@ -43,6 +44,48 @@ HELP_TEXTS = {
     "fatigue_trend": (
         "Average fatigue index across activities. Lower is better.\n"
         "High values (>15%) suggest inadequate recovery or pacing issues."
+    ),
+    # Training Load State
+    "chronic_training_load": (
+        "CTL (Chronic Training Load): 42-day exponentially weighted TSS.\n"
+        "Represents overall fitness. Higher = more training capacity.\n"
+        "• <50: Building phase\n• 50-100: Consistent training\n• 100-150: High fitness\n• >150: Elite"
+    ),
+    "acute_training_load": (
+        "ATL (Acute Training Load): 7-day exponentially weighted TSS.\n"
+        "Represents recent fatigue. High values indicate accumulated stress.\n"
+        "• <50: Fresh\n• 50-100: Normal training\n• >100: High fatigue"
+    ),
+    "training_stress_balance": (
+        "TSB (Training Stress Balance): CTL - ATL.\n"
+        "Indicates form/freshness. Optimal race readiness: -10 to +20.\n"
+        "• >20: Very fresh (may lose fitness)\n• 0-20: Race ready\n• -10 to 0: Productive training\n• <-10: Overreached"
+    ),
+    "acwr": (
+        "ACWR (Acute:Chronic Workload Ratio): ATL ÷ CTL.\n"
+        "Injury risk indicator. Sweet spot: 0.8-1.3.\n"
+        "• <0.8: Undertraining\n• 0.8-1.3: Optimal\n• 1.3-1.5: Caution\n• >1.5: High injury risk"
+    ),
+    # Power Profile
+    "cp": (
+        "CP (Critical Power): Maximum sustainable power for extended efforts (>3 min).\n"
+        "Derived from power-duration curve. Similar to FTP.\n"
+        "• <200W: Beginner\n• 200-300W: Fit\n• 300-400W: Very fit\n• >400W: Elite"
+    ),
+    "w_prime": (
+        "W' (W-prime): Anaerobic work capacity above CP.\n"
+        "Amount of work available for efforts above CP before exhaustion.\n"
+        "• <15kJ: Low\n• 15-25kJ: Average\n• >25kJ: High anaerobic capacity"
+    ),
+    "cp_r_squared": (
+        "R² (Model Fit Quality): Goodness of fit for CP model (0-1).\n"
+        "Higher values = more reliable CP and W' estimates.\n"
+        "• <0.85: Poor fit\n• 0.85-0.95: Good\n• >0.95: Excellent"
+    ),
+    "aei": (
+        "AEI (Aerobic Efficiency Index): Normalized anaerobic capacity (J/kg).\n"
+        "Indicates athlete profile type.\n"
+        "• <0.7: Balanced\n• 0.7-0.85: Aerobic bias\n• >0.85: Strong aerobic profile"
     ),
 }
 
@@ -125,18 +168,21 @@ def main():
         st.warning("No activities found.")
         return
 
-    # Ensure datetime
+    # Ensure datetime (keep as local timezone, don't force UTC)
     df_activities["start_date_local"] = pd.to_datetime(
-        df_activities["start_date_local"], utc=True
+        df_activities["start_date_local"]
     )
 
+    # Remove timezone info if present (work with local dates)
+    if df_activities["start_date_local"].dt.tz is not None:
+        df_activities["start_date_local"] = df_activities["start_date_local"].dt.tz_localize(None)
+
     # Add week column (Start of the week - Monday)
+    # Subtract weekday offset (0=Monday, 6=Sunday) to get Monday of each week
     df_activities["week_start"] = (
         df_activities["start_date_local"]
-        .dt.tz_localize(None)
-        .dt.to_period("W-MON")
-        .dt.start_time
-    )
+        - pd.to_timedelta(df_activities["start_date_local"].dt.weekday, unit='D')
+    ).dt.normalize()
 
     # Get unique weeks for selector
     available_weeks = sorted(df_activities["week_start"].unique(), reverse=True)
@@ -150,14 +196,19 @@ def main():
     # Reload activities with selected metric_view
     df_activities = service.get_all_activities(metric_view)
     df_activities["start_date_local"] = pd.to_datetime(
-        df_activities["start_date_local"], utc=True
+        df_activities["start_date_local"]
     )
+
+    # Remove timezone info if present (work with local dates)
+    if df_activities["start_date_local"].dt.tz is not None:
+        df_activities["start_date_local"] = df_activities["start_date_local"].dt.tz_localize(None)
+
+    # Add week column (Start of the week - Monday)
+    # Subtract weekday offset (0=Monday, 6=Sunday) to get Monday of each week
     df_activities["week_start"] = (
         df_activities["start_date_local"]
-        .dt.tz_localize(None)
-        .dt.to_period("W-MON")
-        .dt.start_time
-    )
+        - pd.to_timedelta(df_activities["start_date_local"].dt.weekday, unit='D')
+    ).dt.normalize()
 
     # Filter data for selected week
     df_week = df_activities[
@@ -195,6 +246,7 @@ def main():
     with tab_overview:
         render_overview_tab(
             df_week,
+            selected_week,
             metric_view,
             calculate_weekly_tid,
             format_duration,
@@ -202,7 +254,7 @@ def main():
         )
 
     with tab_intensity:
-        render_intensity_tab(df_week, metric_view)
+        render_intensity_tab(df_week, selected_week, metric_view)
 
     with tab_trends:
         render_trends_tab(

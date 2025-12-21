@@ -10,6 +10,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
+from activities_viewer.pages.components.activity_detail_components import render_metric
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMPONENT: Week Selector & Navigation
@@ -178,25 +179,12 @@ def render_kpi_section(
 
     col1, col2, col3, col4, col5, col6 = st.columns(6)
 
-    col1.metric(
-        "Distance",
-        f"{total_dist:,.1f} km",
-        delta=f"{total_dist - prev_dist:+.1f} km" if prev_dist else None,
-    )
-    col2.metric(
-        "Time",
-        format_duration_fn(total_time),
-        delta=f"{(total_time - prev_time) / 3600:+.1f}h" if prev_time else None,
-    )
-    col3.metric("Elevation", f"{total_elev:,.0f} m")
-    col4.metric("Activities", f"{count}")
-    col5.metric(
-        "TSS",
-        f"{total_tss:,.0f}",
-        delta=f"{total_tss - prev_tss:+.0f}" if prev_tss else None,
-        help=help_texts.get("tss", ""),
-    )
-    col6.metric("Work", f"{total_work:,.0f} kJ")
+    render_metric(col1, "Distance", f"{total_dist:,.1f} km", f"{total_dist - prev_dist:+.1f} km" if prev_dist else None)
+    render_metric(col2, "Time", format_duration_fn(total_time), f"{(total_time - prev_time) / 3600:+.1f}h" if prev_time else None)
+    render_metric(col3, "Elevation", f"{total_elev:,.0f} m")
+    render_metric(col4, "Activities", f"{count}")
+    render_metric(col5, "TSS", f"{total_tss:,.0f}", f"{total_tss - prev_tss:+.0f}" if prev_tss else None)
+    render_metric(col6, "Work", f"{total_work:,.0f} kJ")
 
     # Row 2: Intensity & Efficiency Metrics
     avg_np = get_metric_fn(df_week, "normalized_power", "mean")
@@ -207,17 +195,14 @@ def render_kpi_section(
     avg_hr = get_metric_fn(df_week, "average_hr", "mean")
 
     t1, t2, t3, t4, t5, t6 = st.columns(6)
-    t1.metric("Avg NP", f"{avg_np:.0f} W" if avg_np else "-")
-    t2.metric("Avg IF", f"{avg_if:.2f}" if avg_if else "-")
-    t3.metric("Avg EF", f"{avg_ef:.2f}" if avg_ef else "-", help=help_texts.get("avg_ef", ""))
-    t4.metric("Avg VI", f"{avg_vi:.2f}" if avg_vi else "-")
-    t5.metric(
-        "Avg Fatigue",
-        f"{avg_fatigue:.1f}%" if avg_fatigue else "-",
-        help=help_texts.get("fatigue_trend", ""),
-    )
+    render_metric(t1, "Avg NP", f"{avg_np:.0f} W" if avg_np else "-")
+    render_metric(t2, "Avg IF", f"{avg_if:.2f}" if avg_if else "-")
+    render_metric(t3, "Avg EF", f"{avg_ef:.2f}" if avg_ef else "-", help_texts.get("avg_ef", ""))
+    render_metric(t4, "Avg VI", f"{avg_vi:.2f}" if avg_vi else "-")
+    render_metric(t5, "Avg Fatigue", f"{avg_fatigue:.1f}%" if avg_fatigue else "-", help_texts.get("fatigue_trend", ""))
+    render_metric(t6, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
 
-    # Row 3: Training Load State visualization (from end of week)
+    # Row 3: Training Load State (from end of week)
     st.divider()
     st.markdown("#### 📊 Training Load State (End of Week)")
 
@@ -231,147 +216,66 @@ def render_kpi_section(
         tsb = latest_activity.get("training_stress_balance", None)
         acwr = latest_activity.get("acwr", None)
 
-        # Create gauge charts for training load metrics
-        from plotly.subplots import make_subplots
-        import plotly.graph_objects as go
+        # Display metrics in 4 columns using render_metric
+        col1, col2, col3, col4 = st.columns(4)
 
-        fig = make_subplots(
-            rows=1, cols=4,
-            specs=[[{'type': 'bar'}, {'type': 'bar'}, {'type': 'bar'}, {'type': 'bar'}]],
-            subplot_titles=('CTL (Fitness)', 'ATL (Fatigue)', 'TSB (Form)', 'ACWR (Injury Risk)')
+        # CTL (Chronic Training Load)
+        ctl_value = f"{ctl:.0f}" if pd.notna(ctl) else "-"
+        ctl_help = "42-day fitness level. Optimal: 80-120\nStatus: " + (
+            "Building - Early in training block" if pd.notna(ctl) and ctl < 50 else
+            "Consistent - Normal training load" if pd.notna(ctl) and ctl < 100 else
+            "High - Peak training phase" if pd.notna(ctl) and ctl < 150 else
+            "Elite - Competition ready"
         )
+        render_metric(col1, "📊 CTL (Fitness)", ctl_value, ctl_help)
 
-        # CTL interpretation
-        ctl_interpretation = ""
-        if pd.notna(ctl):
-            if ctl < 50:
-                ctl_interpretation = "Low fitness (building phase)"
-                ctl_color = "lightgray"
-            elif ctl < 100:
-                ctl_interpretation = "Moderate fitness (consistent training)"
-                ctl_color = "lightblue"
-            elif ctl < 150:
-                ctl_interpretation = "High fitness (peak training)"
-                ctl_color = "lightgreen"
-            else:
-                ctl_interpretation = "Elite fitness (racing/peak)"
-                ctl_color = "darkgreen"
-        else:
-            ctl_color = "lightgray"
+        # ATL (Acute Training Load)
+        atl_value = f"{atl:.0f}" if pd.notna(atl) else "-"
+        atl_help = "7-day fatigue level. Optimal: 30-70\nStatus: " + (
+            "Fresh - Low recent fatigue" if pd.notna(atl) and atl < 50 else
+            "Normal - Healthy training week" if pd.notna(atl) and atl < 100 else
+            "High - Accumulating fatigue"
+        )
+        render_metric(col2, "⚡ ATL (Fatigue)", atl_value, atl_help)
 
-        ctl_value = f"{ctl:.1f}" if pd.notna(ctl) else "0"
-        ctl_hover = f"<b>CTL (Chronic Training Load)</b><br>42-day fitness level<br>Value: {ctl_value}<br>Status: {ctl_interpretation}<br>Optimal: 80-120"
-        fig.add_trace(go.Bar(
-            x=['CTL'],
-            y=[ctl if pd.notna(ctl) else 0],
-            marker=dict(color=[ctl_color]),
-            hovertext=[ctl_hover],
-            hovertemplate='%{hovertext}<extra></extra>',
-            showlegend=False
-        ), row=1, col=1)
+        # TSB (Training Stress Balance)
+        tsb_value = f"{tsb:.0f}" if pd.notna(tsb) else "-"
+        tsb_help = "Form/freshness (CTL - ATL). Optimal: -10 to +20\nStatus: " + (
+            "Exhausted - Avoid racing!" if pd.notna(tsb) and tsb < -50 else
+            "Fatigued - Recovery needed" if pd.notna(tsb) and tsb < -10 else
+            "Optimal - Ready for performance" if pd.notna(tsb) and tsb <= 20 else
+            "Very fresh - Consider intensity"
+        )
+        render_metric(col3, "🎯 TSB (Form)", tsb_value, tsb_help)
 
-        # ATL interpretation
-        atl_interpretation = ""
-        if pd.notna(atl):
-            if atl < 50:
-                atl_interpretation = "Fresh, low fatigue"
-                atl_color = "lightgray"
-            elif atl < 100:
-                atl_interpretation = "Moderate fatigue (normal training week)"
-                atl_color = "lightyellow"
-            else:
-                atl_interpretation = "High fatigue (accumulating load)"
-                atl_color = "lightcoral"
-        else:
-            atl_color = "lightgray"
+        # ACWR (Acute:Chronic Workload Ratio)
+        acwr_value = f"{acwr:.2f}" if pd.notna(acwr) else "-"
+        acwr_help = "Injury risk indicator (ATL ÷ CTL). Optimal: 0.8-1.3\nStatus: " + (
+            "Undertraining - Low injury risk" if pd.notna(acwr) and acwr < 0.8 else
+            "Safe - Optimal training load" if pd.notna(acwr) and acwr <= 1.3 else
+            "Caution - Moderate injury risk" if pd.notna(acwr) and acwr <= 1.5 else
+            "High Risk - Reduce load!"
+        )
+        render_metric(col4, "⚠️ ACWR (Risk)", acwr_value, acwr_help)
 
-        atl_value = f"{atl:.1f}" if pd.notna(atl) else "0"
-        atl_hover = f"<b>ATL (Acute Training Load)</b><br>7-day fatigue level<br>Value: {atl_value}<br>Status: {atl_interpretation}<br>Optimal: 30-70"
-        fig.add_trace(go.Bar(
-            x=['ATL'],
-            y=[atl if pd.notna(atl) else 0],
-            marker=dict(color=[atl_color]),
-            hovertext=[atl_hover],
-            hovertemplate='%{hovertext}<extra></extra>',
-            showlegend=False
-        ), row=1, col=2)
-
-        # TSB interpretation
+        # Training State Summary
         if pd.notna(tsb):
-            if tsb < -50:
-                tsb_interpretation = "Extremely exhausted - AVOID RACING"
-                tsb_color = "darkred"
-            elif tsb < -10:
-                tsb_interpretation = "Fatigued but building fitness"
-                tsb_color = "lightyellow"
-            elif tsb <= 20:
-                tsb_interpretation = "Fresh and race-ready (OPTIMAL)"
-                tsb_color = "lightgreen"
-            else:
-                tsb_interpretation = "Very fresh/detrained"
-                tsb_color = "lightyellow"
-        else:
-            tsb_color = "lightgray"
-            tsb_interpretation = "N/A"
+            if tsb > 20:
+                state = "✅ Well-rested - Good for intensity work"
+                state_color = "green"
+            elif 0 <= tsb <= 20:
+                state = "🎯 Optimal zone - Productive training"
+                state_color = "blue"
+            elif -10 <= tsb < 0:
+                state = "⚠️ Elevated fatigue - Productive but stressed"
+                state_color = "orange"
+            else:  # tsb < -10
+                state = "🔴 Overreached - Recovery needed"
+                state_color = "red"
 
-        tsb_value = f"{tsb:.1f}" if pd.notna(tsb) else "0"
-        tsb_hover = f"<b>TSB (Training Stress Balance)</b><br>Form & freshness (CTL - ATL)<br>Value: {tsb_value}<br>Status: {tsb_interpretation}<br>Optimal: -10 to +20"
-        fig.add_trace(go.Bar(
-            x=['TSB'],
-            y=[tsb if pd.notna(tsb) else 0],
-            marker=dict(color=[tsb_color]),
-            hovertext=[tsb_hover],
-            hovertemplate='%{hovertext}<extra></extra>',
-            showlegend=False
-        ), row=1, col=3)
+            st.markdown(f"**Training State:** <span style='color:{state_color}'>{state}</span>", unsafe_allow_html=True)
 
-        # ACWR interpretation
-        if pd.notna(acwr):
-            if acwr < 0.8:
-                acwr_interpretation = "Undertraining (low injury risk)"
-                acwr_color = "lightyellow"
-            elif acwr <= 1.3:
-                acwr_interpretation = "Optimal zone (safe training)"
-                acwr_color = "lightgreen"
-            elif acwr <= 1.5:
-                acwr_interpretation = "Caution zone (moderate injury risk)"
-                acwr_color = "lightyellow"
-            else:
-                acwr_interpretation = "Danger zone (HIGH INJURY RISK)"
-                acwr_color = "lightcoral"
-        else:
-            acwr_color = "lightgray"
-            acwr_interpretation = "N/A"
-
-        acwr_value = f"{acwr:.2f}" if pd.notna(acwr) else "0"
-        acwr_hover = f"<b>ACWR (Acute:Chronic Workload Ratio)</b><br>Injury risk (ATL ÷ CTL)<br>Value: {acwr_value}<br>Status: {acwr_interpretation}<br>Optimal: 0.8-1.3"
-        fig.add_trace(go.Bar(
-            x=['ACWR'],
-            y=[acwr if pd.notna(acwr) else 0],
-            marker=dict(color=[acwr_color]),
-            hovertext=[acwr_hover],
-            hovertemplate='%{hovertext}<extra></extra>',
-            showlegend=False
-        ), row=1, col=4)
-
-        fig.update_yaxes(title_text="Value", row=1, col=1)
-        fig.update_layout(
-            height=300,
-            margin=dict(l=20, r=20, t=60, b=20),
-            showlegend=False
-        )
-
-        st.plotly_chart(fig, use_container_width=True)
-
-        with st.expander("ℹ️ Training Load Explained"):
-            st.markdown("""
-            - **CTL**: 42-day fitness level (higher = fitter)
-            - **ATL**: 7-day fatigue level (higher = more tired)
-            - **TSB**: Form/freshness (🟢 -10 to +20 = race-ready)
-            - **ACWR**: Injury risk (🟢 0.8-1.3 = optimal, 🔴 >1.5 = danger)
-            """)
-
-        # Row 4: CP Model & Durability visualization
+        # Row 4: CP Model & Durability metrics
         st.divider()
         st.markdown("#### 💪 Power Profile & Durability")
 
@@ -381,63 +285,54 @@ def render_kpi_section(
         r_squared = latest_activity.get("cp_r_squared", None)
         aei = latest_activity.get("aei", None)
 
-        # Create bar chart for power profile
+        # Display metrics in 4 columns using render_metric
         if any(pd.notna(x) for x in [cp, w_prime, r_squared, aei]):
-            fig_power = go.Figure()
+            col1, col2, col3, col4 = st.columns(4)
 
-            # Create hover text for each metric
-            cp_hover = f"CP: {cp:.0f}W<br>Sustainable power threshold<br>Typical: 200-300W (fit), 300-400W (very fit), 400+W (elite)"
-            w_prime_hover = f"W': {w_prime/1000:.1f}kJ<br>Anaerobic capacity above CP<br>Typical: 15-25kJ (fit), 25-35kJ (very fit)"
-            r2_hover = f"R²: {r_squared:.3f}<br>Model fit quality<br>Target >0.95 (excellent), >0.90 (good)"
-            aei_hover = f"AEI: {aei:.2f}<br>Aerobic efficiency (0-1 scale)<br>0.7-0.95 (endurance), 0.5-0.7 (balanced)"
-
-            fig_power.add_trace(go.Bar(
-                x=['CP (W)', 'W\' (kJ)', 'R² (×100)', 'AEI (×100)'],
-                y=[cp if pd.notna(cp) else 0,
-                   (w_prime / 1000) if pd.notna(w_prime) else 0,
-                   (r_squared * 100) if pd.notna(r_squared) else 0,
-                   (aei * 100) if pd.notna(aei) else 0],
-                text=[f"{cp:.0f} W" if pd.notna(cp) else "N/A",
-                      f"{w_prime/1000:.1f} kJ" if pd.notna(w_prime) else "N/A",
-                      f"{r_squared:.3f}" if pd.notna(r_squared) else "N/A",
-                      f"{aei:.2f}" if pd.notna(aei) else "N/A"],
-                textposition='auto',
-                marker_color=['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728'],
-                hovertext=[cp_hover, w_prime_hover, r2_hover, aei_hover],
-                hovertemplate='<b>%{x}</b><br>%{hovertext}<extra></extra>'
-            ))
-
-            fig_power.update_layout(
-                height=300,
-                margin=dict(l=20, r=20, t=20, b=20),
-                showlegend=False,
-                yaxis_title="Value",
-                hovermode='x unified'
+            # CP (Critical Power)
+            cp_value = f"{cp:.0f}W" if pd.notna(cp) else "-"
+            cp_help = "Maximum sustained power for efforts >3 min. Category: " + (
+                "Developing - Early stage training" if pd.notna(cp) and cp < 200 else
+                "Fit - Solid cyclist" if pd.notna(cp) and cp < 300 else
+                "Very Fit - Competitive fitness" if pd.notna(cp) and cp < 400 else
+                "Elite - Professional level"
             )
+            render_metric(col1, "⚡ CP (Power)", cp_value, cp_help)
 
-            st.plotly_chart(fig_power, use_container_width=True)
+            # W' (Anaerobic Capacity)
+            w_prime_value = f"{w_prime/1000:.1f}kJ" if pd.notna(w_prime) else "-"
+            w_prime_kj = w_prime / 1000 if pd.notna(w_prime) else None
+            w_prime_help = "Anaerobic work capacity above CP. Capacity: " + (
+                "Low - Build through intervals" if pd.notna(w_prime_kj) and w_prime_kj < 15 else
+                "Average - Typical endurance cyclist" if pd.notna(w_prime_kj) and w_prime_kj < 25 else
+                "High - Strong sprint ability"
+            )
+            render_metric(col2, "💥 W' (Anaerobic)", w_prime_value, w_prime_help)
 
-            with st.expander("ℹ️ Power Profile Explained"):
-                st.markdown(f"""
-                - **CP**: {cp:.0f} W - Critical Power (sustainable threshold)
-                - **W'**: {w_prime/1000:.1f} kJ - Anaerobic work capacity
-                - **R²**: {r_squared:.3f} - Model fit quality (>0.95 = excellent)
-                - **AEI**: {aei:.2f} - Aerobic efficiency (higher = more aerobic)
-                """ if all(pd.notna(x) for x in [cp, w_prime, r_squared, aei]) else """
-                - **CP**: Critical Power - sustainable threshold
-                - **W'**: Anaerobic work capacity above CP
-                - **R²**: Model fit quality (>0.95 = excellent)
-                - **AEI**: Aerobic efficiency (higher = more aerobic)
-                - ⚠️ Some metrics not available for this week
-                """)
+            # R² (Model Fit)
+            r2_value = f"{r_squared:.3f}" if pd.notna(r_squared) else "-"
+            r2_help = "CP model goodness of fit (0-1). Quality: " + (
+                "Fair - Use with caution" if pd.notna(r_squared) and r_squared <= 0.90 else
+                "Good - Reliable estimates" if pd.notna(r_squared) and r_squared <= 0.95 else
+                "Excellent - Very reliable"
+            )
+            render_metric(col3, "📊 R² (Fit)", r2_value, r2_help)
+
+            # AEI (Aerobic Efficiency)
+            aei_value = f"{aei:.2f}" if pd.notna(aei) else "-"
+            aei_help = "Power per heartbeat. Profile: " + (
+                "Very Aerobic - Endurance focused" if pd.notna(aei) and aei > 0.85 else
+                "Aerobic - Balanced athlete" if pd.notna(aei) and aei > 0.70 else
+                "Balanced - Mixed strengths"
+            )
+            render_metric(col4, "❤️ AEI (Efficiency)", aei_value, aei_help)
         else:
             st.info("No power profile data available for this week")
-
-    t6.metric("Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
 
 
 def render_overview_tab(
     df_week: pd.DataFrame,
+    selected_week: pd.Timestamp,
     metric_view: str,
     calculate_weekly_tid_fn,
     format_duration_fn,
@@ -448,6 +343,7 @@ def render_overview_tab(
 
     Args:
         df_week: Current week activities
+        selected_week: Start of the week (Monday)
         metric_view: "Moving" or "Raw"
         calculate_weekly_tid_fn: Function to calculate TID
         format_duration_fn: Function to format duration
@@ -459,7 +355,10 @@ def render_overview_tab(
         st.subheader("Daily Breakdown")
         if not df_week.empty:
             df_week_daily = df_week.copy()
+            # Create a proper date column for grouping
+            df_week_daily["date_local"] = df_week_daily["start_date_local"].dt.date
             df_week_daily["day_name"] = df_week_daily["start_date_local"].dt.day_name()
+
             days_order = [
                 "Monday",
                 "Tuesday",
@@ -475,9 +374,9 @@ def render_overview_tab(
             if tss_col not in df_week_daily.columns:
                 df_week_daily[tss_col] = 0
 
-            # Group by day with multiple metrics
+            # Group by date (not day name) to capture all activities even if multiple on same day
             daily_stats = (
-                df_week_daily.groupby("day_name")
+                df_week_daily.groupby(["date_local", "day_name"])
                 .agg(
                     {
                         "distance": "sum",
@@ -486,20 +385,54 @@ def render_overview_tab(
                         "total_elevation_gain": "sum",
                     }
                 )
-                .reindex(days_order)
-                .fillna(0)
                 .reset_index()
             )
             daily_stats["distance_km"] = daily_stats["distance"] / 1000
             daily_stats["time_hours"] = daily_stats["moving_time"] / 3600
+
+            # Sort by date
+            daily_stats = daily_stats.sort_values("date_local")
+
+            # Create a complete week from Monday to Sunday using selected_week (which is always Monday)
+            week_start = selected_week.normalize().date() if isinstance(selected_week, pd.Timestamp) else selected_week
+            week_dates = pd.date_range(start=week_start, periods=7, freq='D').date
+            day_names_full = pd.date_range(start=week_start, periods=7, freq='D').day_name()
+
+            # Reindex to include all days of the week
+            daily_display = []
+            for date, day_name in zip(week_dates, day_names_full):
+                day_data = daily_stats[daily_stats["date_local"] == date]
+                if not day_data.empty:
+                    daily_display.append({
+                        "date_local": date,
+                        "day_name": day_name,
+                        "distance_km": day_data["distance_km"].sum(),
+                        "time_hours": day_data["time_hours"].sum(),
+                        "tss": day_data[tss_col].sum(),
+                        "elevation_gain": day_data["total_elevation_gain"].sum(),
+                    })
+                else:
+                    daily_display.append({
+                        "date_local": date,
+                        "day_name": day_name,
+                        "distance_km": 0,
+                        "time_hours": 0,
+                        "tss": 0,
+                        "elevation_gain": 0,
+                    })
+
+            daily_stats_full = pd.DataFrame(daily_display)
+
+            # Create ordered day abbreviations (Mon-Sun)
+            day_abbreviations = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
             # Dual-axis chart: Distance bars + TSS line
             fig_daily = make_subplots(specs=[[{"secondary_y": True}]])
 
             fig_daily.add_trace(
                 go.Bar(
-                    x=daily_stats["day_name"],
-                    y=daily_stats["distance_km"],
+                    x=day_abbreviations,
+                    y=daily_stats_full["distance_km"],
                     name="Distance (km)",
                     marker_color="#3498db",
                 ),
@@ -508,8 +441,8 @@ def render_overview_tab(
 
             fig_daily.add_trace(
                 go.Scatter(
-                    x=daily_stats["day_name"],
-                    y=daily_stats[tss_col],
+                    x=day_abbreviations,
+                    y=daily_stats_full["tss"],
                     name="TSS",
                     line=dict(color="#e74c3c", width=3),
                     mode="lines+markers",
@@ -526,25 +459,35 @@ def render_overview_tab(
             fig_daily.update_yaxes(title_text="TSS", secondary_y=True)
 
             st.plotly_chart(fig_daily, use_container_width=True)
-        else:
-            st.info("No activities this week.")
 
     with col_tid:
         st.subheader("Weekly TID")
-        tid = calculate_weekly_tid_fn(df_week, prefix)
+        tid = calculate_weekly_tid_fn(df_week, metric_view)
 
         if any(tid.values()):
-            fig_tid = px.pie(
-                values=[tid["z1"], tid["z2"], tid["z3"]],
-                names=["Low (<76% FTP)", "Moderate (76-90%)", "High (>90%)"],
-                color_discrete_sequence=["#2ecc71", "#f1c40f", "#e74c3c"],
-                hole=0.4,
-            )
+            # Horizontal bar chart for TID
+            fig_tid = go.Figure()
+
+            fig_tid.add_trace(go.Bar(
+                y=["Low\n(<76% FTP)", "Moderate\n(76-90%)", "High\n(>90%)"],
+                x=[tid["z1"], tid["z2"], tid["z3"]],
+                orientation='h',
+                marker=dict(color=["#2ecc71", "#f1c40f", "#e74c3c"]),
+                text=[f"{tid['z1']:.1f}%", f"{tid['z2']:.1f}%", f"{tid['z3']:.1f}%"],
+                textposition='auto',
+                hovertemplate='<b>%{y}</b><br>%{x:.1f}%<extra></extra>'
+            ))
+
             fig_tid.update_layout(
-                margin=dict(t=20, b=20, l=20, r=20),
-                showlegend=True,
-                legend=dict(orientation="h", y=-0.1),
+                xaxis_title="% of Time",
+                yaxis_title="Zone",
+                height=250,
+                margin=dict(l=100, r=20, t=20, b=20),
+                showlegend=False,
+                hovermode='y unified',
             )
+            fig_tid.update_xaxes(range=[0, 100])
+
             st.plotly_chart(fig_tid, use_container_width=True)
 
             # TID metrics
@@ -633,12 +576,13 @@ def render_overview_tab(
             st.info("No activities this week.")
 
 
-def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
+def render_intensity_tab(df_week: pd.DataFrame, selected_week: pd.Timestamp, metric_view: str) -> None:
     """
     Render the Intensity Distribution tab with power and HR zones.
 
     Args:
         df_week: Current week activities
+        selected_week: Start of the week (Monday)
         metric_view: "Moving" or "Raw"
     """
     col_pz, col_hrz = st.columns(2)
@@ -656,6 +600,16 @@ def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
             "Z6 Anaerobic",
             "Z7 Sprint",
         ]
+        # Power zone ranges as % of FTP
+        power_zone_ranges = [
+            "0-55% FTP",
+            "55-75% FTP",
+            "75-90% FTP",
+            "90-105% FTP",
+            "105-120% FTP",
+            "120-150% FTP",
+            ">150% FTP",
+        ]
         total_time = df_week["moving_time"].sum()
 
         for i in range(1, 8):
@@ -669,13 +623,29 @@ def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
                 power_zones.append(0)
 
         if any(power_zones):
-            fig_pz = px.bar(
-                x=zone_names,
-                y=power_zones,
-                title="Time in Power Zones (Weekly Aggregate)",
-                labels={"x": "Zone", "y": "% of Time"},
-                color=power_zones,
-                color_continuous_scale="YlOrRd",
+            # Create hover text with zone details
+            hover_text = [
+                f"<b>{zone_names[i]}</b><br>{power_zones[i]:.1f}% of time<br>{power_zone_ranges[i]}"
+                for i in range(7)
+            ]
+            fig_pz = go.Figure()
+            fig_pz.add_trace(
+                go.Bar(
+                    y=zone_names,
+                    x=power_zones,
+                    orientation="h",
+                    marker_color=["#808080", "#3498db", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c", "#8e44ad"],
+                    text=[f"{pct:.0f}%" for pct in power_zones],
+                    textposition="outside",
+                    customdata=hover_text,
+                    hovertemplate="%{customdata}<extra></extra>",
+                )
+            )
+            fig_pz.update_layout(
+                xaxis_title="% of Time",
+                height=250,
+                margin={"l": 100, "r": 60, "t": 20, "b": 20},
+                showlegend=False,
             )
             st.plotly_chart(fig_pz, use_container_width=True)
         else:
@@ -691,6 +661,14 @@ def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
             "Z4 Threshold",
             "Z5 Max",
         ]
+        # HR zone ranges as % of LTHR
+        hr_zone_ranges = [
+            "<85% LTHR",
+            "85-94% LTHR",
+            "94-104% LTHR",
+            "104-120% LTHR",
+            ">120% LTHR",
+        ]
 
         for i in range(1, 6):
             col_name = f"hr_z{i}_percentage"
@@ -703,20 +681,36 @@ def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
                 hr_zones.append(0)
 
         if any(hr_zones):
-            fig_hrz = px.bar(
-                x=hr_zone_names,
-                y=hr_zones,
-                title="Time in HR Zones (Weekly Aggregate)",
-                labels={"x": "Zone", "y": "% of Time"},
-                color=hr_zones,
-                color_continuous_scale="Reds",
+            # Create hover text with zone details
+            hover_text = [
+                f"<b>{hr_zone_names[i]}</b><br>{hr_zones[i]:.1f}% of time<br>{hr_zone_ranges[i]}"
+                for i in range(5)
+            ]
+            fig_hrz = go.Figure()
+            fig_hrz.add_trace(
+                go.Bar(
+                    y=hr_zone_names,
+                    x=hr_zones,
+                    orientation="h",
+                    marker_color=["#808080", "#3498db", "#2ecc71", "#e67e22", "#e74c3c"],
+                    text=[f"{pct:.0f}%" for pct in hr_zones],
+                    textposition="outside",
+                    customdata=hover_text,
+                    hovertemplate="%{customdata}<extra></extra>",
+                )
+            )
+            fig_hrz.update_layout(
+                xaxis_title="% of Time",
+                height=200,
+                margin={"l": 100, "r": 60, "t": 20, "b": 20},
+                showlegend=False,
             )
             st.plotly_chart(fig_hrz, use_container_width=True)
         else:
             st.info("No HR zone data available.")
 
     # Per-Activity Intensity Comparison
-    st.subheader("Activity Intensity Comparison")
+    st.subheader("Daily Activity Intensity")
     if not df_week.empty:
         if_col = "intensity_factor"
         tss_col = "training_stress_score"
@@ -727,31 +721,86 @@ def render_intensity_tab(df_week: pd.DataFrame, metric_view: str) -> None:
         if tss_col not in df_week.columns:
             df_week[tss_col] = 0
 
-        df_intensity = df_week[["name", "start_date_local", if_col, tss_col]].copy()
-        df_intensity = df_intensity.dropna(subset=[if_col])
+        # Create a full week dataframe with all 7 days (Mon-Sun)
+        weekdays = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+        day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
-        if not df_intensity.empty:
-            df_intensity["activity"] = (
-                df_intensity["start_date_local"].dt.strftime("%a")
-                + ": "
-                + df_intensity["name"].str[:20]
-            )
+        # Create date range for the week
+        week_dates = pd.date_range(start=selected_week, periods=7, freq="D")
 
-            fig_if = px.bar(
-                df_intensity,
-                x="activity",
-                y=if_col,
-                color=tss_col,
-                title="Intensity Factor by Activity (color = TSS)",
-                labels={if_col: "IF", "activity": "Activity"},
-                color_continuous_scale="Viridis",
-            )
-            fig_if.add_hline(y=0.75, line_dash="dot", annotation_text="Endurance")
-            fig_if.add_hline(y=0.85, line_dash="dot", annotation_text="Tempo")
-            fig_if.add_hline(y=0.95, line_dash="dot", annotation_text="Threshold")
-            st.plotly_chart(fig_if, use_container_width=True)
-        else:
-            st.info("No intensity data for this week.")
+        # Initialize full week data
+        week_data = {
+            "date": week_dates,
+            "day_label": day_labels,
+            "if": [None] * 7,
+            "tss": [0] * 7,
+            "activity_name": ["No activity"] * 7,
+            "color_idx": list(range(7)),  # 0-6 for color mapping
+        }
+
+        # Power zone colors for each day (matching zone distribution)
+        day_colors = ["#808080", "#3498db", "#2ecc71", "#f1c40f", "#e67e22", "#e74c3c", "#8e44ad"]
+
+        # Populate with actual activities
+        df_intensity_temp = df_week[["name", "start_date_local", if_col, tss_col]].copy()
+
+        for idx, (date, row) in enumerate(df_intensity_temp.iterrows()):
+            date_local = row["start_date_local"]
+            day_idx = (date_local - selected_week).days
+
+            if 0 <= day_idx < 7:
+                if pd.notna(row[if_col]):
+                    week_data["if"][day_idx] = row[if_col]
+                    week_data["tss"][day_idx] = row[tss_col]
+                    week_data["activity_name"][day_idx] = row["name"][:25] if pd.notna(row["name"]) else "Activity"
+
+        # Create dataframe for plotting
+        df_plot = pd.DataFrame(week_data)
+
+        # Create horizontal bar chart showing all days
+        fig_daily = go.Figure()
+
+        for idx, row in df_plot.iterrows():
+            if row["if"] is not None:
+                hover_text = f"<b>{row['day_label']}: {row['activity_name']}</b><br>IF: {row['if']:.2f}<br>TSS: {row['tss']:.0f}"
+                fig_daily.add_trace(
+                    go.Bar(
+                        y=[row["day_label"]],
+                        x=[row["if"]],
+                        orientation="h",
+                        marker_color=day_colors[idx],
+                        text=f"{row['if']:.2f}",
+                        textposition="outside",
+                        hovertemplate=hover_text + "<extra></extra>",
+                        showlegend=False,
+                    )
+                )
+            else:
+                # Show empty bar for days without activity
+                fig_daily.add_trace(
+                    go.Bar(
+                        y=[row["day_label"]],
+                        x=[0],
+                        orientation="h",
+                        marker_color="rgba(200, 200, 200, 0.3)",
+                        text="—",
+                        textposition="outside",
+                        hovertemplate=f"<b>{row['day_label']}</b><br>No activity<extra></extra>",
+                        showlegend=False,
+                    )
+                )
+
+        fig_daily.update_layout(
+            xaxis_title="Intensity Factor",
+            height=250,
+            margin={"l": 60, "r": 60, "t": 20, "b": 20},
+            showlegend=False,
+            xaxis_range=[0, 1.2],
+        )
+        fig_daily.add_vline(x=0.75, line_dash="dot", annotation_text="Endurance")
+        fig_daily.add_vline(x=0.85, line_dash="dot", annotation_text="Tempo")
+        fig_daily.add_vline(x=0.95, line_dash="dot", annotation_text="Threshold")
+        st.plotly_chart(fig_daily, use_container_width=True)
 
 
 def render_trends_tab(
@@ -886,7 +935,7 @@ def render_trends_tab(
         weekly_tid = []
         for week in weekly_trend["week_start"]:
             week_data = df_trend[df_trend["week_start"] == week]
-            tid = calculate_weekly_tid_fn(week_data, prefix)
+            tid = calculate_weekly_tid_fn(week_data, metric_view)
             weekly_tid.append(
                 {
                     "week": week,

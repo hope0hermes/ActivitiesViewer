@@ -11,6 +11,7 @@ import streamlit as st
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.pages.components.activity_detail_components import (
     render_activity_selector,
+    render_activity_navigation,
     render_overview_tab,
     render_power_hr_tab,
     render_durability_tab,
@@ -214,6 +215,9 @@ def main():
     # Reload activity to ensure correct metric_view data is used
     # (in case metric_view changed but activity selection didn't)
     activity = service.get_activity(activity_id, metric_view)
+
+    # Render activity navigation (prev/next buttons)
+    render_activity_navigation(service, activity_id, metric_view)
 
     st.divider()
 

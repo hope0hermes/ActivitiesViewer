@@ -53,6 +53,30 @@ HR_ZONE_COLORS = [
     "#e74c3c",  # Z5 - Red
 ]
 
+# Zone definitions for hover text
+# These are typical trainer road power zones (as % of FTP)
+POWER_ZONE_RANGES = {
+    1: "0-55% FTP",
+    2: "55-75% FTP",
+    3: "75-90% FTP",
+    4: "90-105% FTP",
+    5: "105-120% FTP",
+    6: "120-150% FTP",
+    7: ">150% FTP",
+}
+
+# Power zone thresholds as % of FTP
+POWER_ZONE_THRESHOLDS = [0, 55, 75, 90, 105, 120, 150, float('inf')]
+
+# HR zone ranges (typical % of LTHR - lactate threshold HR)
+HR_ZONE_RANGES = {
+    1: "<85% LTHR",
+    2: "85-94% LTHR",
+    3: "94-104% LTHR",
+    4: "104-120% LTHR",
+    5: ">120% LTHR",
+}
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
@@ -239,6 +263,15 @@ def render_activity_selector(
     min_date = df_activities["start_date_local"].min().date()
     max_date = df_activities["start_date_local"].max().date()
 
+    # Check if activity was pre-selected via navigation buttons
+    if "selected_activity_id" in st.session_state:
+        pre_selected_id = st.session_state.selected_activity_id
+        # Find the pre-selected activity
+        if pre_selected_id in df_activities["id"].values:
+            activity_id = pre_selected_id
+            activity = service.get_activity(activity_id, metric_view)
+            return activity, activity_id
+
     # Calendar date picker
     col_cal, col_select = st.columns([1, 2])
 
@@ -281,6 +314,73 @@ def render_activity_selector(
     activity = service.get_activity(activity_id, metric_view)
 
     return activity, activity_id
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# ACTIVITY NAVIGATION
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_activity_navigation(
+    service: ActivityService,
+    current_activity_id: str,
+    metric_view: str,
+) -> None:
+    """
+    Render activity navigation buttons (prev/next) and display activity info.
+
+    Args:
+        service: ActivityService instance
+        current_activity_id: ID of currently displayed activity
+        metric_view: Either "Moving Time" or "Raw Time"
+    """
+    df_activities = service.get_all_activities(metric_view)
+    if df_activities.empty:
+        return
+
+    # Sort by date descending (newest first)
+    df_activities = df_activities.sort_values("start_date_local", ascending=False)
+    activity_ids = df_activities["id"].tolist()
+
+    # Find current activity index
+    try:
+        current_idx = activity_ids.index(current_activity_id)
+    except ValueError:
+        return
+
+    has_prev = current_idx < len(activity_ids) - 1  # Older activity
+    has_next = current_idx > 0  # Newer activity
+
+    # Navigation with prev/next buttons
+    nav_col1, nav_col2, nav_col3 = st.columns([1, 4, 1])
+
+    with nav_col1:
+        if st.button(
+            "◀ Prev",
+            disabled=not has_prev,
+            use_container_width=True,
+            help="Go to previous activity (older)",
+        ):
+            prev_activity_id = activity_ids[current_idx + 1]
+            st.session_state["selected_activity_id"] = prev_activity_id
+            st.rerun()
+
+    with nav_col2:
+        current_activity = df_activities[df_activities["id"] == current_activity_id].iloc[0]
+        activity_date = pd.to_datetime(current_activity["start_date_local"]).strftime("%B %d, %Y")
+        activity_name = current_activity["name"]
+        st.subheader(f"{activity_name} • {activity_date}", anchor=False)
+
+    with nav_col3:
+        if st.button(
+            "Next ▶",
+            disabled=not has_next,
+            use_container_width=True,
+            help="Go to next activity (newer)",
+        ):
+            next_activity_id = activity_ids[current_idx - 1]
+            st.session_state["selected_activity_id"] = next_activity_id
+            st.rerun()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -896,6 +996,25 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
         st.markdown("##### ⚡ Power Zone Distribution")
         if power_total > 0:
             power_zones_pct = [z / power_total * 100 for z in power_zones]
+            # Get pre-computed zone boundaries from activity
+            zone_boundaries = [get_metric(activity, f"power_zone_{i}") for i in range(1, 7)]
+            # Create custom hover text with zone ranges and watts
+            hover_text = []
+            for i, pct in enumerate(power_zones_pct):
+                zone_num = i + 1
+                range_str = POWER_ZONE_RANGES[zone_num]
+                if zone_num < 7 and i < len(zone_boundaries) and zone_boundaries[i]:
+                    # Z1-Z6: show range from previous boundary to current boundary
+                    lower = int(zone_boundaries[i-1]) if i > 0 and zone_boundaries[i-1] else 0
+                    upper = int(zone_boundaries[i])
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str} ({lower}-{upper}W)")
+                elif zone_num == 7 and i > 0 and zone_boundaries[i-1]:
+                    # Z7: show > highest boundary
+                    lower = int(zone_boundaries[i-1])
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str} (>{lower}W)")
+                else:
+                    # Fallback if boundaries not available
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str}")
             fig_pz = go.Figure()
             fig_pz.add_trace(
                 go.Bar(
@@ -905,6 +1024,8 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                     marker_color=POWER_ZONE_COLORS,
                     text=[f"{pct:.0f}%" for pct in power_zones_pct],
                     textposition="outside",
+                    customdata=hover_text,
+                    hovertemplate="%{customdata}<extra></extra>",
                 )
             )
             fig_pz.update_layout(
@@ -922,6 +1043,25 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
         st.markdown("##### ❤️ HR Zone Distribution")
         if hr_total > 0:
             hr_zones_pct = [z / hr_total * 100 for z in hr_zones]
+            # Get pre-computed zone boundaries from activity
+            zone_boundaries = [get_metric(activity, f"hr_zone_{i}") for i in range(1, 6)]
+            # Create custom hover text with zone ranges and bpm
+            hover_text = []
+            for i, pct in enumerate(hr_zones_pct):
+                zone_num = i + 1
+                range_str = HR_ZONE_RANGES[zone_num]
+                if zone_num < 5 and i < len(zone_boundaries) and zone_boundaries[i]:
+                    # Z1-Z4: show range from previous boundary to current boundary
+                    lower = int(zone_boundaries[i-1]) if i > 0 and zone_boundaries[i-1] else 0
+                    upper = int(zone_boundaries[i])
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str} ({lower}-{upper} bpm)")
+                elif zone_num == 5 and i > 0 and zone_boundaries[i-1]:
+                    # Z5: show > highest boundary
+                    lower = int(zone_boundaries[i-1])
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str} (>{lower} bpm)")
+                else:
+                    # Fallback if boundaries not available
+                    hover_text.append(f"<b>Z{zone_num}</b><br>{pct:.1f}% time<br>{range_str}")
             fig_hz = go.Figure()
             fig_hz.add_trace(
                 go.Bar(
@@ -931,6 +1071,8 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                     marker_color=HR_ZONE_COLORS,
                     text=[f"{pct:.0f}%" for pct in hr_zones_pct],
                     textposition="outside",
+                    customdata=hover_text,
+                    hovertemplate="%{customdata}<extra></extra>",
                 )
             )
             fig_hz.update_layout(
@@ -954,15 +1096,17 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
         col_a, col_b = st.columns(2)
         pol_idx = get_metric(activity, "power_polarization_index")
         tdr = get_metric(activity, "power_tdr")
-        col_a.metric(
-            "Polarization Index",
+        render_metric(
+            col_a,
+            "📊 Polarization Index",
             f"{pol_idx:.2f}" if pol_idx else "-",
-            help=help_texts.get("polarization_index", ""),
+            help_texts.get("polarization_index", ""),
         )
-        col_b.metric(
-            "TDR",
+        render_metric(
+            col_b,
+            "⚖️ TDR",
             f"{tdr:.1f}" if tdr else "-",
-            help=help_texts.get("tdr", ""),
+            help_texts.get("tdr", ""),
         )
 
         # Power TID Bar Plot
@@ -994,15 +1138,17 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
         col_a, col_b = st.columns(2)
         hr_pol_idx = get_metric(activity, "hr_polarization_index")
         hr_tdr = get_metric(activity, "hr_tdr")
-        col_a.metric(
-            "HR Polarization",
+        render_metric(
+            col_a,
+            "❤️ HR Polarization",
             f"{hr_pol_idx:.2f}" if hr_pol_idx else "-",
-            help=help_texts.get("polarization_index", ""),
+            help_texts.get("polarization_index", ""),
         )
-        col_b.metric(
-            "HR TDR",
+        render_metric(
+            col_b,
+            "⚖️ HR TDR",
             f"{hr_tdr:.1f}" if hr_tdr else "-",
-            help=help_texts.get("tdr", ""),
+            help_texts.get("tdr", ""),
         )
 
         # HR TID Bar Plot
@@ -1040,18 +1186,18 @@ def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
     np_val = get_metric(activity, "normalized_power")
     max_pwr = get_metric(activity, "max_power")
 
-    c1.metric("Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-")
-    c2.metric("Norm Power", f"{np_val:.0f} W" if np_val else "-")
-    c3.metric("Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
+    render_metric(c1, "⚡ Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-")
+    render_metric(c2, "📊 Norm Power", f"{np_val:.0f} W" if np_val else "-")
+    render_metric(c3, "📈 Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
 
     c1, c2, c3 = st.columns(3)
     w_kg = get_metric(activity, "power_per_kg")
     if_val = get_metric(activity, "intensity_factor")
     tss_val = get_metric(activity, "training_stress_score")
 
-    c1.metric("W/kg", f"{w_kg:.2f}" if w_kg else "-")
-    c2.metric("IF", f"{if_val:.2f}" if if_val else "-")
-    c3.metric("TSS", f"{tss_val:.0f}" if tss_val else "-")
+    render_metric(c1, "🏋️ W/kg", f"{w_kg:.2f}" if w_kg else "-")
+    render_metric(c2, "🎯 IF", f"{if_val:.2f}" if if_val else "-")
+    render_metric(c3, "📈 TSS", f"{tss_val:.0f}" if tss_val else "-")
 
     st.divider()
 
@@ -1093,15 +1239,17 @@ def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
         col_a, col_b = st.columns(2)
         pol_idx = get_metric(activity, "power_polarization_index")
         tdr = get_metric(activity, "power_tdr")
-        col_a.metric(
-            "Polarization Index",
+        render_metric(
+            col_a,
+            "📊 Polarization Index",
             f"{pol_idx:.2f}" if pol_idx else "-",
-            help=help_texts.get("polarization_index", ""),
+            help_texts.get("polarization_index", ""),
         )
-        col_b.metric(
-            "TDR",
+        render_metric(
+            col_b,
+            "⚖️ TDR",
             f"{tdr:.1f}" if tdr else "-",
-            help=help_texts.get("tdr", ""),
+            help_texts.get("tdr", ""),
         )
 
         # Power TID Bar Plot
