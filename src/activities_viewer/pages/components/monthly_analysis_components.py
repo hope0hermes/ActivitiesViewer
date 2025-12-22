@@ -336,6 +336,8 @@ def render_overview_tab(
     calculate_monthly_tid_fn,
     format_duration_fn,
     settings,
+    df_all_activities: pd.DataFrame = None,
+    help_texts: dict = None,
 ) -> None:
     """
     Render the Overview tab with weekly breakdown and TID analysis.
@@ -347,6 +349,8 @@ def render_overview_tab(
         calculate_monthly_tid_fn: Function to calculate TID
         format_duration_fn: Function to format duration
         settings: Settings object with gear names
+        df_all_activities: All activities (for Section 3 calculations)
+        help_texts: Dictionary of help text strings
     """
     col_weekly, col_tid = st.columns([2, 1])
 
@@ -354,7 +358,7 @@ def render_overview_tab(
         st.subheader("Weekly Breakdown")
         if not df_month.empty:
             df_month_weekly = df_month.copy()
-            
+
             # Add week column
             df_month_weekly["week_start"] = (
                 df_month_weekly["start_date_local"]
@@ -470,11 +474,11 @@ def render_overview_tab(
     # Activity Calendar Heatmap
     st.divider()
     st.subheader("📅 Activity Calendar")
-    
+
     if not df_month.empty:
         df_calendar = df_month.copy()
         df_calendar["date"] = df_calendar["start_date_local"].dt.date
-        
+
         # Aggregate by date
         daily_stats = df_calendar.groupby("date").agg({
             "training_stress_score": "sum",
@@ -483,32 +487,32 @@ def render_overview_tab(
         }).reset_index()
         daily_stats.columns = ["date", "tss", "distance", "count"]
         daily_stats["distance_km"] = daily_stats["distance"] / 1000
-        
+
         # Create calendar heatmap data
         # Get all days in month
         if selected_month.month == 12:
             month_end = pd.Timestamp(year=selected_month.year + 1, month=1, day=1) - pd.Timedelta(days=1)
         else:
             month_end = pd.Timestamp(year=selected_month.year, month=selected_month.month + 1, day=1) - pd.Timedelta(days=1)
-        
+
         all_days = pd.date_range(start=selected_month, end=month_end, freq='D')
-        
+
         # Create complete dataframe
         calendar_df = pd.DataFrame({"date": all_days.date})
         calendar_df = calendar_df.merge(daily_stats, on="date", how="left").fillna(0)
-        
+
         # Add day info
         calendar_df["day_of_week"] = pd.to_datetime(calendar_df["date"]).dt.dayofweek
         calendar_df["week_of_month"] = (pd.to_datetime(calendar_df["date"]).dt.day - 1) // 7
         calendar_df["day_name"] = pd.to_datetime(calendar_df["date"]).dt.strftime("%a")
-        
+
         # Create heatmap
         fig_calendar = go.Figure()
-        
+
         # Pivot for heatmap
         heatmap_data = calendar_df.pivot(index="day_of_week", columns="week_of_month", values="tss")
         day_labels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-        
+
         fig_calendar.add_trace(
             go.Heatmap(
                 z=heatmap_data.values,
@@ -522,13 +526,13 @@ def render_overview_tab(
                 colorbar=dict(title="TSS"),
             )
         )
-        
+
         fig_calendar.update_layout(
             title="Daily TSS Heatmap",
             height=250,
             margin={"l": 60, "r": 20, "t": 40, "b": 20},
         )
-        
+
         st.plotly_chart(fig_calendar, use_container_width=True)
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -924,6 +928,516 @@ def render_overview_tab(
                 st.plotly_chart(fig_tss_np, use_container_width=True)
             else:
                 st.info("No TSS data available.")
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 3: New Physiological Metrics
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    if help_texts is not None and df_all_activities is not None:
+        st.divider()
+        
+        # Section 3.1: Fitness Evolution
+        render_fitness_evolution_section(df_month, df_all_activities, selected_month, help_texts)
+        
+        st.divider()
+        
+        # Section 3.2: Periodization Check
+        render_periodization_check(df_month, df_all_activities, selected_month, help_texts)
+        
+        st.divider()
+        
+        # Section 3.3: Aerobic Development
+        render_aerobic_development(df_month, help_texts)
+        
+        st.divider()
+        
+        # Section 3.4: Training Consistency
+        render_training_consistency(df_month, selected_month, help_texts)
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.1: Fitness Evolution
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_fitness_evolution_section(
+    df_month: pd.DataFrame,
+    df_all_activities: pd.DataFrame,
+    selected_month: pd.Timestamp,
+    help_texts: dict,
+) -> None:
+    """
+    Render Fitness Evolution section with FTP estimates and power PRs.
+
+    Args:
+        df_month: Current month activities
+        df_all_activities: All activities for trend analysis
+        selected_month: Start of the month
+        help_texts: Dictionary of help text strings
+    """
+    st.markdown("### 📈 Fitness Evolution")
+    
+    # Check if FTP estimate data is available
+    if "estimated_ftp" not in df_month.columns or df_month["estimated_ftp"].isna().all():
+        st.info("FTP estimate data not available. Requires power meter data for calculation.")
+        return
+    
+    # Get FTP estimates for the month
+    df_month_ftp = df_month[df_month["estimated_ftp"].notna()].copy()
+    
+    if len(df_month_ftp) == 0:
+        st.info("No FTP estimates available for this month.")
+        return
+    
+    # Sort by date
+    df_month_ftp = df_month_ftp.sort_values("start_date_local")
+    
+    # FTP start (first estimate) and end (last estimate)
+    ftp_start = df_month_ftp.iloc[0]["estimated_ftp"]
+    ftp_end = df_month_ftp.iloc[-1]["estimated_ftp"]
+    ftp_change = ftp_end - ftp_start
+    ftp_change_pct = (ftp_change / ftp_start * 100) if ftp_start > 0 else 0
+    
+    # 3-column layout for FTP metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        render_metric(
+            col1,
+            "Est. FTP Start",
+            f"{ftp_start:.0f} W",
+            help_texts.get("ftp_start", "Estimated FTP at beginning of month")
+        )
+    
+    with col2:
+        render_metric(
+            col2,
+            "Est. FTP End",
+            f"{ftp_end:.0f} W",
+            help_texts.get("ftp_end", "Estimated FTP at end of month")
+        )
+    
+    with col3:
+        change_symbol = "✅" if ftp_change > 0 else "⚠️" if ftp_change < 0 else "➡️"
+        render_metric(
+            col3,
+            "Change",
+            f"{ftp_change:+.0f} W ({ftp_change_pct:+.1f}%) {change_symbol}",
+            help_texts.get("ftp_change", "FTP change over the month. Positive = fitness improvement")
+        )
+    
+    # FTP trend chart
+    if len(df_month_ftp) > 1:
+        fig_ftp = go.Figure()
+        
+        fig_ftp.add_trace(go.Scatter(
+            x=df_month_ftp["start_date_local"],
+            y=df_month_ftp["estimated_ftp"],
+            mode='lines+markers',
+            name='Estimated FTP',
+            line=dict(color='#2ecc71', width=3),
+            marker=dict(size=8)
+        ))
+        
+        fig_ftp.update_layout(
+            title="FTP Trend Over Month",
+            xaxis_title="Date",
+            yaxis_title="Estimated FTP (W)",
+            hovermode="x unified",
+            height=300
+        )
+        
+        st.plotly_chart(fig_ftp, use_container_width=True)
+    
+    # Power PRs this month
+    st.markdown("**🏆 Power PRs This Month:**")
+    
+    pr_durations = {
+        "5min": ("power_5min", 300),
+        "20min": ("power_20min", 1200),
+        "60min": ("power_60min", 3600)
+    }
+    
+    pr_cols = st.columns(len(pr_durations))
+    
+    for idx, (duration_name, (col_name, _)) in enumerate(pr_durations.items()):
+        with pr_cols[idx]:
+            if col_name in df_month.columns:
+                max_power = df_month[col_name].max()
+                if pd.notna(max_power) and max_power > 0:
+                    st.metric(f"{duration_name}", f"{max_power:.0f} W")
+                else:
+                    st.caption(f"{duration_name}: -")
+            else:
+                st.caption(f"{duration_name}: -")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.2: Periodization Check
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_periodization_check(
+    df_month: pd.DataFrame,
+    df_all_activities: pd.DataFrame,
+    selected_month: pd.Timestamp,
+    help_texts: dict,
+) -> None:
+    """
+    Render Periodization Check section with block classification.
+
+    Args:
+        df_month: Current month activities
+        df_all_activities: All activities for 3-month average calculation
+        selected_month: Start of the month
+        help_texts: Dictionary of help text strings
+    """
+    st.markdown("### 🗓️ Periodization Check")
+    
+    # Calculate month metrics
+    month_volume = df_month["moving_time"].sum() if "moving_time" in df_month.columns else 0
+    month_avg_if = df_month["intensity_factor"].mean() if "intensity_factor" in df_month.columns else 0
+    
+    # Get previous 3 months for comparison
+    month_start = selected_month
+    three_months_ago = month_start - pd.DateOffset(months=3)
+    
+    df_prev_3months = df_all_activities[
+        (df_all_activities["start_date_local"] >= three_months_ago) &
+        (df_all_activities["start_date_local"] < month_start)
+    ]
+    
+    if len(df_prev_3months) > 0:
+        # Calculate 3-month averages
+        df_prev_3months_copy = df_prev_3months.copy()
+        df_prev_3months_copy["month_start"] = df_prev_3months_copy["start_date_local"].dt.to_period('M').apply(lambda x: x.start_time)
+        
+        monthly_volumes = df_prev_3months_copy.groupby("month_start")["moving_time"].sum()
+        monthly_ifs = df_prev_3months_copy.groupby("month_start")["intensity_factor"].mean()
+        
+        rolling_3month_avg_volume = monthly_volumes.mean()
+        rolling_3month_avg_if = monthly_ifs.mean()
+    else:
+        rolling_3month_avg_volume = month_volume
+        rolling_3month_avg_if = month_avg_if
+    
+    # Calculate ratios
+    volume_vs_avg = (month_volume / rolling_3month_avg_volume) if rolling_3month_avg_volume > 0 else 1.0
+    intensity_vs_avg = (month_avg_if / rolling_3month_avg_if) if rolling_3month_avg_if > 0 else 1.0
+    
+    # Block classification
+    if volume_vs_avg < 0.6:
+        block_type = "🛌 RECOVERY"
+        block_color = "#95a5a6"
+    elif volume_vs_avg > 1.1 and intensity_vs_avg < 0.95:
+        block_type = "🏗️ BASE"
+        block_color = "#3498db"
+    elif volume_vs_avg > 1.0 and intensity_vs_avg > 1.05:
+        block_type = "💪 BUILD"
+        block_color = "#f39c12"
+    elif intensity_vs_avg > 1.1:
+        block_type = "⚡ PEAK"
+        block_color = "#e74c3c"
+    else:
+        block_type = "➡️ MAINTENANCE"
+        block_color = "#2ecc71"
+    
+    # Count long rides (>3 hours)
+    long_ride_count = len(df_month[df_month["moving_time"] > 10800]) if "moving_time" in df_month.columns else 0
+    
+    # Display block type prominently
+    st.markdown(f"<h4 style='color: {block_color};'>Block Type: {block_type}</h4>", unsafe_allow_html=True)
+    
+    # 3-column layout
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        volume_change_pct = (volume_vs_avg - 1) * 100
+        arrow = "⬆️" if volume_change_pct > 5 else "⬇️" if volume_change_pct < -5 else "➡️"
+        render_metric(
+            col1,
+            "Volume vs 3mo avg",
+            f"{volume_change_pct:+.0f}% {arrow}",
+            help_texts.get("volume_vs_avg", "Monthly volume compared to 3-month rolling average")
+        )
+    
+    with col2:
+        intensity_change_pct = (intensity_vs_avg - 1) * 100
+        arrow = "⬆️" if intensity_change_pct > 5 else "⬇️" if intensity_change_pct < -5 else "➡️"
+        render_metric(
+            col2,
+            "Intensity vs 3mo avg",
+            f"{intensity_change_pct:+.0f}% {arrow}",
+            help_texts.get("intensity_vs_avg", "Average intensity (IF) compared to 3-month rolling average")
+        )
+    
+    with col3:
+        render_metric(
+            col3,
+            "Long Rides (>3h)",
+            f"{long_ride_count}",
+            help_texts.get("long_rides", "Number of rides longer than 3 hours. Important for endurance development")
+        )
+    
+    # Recommendation based on block type
+    st.markdown("**💡 Recommendation:**")
+    if "BUILD" in block_type:
+        st.warning("High load block. Monitor recovery and schedule a recovery week.")
+    elif "PEAK" in block_type:
+        st.info("Peak intensity phase. Ensure adequate recovery between sessions.")
+    elif "RECOVERY" in block_type:
+        st.success("Recovery phase. Good time for adaptation and healing.")
+    elif "BASE" in block_type:
+        st.info("Aerobic base building. Focus on Z2 volume and consistency.")
+    else:
+        st.info("Maintenance phase. Steady training load.")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.3: Aerobic Development
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_aerobic_development(
+    df_month: pd.DataFrame,
+    help_texts: dict,
+) -> None:
+    """
+    Render Aerobic Development section with EF trend and decoupling.
+
+    Args:
+        df_month: Current month activities
+        help_texts: Dictionary of help text strings
+    """
+    st.markdown("### ❤️ Aerobic Development")
+    
+    # Check if EF and decoupling data available
+    if "efficiency_factor" not in df_month.columns or df_month["efficiency_factor"].isna().all():
+        st.info("Efficiency Factor data not available. Requires power and heart rate data.")
+        return
+    
+    df_month_ef = df_month[df_month["efficiency_factor"].notna()].copy()
+    
+    if len(df_month_ef) == 0:
+        st.info("No Efficiency Factor data available for this month.")
+        return
+    
+    # Sort by date
+    df_month_ef = df_month_ef.sort_values("start_date_local")
+    
+    # Calculate EF trend (linear regression)
+    import numpy as np
+    from scipy import stats
+    
+    # Create day numbers for regression
+    df_month_ef["days_from_start"] = (df_month_ef["start_date_local"] - df_month_ef["start_date_local"].min()).dt.days
+    
+    if len(df_month_ef) > 2:
+        slope, intercept, r_value, p_value, std_err = stats.linregress(
+            df_month_ef["days_from_start"],
+            df_month_ef["efficiency_factor"]
+        )
+        
+        # Convert slope to per-week
+        ef_trend_per_week = slope * 7
+        
+        # Create regression line
+        df_month_ef["ef_trend"] = intercept + slope * df_month_ef["days_from_start"]
+    else:
+        ef_trend_per_week = 0
+        df_month_ef["ef_trend"] = df_month_ef["efficiency_factor"]
+    
+    # EF Trend Chart
+    fig_ef = go.Figure()
+    
+    fig_ef.add_trace(go.Scatter(
+        x=df_month_ef["start_date_local"],
+        y=df_month_ef["efficiency_factor"],
+        mode='markers',
+        name='EF',
+        marker=dict(size=8, color='#3498db')
+    ))
+    
+    if len(df_month_ef) > 2:
+        fig_ef.add_trace(go.Scatter(
+            x=df_month_ef["start_date_local"],
+            y=df_month_ef["ef_trend"],
+            mode='lines',
+            name='Trend',
+            line=dict(color='#e74c3c', width=2, dash='dash')
+        ))
+    
+    fig_ef.update_layout(
+        title="Efficiency Factor Trend",
+        xaxis_title="Date",
+        yaxis_title="EF (W/bpm)",
+        hovermode="x unified",
+        height=300
+    )
+    
+    st.plotly_chart(fig_ef, use_container_width=True)
+    
+    # Metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        trend_symbol = "✅" if ef_trend_per_week > 0 else "⚠️" if ef_trend_per_week < 0 else "➡️"
+        render_metric(
+            col1,
+            "EF Trend",
+            f"{ef_trend_per_week:+.2f}/week {trend_symbol}",
+            help_texts.get("ef_trend", "Weekly change in Efficiency Factor. Positive = improving aerobic efficiency")
+        )
+        if ef_trend_per_week > 0.01:
+            st.success("Improving aerobic fitness")
+        elif ef_trend_per_week < -0.01:
+            st.warning("Declining aerobic efficiency")
+        else:
+            st.info("Stable aerobic fitness")
+    
+    with col2:
+        avg_decoupling = df_month_ef["cardiac_drift"].mean() if "cardiac_drift" in df_month_ef.columns else 0
+        render_metric(
+            col2,
+            "Avg Decoupling",
+            f"{avg_decoupling:.1f}%",
+            help_texts.get("avg_decoupling", "Average cardiac drift. Lower = better aerobic fitness")
+        )
+        if avg_decoupling < 5:
+            st.success("✅ Good aerobic fitness")
+        elif avg_decoupling < 10:
+            st.info("➡️ Moderate decoupling")
+        else:
+            st.warning("⚠️ High decoupling")
+    
+    with col3:
+        if "cardiac_drift" in df_month_ef.columns and len(df_month_ef) > 2:
+            # Calculate decoupling trend
+            df_month_ef_cd = df_month_ef[df_month_ef["cardiac_drift"].notna()].copy()
+            if len(df_month_ef_cd) > 2:
+                cd_slope, _, _, _, _ = stats.linregress(
+                    df_month_ef_cd["days_from_start"],
+                    df_month_ef_cd["cardiac_drift"]
+                )
+                decoupling_trend_per_week = cd_slope * 7
+            else:
+                decoupling_trend_per_week = 0
+        else:
+            decoupling_trend_per_week = 0
+        
+        trend_symbol = "✅" if decoupling_trend_per_week < 0 else "⚠️" if decoupling_trend_per_week > 0 else "➡️"
+        render_metric(
+            col3,
+            "Decoupling Trend",
+            f"{decoupling_trend_per_week:+.2f}%/week {trend_symbol}",
+            help_texts.get("decoupling_trend", "Weekly change in cardiac drift. Negative = improving aerobic fitness")
+        )
+        if decoupling_trend_per_week < -0.1:
+            st.success("Improving aerobic fitness")
+        elif decoupling_trend_per_week > 0.1:
+            st.warning("Increasing fatigue/drift")
+        else:
+            st.info("Stable")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 3.4: Training Consistency
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_training_consistency(
+    df_month: pd.DataFrame,
+    selected_month: pd.Timestamp,
+    help_texts: dict,
+) -> None:
+    """
+    Render Training Consistency section with training days, streaks, and gaps.
+
+    Args:
+        df_month: Current month activities
+        selected_month: Start of the month
+        help_texts: Dictionary of help text strings
+    """
+    st.markdown("### 📊 Training Consistency")
+    
+    if df_month.empty:
+        st.info("No activities this month.")
+        return
+    
+    # Get unique training days
+    df_month_copy = df_month.copy()
+    df_month_copy["date_local"] = df_month_copy["start_date_local"].dt.date
+    training_days = df_month_copy["date_local"].unique()
+    training_days_count = len(training_days)
+    
+    # Calculate total days in month
+    if selected_month.month == 12:
+        month_end = pd.Timestamp(year=selected_month.year + 1, month=1, day=1) - pd.Timedelta(days=1)
+    else:
+        month_end = pd.Timestamp(year=selected_month.year, month=selected_month.month + 1, day=1) - pd.Timedelta(days=1)
+    
+    days_in_month = (month_end - selected_month).days + 1
+    consistency_pct = (training_days_count / days_in_month * 100)
+    
+    # Calculate longest streak
+    training_days_sorted = sorted(training_days)
+    training_days_pd = pd.to_datetime(training_days_sorted)
+    
+    longest_streak = 1
+    current_streak = 1
+    
+    for i in range(1, len(training_days_pd)):
+        if (training_days_pd[i] - training_days_pd[i-1]).days == 1:
+            current_streak += 1
+            longest_streak = max(longest_streak, current_streak)
+        else:
+            current_streak = 1
+    
+    # Calculate longest gap
+    longest_gap = 0
+    if len(training_days_pd) > 1:
+        for i in range(1, len(training_days_pd)):
+            gap = (training_days_pd[i] - training_days_pd[i-1]).days - 1
+            longest_gap = max(longest_gap, gap)
+    
+    # 3-column layout
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        render_metric(
+            col1,
+            "Training Days",
+            f"{training_days_count} / {days_in_month} ({consistency_pct:.0f}%)",
+            help_texts.get("training_days", "Number of days with at least one activity")
+        )
+        if consistency_pct >= 70:
+            st.success("✅ Good consistency")
+        elif consistency_pct >= 50:
+            st.info("➡️ Moderate consistency")
+        else:
+            st.warning("⚠️ Low consistency")
+    
+    with col2:
+        render_metric(
+            col2,
+            "Longest Streak",
+            f"{longest_streak} days",
+            help_texts.get("longest_streak", "Longest consecutive training days without a day off")
+        )
+    
+    with col3:
+        render_metric(
+            col3,
+            "Longest Gap",
+            f"{longest_gap} days",
+            help_texts.get("longest_gap", "Longest period without training in the month")
+        )
+        if longest_gap <= 3:
+            st.success("✅ Normal")
+        elif longest_gap <= 7:
+            st.info("➡️ Week off")
+        else:
+            st.warning("⚠️ Extended break")
 
 
 def render_intensity_tab(df_month: pd.DataFrame, selected_month: pd.Timestamp, metric_view: str) -> None:
@@ -1059,31 +1573,31 @@ def render_intensity_tab(df_month: pd.DataFrame, selected_month: pd.Timestamp, m
     st.subheader("Weekly Intensity Comparison")
     if not df_month.empty:
         df_intensity = df_month.copy()
-        
+
         # Add week column
         df_intensity["week_start"] = (
             df_intensity["start_date_local"]
             - pd.to_timedelta(df_intensity["start_date_local"].dt.weekday, unit='D')
         ).dt.normalize()
-        
+
         # Aggregate by week
         if_col = "intensity_factor"
         tss_col = "training_stress_score"
-        
+
         if if_col not in df_intensity.columns:
             df_intensity[if_col] = None
         if tss_col not in df_intensity.columns:
             df_intensity[tss_col] = 0
-        
+
         weekly_if = df_intensity.groupby("week_start").agg({
             if_col: "mean",
             tss_col: "sum",
             "moving_time": "sum"
         }).reset_index()
-        
+
         weekly_if["week_label"] = weekly_if["week_start"].dt.strftime("Week %d %b")
         weekly_if = weekly_if.dropna(subset=[if_col])
-        
+
         if not weekly_if.empty:
             # Create horizontal bar chart
             fig_weekly_if = go.Figure()

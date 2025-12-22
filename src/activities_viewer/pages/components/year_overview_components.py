@@ -1326,3 +1326,596 @@ def render_extremes_section(df: pd.DataFrame, metric_view: str, format_duration_
             )
         else:
             render_metric(col_e4, "⚡ Highest NP", "N/A")
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4.1: Performance Trajectory
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_performance_trajectory(
+    df: pd.DataFrame,
+    selected_year: int,
+    help_texts: dict,
+) -> None:
+    """
+    Render Performance Trajectory section with FTP evolution and peak metrics.
+
+    Args:
+        df: Year activities
+        selected_year: Selected year
+        help_texts: Dictionary of help text strings
+    """
+    st.divider()
+    st.markdown("### 📈 Performance Trajectory")
+    
+    # Check if FTP estimate data is available
+    if "estimated_ftp" not in df.columns or df["estimated_ftp"].isna().all():
+        st.info("FTP estimate data not available. Requires power meter data for calculation.")
+        return
+    
+    # Get activities with FTP estimates
+    df_ftp = df[df["estimated_ftp"].notna()].copy()
+    
+    if len(df_ftp) == 0:
+        st.info("No FTP estimates available for this year.")
+        return
+    
+    # Sort by date
+    df_ftp = df_ftp.sort_values("start_date_local")
+    
+    # Group by month to get monthly averages
+    df_ftp["month"] = df_ftp["start_date_local"].dt.to_period("M")
+    monthly_ftp = df_ftp.groupby("month")["estimated_ftp"].mean().reset_index()
+    monthly_ftp["month_name"] = monthly_ftp["month"].apply(lambda x: x.strftime("%b"))
+    monthly_ftp["month_date"] = monthly_ftp["month"].apply(lambda x: x.to_timestamp())
+    
+    # Calculate year metrics
+    ftp_start = df_ftp.iloc[0]["estimated_ftp"]
+    ftp_end = df_ftp.iloc[-1]["estimated_ftp"]
+    ftp_change = ftp_end - ftp_start
+    ftp_change_pct = (ftp_change / ftp_start * 100) if ftp_start > 0 else 0
+    peak_ftp = df_ftp["estimated_ftp"].max()
+    peak_ftp_date = df_ftp.loc[df_ftp["estimated_ftp"].idxmax(), "start_date_local"]
+    
+    # Peak CTL
+    peak_ctl = 0
+    peak_ctl_date = None
+    if "chronic_training_load" in df.columns and df["chronic_training_load"].notna().any():
+        peak_ctl = df["chronic_training_load"].max()
+        peak_ctl_date = df.loc[df["chronic_training_load"].idxmax(), "start_date_local"]
+    
+    # FTP Evolution Chart
+    fig_ftp = go.Figure()
+    
+    fig_ftp.add_trace(go.Scatter(
+        x=df_ftp["start_date_local"],
+        y=df_ftp["estimated_ftp"],
+        mode='markers',
+        name='FTP Estimates',
+        marker=dict(size=6, color='rgba(46, 204, 113, 0.4)'),
+        hovertemplate='%{x}<br>FTP: %{y:.0f}W<extra></extra>'
+    ))
+    
+    if len(monthly_ftp) > 1:
+        fig_ftp.add_trace(go.Scatter(
+            x=monthly_ftp["month_date"],
+            y=monthly_ftp["estimated_ftp"],
+            mode='lines+markers',
+            name='Monthly Average',
+            line=dict(color='#2ecc71', width=3),
+            marker=dict(size=10),
+            hovertemplate='%{x}<br>Avg FTP: %{y:.0f}W<extra></extra>'
+        ))
+    
+    fig_ftp.update_layout(
+        title="FTP Evolution",
+        xaxis_title="Date",
+        yaxis_title="Estimated FTP (W)",
+        hovermode="x unified",
+        height=350
+    )
+    
+    st.plotly_chart(fig_ftp, use_container_width=True)
+    
+    # Year summary metrics
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        change_symbol = "✅" if ftp_change > 0 else "⚠️" if ftp_change < 0 else "➡️"
+        st.markdown(f"**Jan → Dec:** {ftp_start:.0f}W → {ftp_end:.0f}W  "
+                   f"**({ftp_change:+.0f}W, {ftp_change_pct:+.1f}%) {change_symbol}**")
+    
+    with col2:
+        peak_month = peak_ftp_date.strftime("%B") if peak_ftp_date else "N/A"
+        st.markdown(f"**Peak FTP:** {peak_ftp:.0f}W ({peak_month})")
+    
+    with col3:
+        if peak_ctl > 0:
+            peak_ctl_month = peak_ctl_date.strftime("%B") if peak_ctl_date else "N/A"
+            st.markdown(f"**Peak CTL:** {peak_ctl:.0f} ({peak_ctl_month})")
+        else:
+            st.markdown("**Peak CTL:** N/A")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4.2: Season Phases
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_season_phases(
+    df: pd.DataFrame,
+    selected_year: int,
+    help_texts: dict,
+) -> None:
+    """
+    Render Season Phases section with timeline visualization.
+
+    Args:
+        df: Year activities
+        selected_year: Selected year
+        help_texts: Dictionary of help text strings
+    """
+    st.divider()
+    st.markdown("### 🗓️ Season Phases")
+    
+    # Check for required data
+    if "chronic_training_load" not in df.columns or df["chronic_training_load"].isna().all():
+        st.info("CTL data not available for season phase detection.")
+        return
+    
+    # Group by month
+    df_monthly = df.copy()
+    df_monthly["month"] = df_monthly["start_date_local"].dt.to_period("M")
+    
+    monthly_stats = df_monthly.groupby("month").agg({
+        "chronic_training_load": "mean",
+        "training_stress_balance": "mean",
+        "intensity_factor": "mean",
+        "moving_time": "sum",
+    }).reset_index()
+    
+    monthly_stats["month_name"] = monthly_stats["month"].apply(lambda x: x.strftime("%b"))
+    
+    # Calculate annual averages
+    annual_avg_volume = monthly_stats["moving_time"].mean()
+    peak_ctl = monthly_stats["chronic_training_load"].max()
+    
+    # Detect phases for each month
+    phases = []
+    for idx, row in monthly_stats.iterrows():
+        ctl = row["chronic_training_load"]
+        tsb = row["training_stress_balance"]
+        avg_if = row["intensity_factor"]
+        volume = row["moving_time"]
+        
+        # Calculate CTL trend
+        if idx > 0:
+            prev_ctl = monthly_stats.iloc[idx - 1]["chronic_training_load"]
+            ctl_trend = ctl - prev_ctl
+        else:
+            ctl_trend = 0
+        
+        # Phase detection logic
+        if pd.isna(ctl) or pd.isna(avg_if):
+            phase = "TRANSITION"
+        elif ctl_trend < 0 and volume < 0.5 * annual_avg_volume:
+            phase = "OFF-SEASON"
+        elif ctl_trend > 0 and avg_if < 0.72:
+            phase = "BASE"
+        elif ctl_trend > 0 and avg_if > 0.75:
+            phase = "BUILD"
+        elif ctl > 0.9 * peak_ctl and tsb > -5:
+            phase = "PEAK/RACE"
+        elif ctl_trend < 0 and tsb > 10:
+            phase = "RECOVERY"
+        else:
+            phase = "TRANSITION"
+        
+        phases.append(phase)
+    
+    monthly_stats["phase"] = phases
+    
+    # Create timeline visualization
+    phase_colors = {
+        "OFF-SEASON": "#95a5a6",
+        "BASE": "#3498db",
+        "BUILD": "#f39c12",
+        "PEAK/RACE": "#e74c3c",
+        "RECOVERY": "#2ecc71",
+        "TRANSITION": "#9b59b6"
+    }
+    
+    fig_timeline = go.Figure()
+    
+    for phase_name, color in phase_colors.items():
+        phase_data = monthly_stats[monthly_stats["phase"] == phase_name]
+        if len(phase_data) > 0:
+            fig_timeline.add_trace(go.Bar(
+                x=phase_data["month_name"],
+                y=[1] * len(phase_data),
+                name=phase_name,
+                marker_color=color,
+                hovertemplate=f"<b>{phase_name}</b><br>%{{x}}<extra></extra>"
+            ))
+    
+    fig_timeline.update_layout(
+        title="Season Timeline",
+        xaxis_title="Month",
+        yaxis=dict(showticklabels=False, showgrid=False),
+        barmode='overlay',
+        height=200,
+        showlegend=True,
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+    )
+    
+    st.plotly_chart(fig_timeline, use_container_width=True)
+    
+    # Phase summary
+    phase_counts = monthly_stats["phase"].value_counts()
+    st.markdown("**Phase Distribution:**")
+    for phase in ["BASE", "BUILD", "PEAK/RACE", "RECOVERY", "OFF-SEASON", "TRANSITION"]:
+        if phase in phase_counts:
+            weeks = phase_counts[phase] * 4  # Approximate weeks
+            st.markdown(f"- **{phase}**: {phase_counts[phase]} months (~{weeks} weeks)")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4.3: Year-over-Year Comparison
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_year_over_year_comparison(
+    df_current: pd.DataFrame,
+    df_previous: pd.DataFrame,
+    selected_year: int,
+    help_texts: dict,
+) -> None:
+    """
+    Render Year-over-Year Comparison section.
+
+    Args:
+        df_current: Current year activities
+        df_previous: Previous year activities
+        selected_year: Selected year
+        help_texts: Dictionary of help text strings
+    """
+    st.divider()
+    st.markdown("### 📊 Year-over-Year Comparison")
+    
+    if df_previous.empty:
+        st.info(f"No data available for {selected_year - 1} to compare.")
+        return
+    
+    # Calculate metrics for both years
+    def calc_year_metrics(df):
+        total_hours = df["moving_time"].sum() / 3600
+        total_distance = df["distance"].sum() / 1000
+        total_tss = df["training_stress_score"].sum() if "training_stress_score" in df.columns else 0
+        
+        peak_ftp = 0
+        if "estimated_ftp" in df.columns:
+            peak_ftp = df["estimated_ftp"].max() if df["estimated_ftp"].notna().any() else 0
+        
+        peak_ctl = 0
+        if "chronic_training_load" in df.columns:
+            peak_ctl = df["chronic_training_load"].max() if df["chronic_training_load"].notna().any() else 0
+        
+        avg_ef = 0
+        if "efficiency_factor" in df.columns:
+            avg_ef = df["efficiency_factor"].mean() if df["efficiency_factor"].notna().any() else 0
+        
+        return {
+            "hours": total_hours,
+            "distance": total_distance,
+            "tss": total_tss,
+            "peak_ftp": peak_ftp,
+            "peak_ctl": peak_ctl,
+            "avg_ef": avg_ef
+        }
+    
+    current_metrics = calc_year_metrics(df_current)
+    previous_metrics = calc_year_metrics(df_previous)
+    
+    # Create comparison table
+    st.markdown(f"#### {selected_year - 1} vs {selected_year}")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.markdown("**Metric**")
+        st.markdown("Total Hours")
+        st.markdown("Total Distance")
+        st.markdown("Total TSS")
+        st.markdown("Peak FTP")
+        st.markdown("Peak CTL")
+        st.markdown("Avg EF")
+    
+    with col2:
+        st.markdown(f"**{selected_year - 1}**")
+        st.markdown(f"{previous_metrics['hours']:.0f}h")
+        st.markdown(f"{previous_metrics['distance']:,.0f} km")
+        st.markdown(f"{previous_metrics['tss']:,.0f}")
+        st.markdown(f"{previous_metrics['peak_ftp']:.0f} W" if previous_metrics['peak_ftp'] > 0 else "N/A")
+        st.markdown(f"{previous_metrics['peak_ctl']:.0f}" if previous_metrics['peak_ctl'] > 0 else "N/A")
+        st.markdown(f"{previous_metrics['avg_ef']:.2f}" if previous_metrics['avg_ef'] > 0 else "N/A")
+    
+    with col3:
+        st.markdown(f"**{selected_year}**")
+        st.markdown(f"{current_metrics['hours']:.0f}h")
+        st.markdown(f"{current_metrics['distance']:,.0f} km")
+        st.markdown(f"{current_metrics['tss']:,.0f}")
+        st.markdown(f"{current_metrics['peak_ftp']:.0f} W" if current_metrics['peak_ftp'] > 0 else "N/A")
+        st.markdown(f"{current_metrics['peak_ctl']:.0f}" if current_metrics['peak_ctl'] > 0 else "N/A")
+        st.markdown(f"{current_metrics['avg_ef']:.2f}" if current_metrics['avg_ef'] > 0 else "N/A")
+    
+    with col4:
+        st.markdown("**Δ**")
+        
+        # Calculate deltas
+        for metric in ["hours", "distance", "tss", "peak_ftp", "peak_ctl", "avg_ef"]:
+            if previous_metrics[metric] > 0 and current_metrics[metric] > 0:
+                delta_pct = ((current_metrics[metric] - previous_metrics[metric]) / previous_metrics[metric]) * 100
+                symbol = "✅" if delta_pct > 0 else "⚠️" if delta_pct < -5 else "➡️"
+                st.markdown(f"{delta_pct:+.0f}% {symbol}")
+            else:
+                st.markdown("N/A")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4.4: Annual Statistics
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_annual_statistics(
+    df: pd.DataFrame,
+    selected_year: int,
+    format_duration_fn,
+    help_texts: dict,
+) -> None:
+    """
+    Render Annual Statistics section.
+
+    Args:
+        df: Year activities
+        selected_year: Selected year
+        format_duration_fn: Function to format duration
+        help_texts: Dictionary of help text strings
+    """
+    st.divider()
+    st.markdown("### 🏆 Annual Statistics")
+    
+    # Calculate statistics
+    total_hours = df["moving_time"].sum() / 3600
+    
+    # Biggest week
+    df_weekly = df.copy()
+    df_weekly["week_start"] = (df_weekly["start_date_local"] - 
+                                pd.to_timedelta(df_weekly["start_date_local"].dt.weekday, unit='D')).dt.normalize()
+    weekly_hours = df_weekly.groupby("week_start")["moving_time"].sum() / 3600
+    biggest_week_hours = weekly_hours.max()
+    biggest_week_date = weekly_hours.idxmax()
+    biggest_week_num = biggest_week_date.isocalendar()[1] if biggest_week_hours > 0 else 0
+    
+    # Longest ride
+    longest_ride = df.loc[df["moving_time"].idxmax()]
+    longest_ride_time = longest_ride["moving_time"]
+    
+    # Training days
+    df["date_local"] = df["start_date_local"].dt.date
+    training_days = len(df["date_local"].unique())
+    total_days = 366 if selected_year % 4 == 0 else 365  # Leap year check
+    
+    # Most climbing
+    most_climbing = df.loc[df["total_elevation_gain"].idxmax()]
+    most_climbing_elev = most_climbing["total_elevation_gain"]
+    
+    # Highest NP
+    highest_np = 0
+    if "normalized_power" in df.columns and df["normalized_power"].notna().any():
+        highest_np = df["normalized_power"].max()
+    
+    # Display in 2 rows, 3 columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        render_metric(
+            col1,
+            "Total Hours",
+            f"{total_hours:.0f}h",
+            help_texts.get("total_hours", "Total training time for the year")
+        )
+    
+    with col2:
+        render_metric(
+            col2,
+            "Biggest Week",
+            f"{biggest_week_hours:.1f}h",
+            f"Week {biggest_week_num}" if biggest_week_num > 0 else "N/A"
+        )
+    
+    with col3:
+        render_metric(
+            col3,
+            "Longest Ride",
+            format_duration_fn(longest_ride_time),
+            longest_ride["name"][:30] if "name" in longest_ride else "N/A"
+        )
+    
+    col4, col5, col6 = st.columns(3)
+    
+    with col4:
+        render_metric(
+            col4,
+            "Training Days",
+            f"{training_days} / {total_days}",
+            f"{training_days / total_days * 100:.0f}% consistency"
+        )
+    
+    with col5:
+        render_metric(
+            col5,
+            "Most Climbing",
+            f"{most_climbing_elev:,.0f}m",
+            most_climbing["name"][:30] if "name" in most_climbing else "N/A"
+        )
+    
+    with col6:
+        if highest_np > 0:
+            render_metric(
+                col6,
+                "Highest NP",
+                f"{highest_np:.0f} W",
+                help_texts.get("highest_np", "Highest normalized power for a single activity")
+            )
+        else:
+            render_metric(col6, "Highest NP", "N/A")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SECTION 4.5: Risk Analysis
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_risk_analysis(
+    df: pd.DataFrame,
+    selected_year: int,
+    help_texts: dict,
+) -> None:
+    """
+    Render Training Risk Analysis section.
+
+    Args:
+        df: Year activities
+        selected_year: Selected year
+        help_texts: Dictionary of help text strings
+    """
+    st.divider()
+    st.markdown("### ⚠️ Training Risk Analysis")
+    
+    # High ACWR weeks
+    high_acwr_weeks = 0
+    if "acwr" in df.columns:
+        df_weekly = df.copy()
+        df_weekly["week_start"] = (df_weekly["start_date_local"] - 
+                                    pd.to_timedelta(df_weekly["start_date_local"].dt.weekday, unit='D')).dt.normalize()
+        weekly_acwr = df_weekly.groupby("week_start")["acwr"].mean()
+        high_acwr_weeks = (weekly_acwr > 1.5).sum()
+    
+    # Overreach periods (TSB < -30)
+    overreach_days = 0
+    overreach_periods = 0
+    if "training_stress_balance" in df.columns:
+        df_sorted = df.sort_values("start_date_local")
+        df_sorted["date_local"] = df_sorted["start_date_local"].dt.date
+        daily_tsb = df_sorted.groupby("date_local")["training_stress_balance"].mean()
+        overreach_mask = daily_tsb < -30
+        overreach_days = overreach_mask.sum()
+        
+        # Count continuous overreach periods
+        in_overreach = False
+        for is_overreach in overreach_mask:
+            if is_overreach and not in_overreach:
+                overreach_periods += 1
+                in_overreach = True
+            elif not is_overreach:
+                in_overreach = False
+    
+    # Training consistency
+    df["date_local"] = df["start_date_local"].dt.date
+    training_days = len(df["date_local"].unique())
+    total_days = 366 if selected_year % 4 == 0 else 365
+    consistency_pct = (training_days / total_days) * 100
+    
+    # Longest training break
+    training_dates = sorted(df["date_local"].unique())
+    training_dates_pd = pd.to_datetime(training_dates)
+    
+    longest_gap = 0
+    if len(training_dates_pd) > 1:
+        for i in range(1, len(training_dates_pd)):
+            gap = (training_dates_pd[i] - training_dates_pd[i-1]).days - 1
+            longest_gap = max(longest_gap, gap)
+    
+    # Calculate risk score
+    risk_score = 0
+    risk_factors = []
+    
+    if high_acwr_weeks > 5:
+        risk_score += 2
+        risk_factors.append("High ACWR frequency")
+    elif high_acwr_weeks > 2:
+        risk_score += 1
+    
+    if overreach_periods > 3:
+        risk_score += 2
+        risk_factors.append("Frequent overreaching")
+    elif overreach_periods > 1:
+        risk_score += 1
+    
+    if consistency_pct < 50:
+        risk_score += 2
+        risk_factors.append("Low consistency")
+    elif consistency_pct < 70:
+        risk_score += 1
+    
+    if longest_gap > 14:
+        risk_score += 1
+        risk_factors.append("Extended training break")
+    
+    # Determine risk level
+    if risk_score == 0:
+        risk_level = "LOW"
+        risk_color = "#2ecc71"
+        risk_message = "✅ Excellent load management"
+    elif risk_score <= 2:
+        risk_level = "MODERATE"
+        risk_color = "#f39c12"
+        risk_message = "⚠️ Monitor recovery and consistency"
+    else:
+        risk_level = "HIGH"
+        risk_color = "#e74c3c"
+        risk_message = "🔴 Review training plan and recovery"
+    
+    # Display metrics
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        render_metric(
+            col1,
+            "High ACWR Weeks",
+            f"{high_acwr_weeks}",
+            help_texts.get("high_acwr_weeks", "Weeks with ACWR > 1.5 (injury risk)")
+        )
+    
+    with col2:
+        render_metric(
+            col2,
+            "Overreach Periods",
+            f"{overreach_periods}",
+            f"{overreach_days} days total" if overreach_days > 0 else "N/A"
+        )
+    
+    with col3:
+        render_metric(
+            col3,
+            "Training Consistency",
+            f"{consistency_pct:.0f}%",
+            f"{training_days}/{total_days} days"
+        )
+    
+    with col4:
+        render_metric(
+            col4,
+            "Longest Break",
+            f"{longest_gap} days",
+            help_texts.get("longest_break", "Longest period without training")
+        )
+    
+    # Risk score summary
+    st.markdown(f"<h4 style='color: {risk_color};'>💡 Risk Score: {risk_level}</h4>", unsafe_allow_html=True)
+    st.markdown(f"**{risk_message}**")
+    
+    if risk_factors:
+        st.markdown("**Risk Factors:**")
+        for factor in risk_factors:
+            st.markdown(f"- {factor}")

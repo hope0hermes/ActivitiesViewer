@@ -25,6 +25,7 @@ dependencies = [
     { name = "pydantic-settings" },
     { name = "python-dotenv" },
     { name = "pyyaml" },
+    { name = "scipy" },
     { name = "streamlit" },
     { name = "streamlit-folium" },
 ]
@@ -100,6 +101,7 @@ requires-dist = [
     { name = "redis", marker = "extra == 'deployment'", specifier = ">=5.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.9.1" },
     { name = "scikit-learn", marker = "extra == 'segments'", specifier = ">=1.3.0" },
+    { name = "scipy", specifier = ">=1.11.0" },
     { name = "sentence-transformers", marker = "extra == 'ai'", specifier = ">=2.2.0" },
     { name = "sentence-transformers", marker = "extra == 'segments'", specifier = ">=2.2.0" },
     { name = "shapely", marker = "extra == 'segments'", specifier = ">=2.0.0" },

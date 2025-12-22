@@ -37,6 +37,19 @@ data_enriched/
 - `average_hr` / `moving_average_hr` - Average heart rate
 - `moving_power_z1_percentage` through `moving_power_z7_percentage` - Power zone percentages
 - `moving_hr_z1_percentage` through `moving_hr_z5_percentage` - HR zone percentages
+- **NEW Advanced Power Metrics:**
+  - `time_above_90_ftp` / `moving_time_above_90_ftp` - Seconds above 90% FTP
+  - `time_sweet_spot` / `moving_time_sweet_spot` - Seconds in 88-94% FTP (sweet spot)
+  - `w_prime_balance_min` / `moving_w_prime_balance_min` - Minimum W' balance reached
+  - `match_burn_count` / `moving_match_burn_count` - Number of significant W' expenditures
+  - `negative_split_index` / `moving_negative_split_index` - NP 2nd half / NP 1st half
+  - `cardiac_drift` / `moving_cardiac_drift` - EF 1st half vs 2nd half (%)
+  - `estimated_ftp` / `moving_estimated_ftp` - FTP estimate from 20min power
+- **NEW Climbing Metrics:**
+  - `vam` / `moving_vam` - Velocità Ascensionale Media (m/h)
+  - `climbing_time` / `moving_climbing_time` - Time spent climbing (seconds)
+  - `climbing_power` / `moving_climbing_power` - Avg power on climbs >4% (W)
+  - `climbing_power_per_kg` / `moving_climbing_power_per_kg` - Climbing W/kg
 - Additional advanced metrics (VI, EF, decoupling, etc.)
 
 **Example Usage:**

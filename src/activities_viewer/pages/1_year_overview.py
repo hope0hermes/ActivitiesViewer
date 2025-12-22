@@ -25,6 +25,11 @@ from activities_viewer.pages.components.year_overview_components import (
     render_distributions_tab,
     render_patterns_tab,
     render_extremes_section,
+    render_performance_trajectory,
+    render_season_phases,
+    render_year_over_year_comparison,
+    render_annual_statistics,
+    render_risk_analysis,
 )
 
 st.set_page_config(page_title="Year Overview", page_icon="📊", layout="wide")
@@ -77,8 +82,44 @@ HELP_TEXTS = {
     Helps track:
     - Equipment wear and maintenance needs
     - Training distribution across bikes
-    - Preferred equipment for different activities""",
-}
+    - Preferred equipment for different activities""",    # Section 4: Performance Trajectory
+    "ftp_trajectory": """**FTP Evolution**
+    Track estimated FTP changes throughout the year.
+    Upward trend indicates improving fitness.
+    Monthly averages smooth out daily fluctuations.""",
+    "peak_metrics": """**Peak Performance Metrics**
+    Highest values achieved during the year.
+    Peak FTP, CTL, and W/kg indicate best fitness state.""",
+    # Section 4: Season Phases
+    "season_phases": """**Season Phase Detection**
+    Automatic classification based on CTL trends and intensity:
+    - OFF-SEASON: Low volume recovery period
+    - BASE: Building aerobic foundation (low IF)
+    - BUILD: Increasing intensity and volume
+    - PEAK/RACE: Tapering for peak performance
+    - RECOVERY: Active recovery after hard blocks
+    - TRANSITION: Between defined phases""",
+    # Section 4: Year-over-Year
+    "yoy_comparison": """**Year-over-Year Progress**
+    Compare key metrics against previous year.
+    Positive trends indicate consistent improvement.""",
+    # Section 4: Annual Statistics
+    "total_hours": """Total training time for the year.
+    Elite cyclists: 500-800h/year
+    Serious amateurs: 300-500h/year
+    Recreational: <300h/year""",
+    "biggest_week": """Week with highest training volume.
+    Useful for tracking peak training blocks.""",
+    "highest_np": """Highest normalized power for any single activity.
+    Indicates peak sustained power output capability.""",
+    # Section 4: Risk Analysis
+    "high_acwr_weeks": """Weeks with Acute:Chronic Workload Ratio > 1.5.
+    High ACWR increases injury risk.
+    Target: Keep ACWR between 0.8-1.3""",
+    "longest_break": """Longest consecutive period without training.
+    • 1-3 days: Normal recovery
+    • 4-7 days: Planned rest week
+    • >7 days: Extended break (illness, vacation, etc.)""",}
 
 
 def format_duration(seconds: float) -> str:
@@ -256,6 +297,25 @@ def main():
 
     # Activity Extremes
     render_extremes_section(df, metric_view, format_duration)
+    
+    # ═══════════════════════════════════════════════════════════════════════════
+    # SECTION 4: Advanced Annual Analysis
+    # ═══════════════════════════════════════════════════════════════════════════
+    
+    # Section 4.1: Performance Trajectory
+    render_performance_trajectory(df, selected_year, HELP_TEXTS)
+    
+    # Section 4.2: Season Phases
+    render_season_phases(df, selected_year, HELP_TEXTS)
+    
+    # Section 4.3: Year-over-Year Comparison
+    render_year_over_year_comparison(df, df_prev_filtered, selected_year, HELP_TEXTS)
+    
+    # Section 4.4: Annual Statistics
+    render_annual_statistics(df, selected_year, format_duration, HELP_TEXTS)
+    
+    # Section 4.5: Risk Analysis
+    render_risk_analysis(df, selected_year, HELP_TEXTS)
 
 
 if __name__ == "__main__":

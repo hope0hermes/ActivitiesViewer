@@ -79,6 +79,55 @@ Higher values indicate better overall aerobic efficiency.""",
 - Z3 High: Above lactate threshold (>100% LTHR)
 
 Polarized training (80% Z1, 20% Z3) is optimal for most athletes.""",
+    # Section 3: Fitness Evolution
+    "ftp_start": """Estimated FTP at the beginning of the month.
+Based on power duration curve analysis from recent activities.""",
+    "ftp_end": """Estimated FTP at the end of the month.
+Based on power duration curve analysis from recent activities.""",
+    "ftp_change": """Change in estimated FTP over the month.
+• Positive: Fitness improvement ✅
+• Negative: May need recovery or training adjustment ⚠️
+• Stable (±2W): Maintenance phase ➡️""",
+    # Section 3: Periodization Check
+    "volume_vs_avg": """Monthly training volume compared to 3-month rolling average.
+• +10% or more: High volume block 📈
+• -10% or less: Recovery/taper block 📉
+• ±10%: Maintenance ➡️""",
+    "intensity_vs_avg": """Average ride intensity (IF) compared to 3-month rolling average.
+• Higher: BUILD/PEAK phase (harder efforts) ⚡
+• Lower: BASE phase (endurance focus) 🏗️
+• Similar: Maintenance ➡️""",
+    "long_rides": """Number of rides longer than 3 hours.
+Critical for endurance development and aerobic capacity.
+Target: 1-2 per week during base phase.""",
+    # Section 3: Aerobic Development
+    "ef_trend": """Weekly rate of change in Efficiency Factor.
+Positive trend = improving aerobic efficiency ✅
+• >0.02/week: Significant improvement
+• 0-0.02/week: Gradual improvement
+• <0: May need more Z2 volume or recovery""",
+    "avg_decoupling": """Average cardiac drift across all activities this month.
+Lower values indicate better aerobic fitness.
+• <5%: Excellent aerobic fitness ✅
+• 5-10%: Good aerobic fitness ➡️
+• >10%: May need more Z2 base work ⚠️""",
+    "decoupling_trend": """Weekly rate of change in cardiac drift.
+Negative trend (decreasing drift) = improving aerobic fitness ✅
+• <-0.2%/week: Significant improvement
+• -0.2 to 0: Gradual improvement
+• >0: Increasing fatigue or deconditioning""",
+    # Section 3: Training Consistency
+    "training_days": """Number of days with at least one activity.
+Higher consistency = better adaptation and fitness gains.
+• 70%+: Excellent consistency ✅
+• 50-70%: Good consistency ➡️
+• <50%: Consider improving consistency ⚠️""",
+    "longest_streak": """Longest run of consecutive training days.
+Very long streaks (>14 days) may indicate need for rest days.""",
+    "longest_gap": """Longest period without training.
+• 1-3 days: Normal recovery ✅
+• 4-7 days: Planned rest week ➡️
+• >7 days: Extended break (illness, vacation, etc.) ⚠️""",
 }
 
 
@@ -189,7 +238,7 @@ def main():
 
     # Ensure datetime
     df_activities["start_date_local"] = pd.to_datetime(df_activities["start_date_local"])
-    
+
     # Remove timezone info if present (work with local dates)
     if df_activities["start_date_local"].dt.tz is not None:
         df_activities["start_date_local"] = df_activities["start_date_local"].dt.tz_localize(None)
@@ -260,6 +309,8 @@ def main():
             calculate_monthly_tid_fn=calculate_monthly_tid,
             format_duration_fn=format_duration,
             settings=settings,
+            df_all_activities=df_activities,
+            help_texts=HELP_TEXTS,
         )
 
     with tab_intensity:

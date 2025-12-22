@@ -136,6 +136,58 @@ class Activity(BaseModel):
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # ADVANCED POWER METRICS (NEW)
+    # ═══════════════════════════════════════════════════════════════════════════
+    time_above_90_ftp: Optional[int] = Field(
+        default=None,
+        description="Seconds above 90% FTP (VO2max zone). Measures high-intensity training stimulus.",
+    )
+    time_sweet_spot: Optional[int] = Field(
+        default=None,
+        description="Seconds in sweet spot (88-94% FTP). Optimal zone for FTP development.",
+    )
+    w_prime_balance_min: Optional[float] = Field(
+        default=None,
+        description="Minimum W' balance reached (J). Shows proximity to anaerobic exhaustion.",
+    )
+    match_burn_count: Optional[int] = Field(
+        default=None,
+        description="Number of significant W' expenditures (>50% depletion). Quantifies hard efforts.",
+    )
+    negative_split_index: Optional[float] = Field(
+        default=None,
+        description="NP 2nd half / NP 1st half. <0.95=negative split, 0.95-1.05=even, >1.05=fade.",
+    )
+    cardiac_drift: Optional[float] = Field(
+        default=None,
+        description="(EF 1st - EF 2nd)/EF 1st × 100%. <3%=excellent fitness, >8%=poor/fatigue.",
+    )
+    estimated_ftp: Optional[float] = Field(
+        default=None,
+        description="FTP estimate from best 20-min power (×0.95). Track progression ride-to-ride.",
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CLIMBING METRICS (NEW)
+    # ═══════════════════════════════════════════════════════════════════════════
+    vam: Optional[float] = Field(
+        default=None,
+        description="Velocità Ascensionale Media (m/h). Vertical ascent rate, the gold standard for climbing.",
+    )
+    climbing_time: Optional[int] = Field(
+        default=None,
+        description="Seconds spent climbing (positive gradient). Quantifies climbing volume.",
+    )
+    climbing_power: Optional[float] = Field(
+        default=None,
+        description="Average power on gradients >4% (W). Shows sustained climbing strength.",
+    )
+    climbing_power_per_kg: Optional[float] = Field(
+        default=None,
+        description="Climbing power / weight (W/kg). THE key metric for climbing performance.",
+    )
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # HEART RATE METRICS
     # ═══════════════════════════════════════════════════════════════════════════
     has_heartrate: Optional[bool] = Field(default=None)

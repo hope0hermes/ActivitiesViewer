@@ -87,6 +87,43 @@ HELP_TEXTS = {
         "Indicates athlete profile type.\n"
         "• <0.7: Balanced\n• 0.7-0.85: Aerobic bias\n• >0.85: Strong aerobic profile"
     ),
+    # Section 2: Recovery & Readiness
+    "rest_days": """Days with no activity or TSS < 20.
+Adequate recovery time prevents overtraining and allows adaptation.
+• 2+: ✅ Good recovery
+• 1: ⚠️ May need more rest
+• 0: 🔴 High overtraining risk""",
+    "monotony": """Mean daily TSS divided by standard deviation.
+Measures training variety. Lower values indicate better variation.
+• <1.5: ✅ Good variety
+• 1.5-2.0: ⚠️ Moderate risk
+• >2.0: 🔴 Too repetitive""",
+    "strain": """Weekly TSS × Monotony Index.
+Combines training load with variation. Higher values = greater stress.
+• <3000: ✅ Manageable
+• 3000-6000: ⚠️ Moderate
+• >6000: 🔴 High strain""",
+    # Section 2: Progressive Overload
+    "this_week_tss": """Total Training Stress Score for the current week.
+Quantifies overall training load across all activities.""",
+    "four_week_avg_tss": """Average weekly TSS over the previous 4 weeks.
+Provides baseline for comparing current week's load.""",
+    "progression": """Week-over-week TSS change as percentage.
+Optimal progression: 3-10% increase per week.
+• +3 to +10%: ✅ Optimal
+• +10 to +20%: ⚠️ Monitor recovery
+• >+20%: 🔴 High risk
+• <-10%: 💤 Recovery week""",
+    # Section 2: Intensity-Specific Volume
+    "z2_volume": """Time spent in Zone 2 (56-75% FTP).
+Aerobic base building, mitochondrial adaptation.
+Target: 60-80% of weekly volume for base phase.""",
+    "sweet_spot_time": """Time at 88-94% FTP (Sweet Spot range).
+Highly effective for FTP improvement.
+Target: 10-20% of weekly volume during build phase.""",
+    "vo2max_time": """Time above 90% FTP (VO2max and above).
+High intensity training for maximal aerobic power.
+Target: 5-10% of weekly volume.""",
 }
 
 # Helper functions (kept from original, needed by components)
@@ -251,6 +288,8 @@ def main():
             calculate_weekly_tid,
             format_duration,
             settings,
+            df_all_activities=df_activities,
+            help_texts=HELP_TEXTS,
         )
 
     with tab_intensity:

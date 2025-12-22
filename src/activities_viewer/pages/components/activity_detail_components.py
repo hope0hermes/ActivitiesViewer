@@ -133,8 +133,8 @@ def render_metric(column, label: str, value: str, help_text: str = None) -> None
     with column:
         # Create a responsive metric card with proper text sizing and help text support
         if help_text:
-            # Escape newlines and quotes for HTML attribute
-            help_escaped = help_text.replace('\n', '\\n').replace('"', '&quot;')
+            # Convert newlines to HTML entity and escape quotes for HTML attribute
+            help_escaped = help_text.replace('\n', '&#10;').replace('"', '&quot;')
             # HTML with tooltip on hover
             metric_html = f"""
             <div style="
@@ -408,6 +408,221 @@ def get_workout_type_info(workout_type: float | None) -> tuple[str, str]:
     return WORKOUT_TYPES.get(int(workout_type), ("Ride", "🚴"))
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEW ANALYSIS SECTIONS (December 2025)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+def render_pacing_analysis(activity: Activity, help_texts: dict = None) -> None:
+    """Render pacing analysis section with negative split, match burns, and time in red.
+
+    Args:
+        activity: Activity object to display
+        help_texts: Dictionary of help text strings
+    """
+    if help_texts is None:
+        help_texts = {}
+
+    st.markdown("#### 📊 Pacing Analysis")
+
+    col1, col2, col3 = st.columns(3)
+
+    # Negative Split Index
+    nsi = get_metric(activity, "negative_split_index")
+    if nsi:
+        if nsi > 1.05:
+            nsi_label = "Negative Split ✅"
+            nsi_emoji = "🟢"
+        elif nsi >= 0.95:
+            nsi_label = "Even Pacing ✅"
+            nsi_emoji = "🟢"
+        elif nsi >= 0.85:
+            nsi_label = "Slight Fade ⚠️"
+            nsi_emoji = "🟡"
+        else:
+            nsi_label = "Significant Fade 🔴"
+            nsi_emoji = "🔴"
+
+        render_metric(
+            col1,
+            "Negative Split Index",
+            f"{nsi_emoji} {nsi:.2f}",
+            get_help_text("negative_split_index", help_texts)
+        )
+        with col1:
+            st.caption(nsi_label)
+    else:
+        render_metric(col1, "Negative Split Index", "-", get_help_text("negative_split_index", help_texts))
+
+    # Match Burns
+    match_burns = get_metric(activity, "match_burn_count")
+    if match_burns is not None:
+        if match_burns <= 2:
+            burn_label = "Steady ride"
+            burn_emoji = "🟢"
+        elif match_burns <= 5:
+            burn_label = "Interval workout"
+            burn_emoji = "🟡"
+        elif match_burns <= 10:
+            burn_label = "Dynamic ride"
+            burn_emoji = "🟠"
+        else:
+            burn_label = "Racing effort"
+            burn_emoji = "🔴"
+
+        render_metric(
+            col2,
+            "Match Burns",
+            f"{burn_emoji} {int(match_burns)}",
+            get_help_text("match_burn_count", help_texts)
+        )
+        with col2:
+            st.caption(burn_label)
+    else:
+        render_metric(col2, "Match Burns", "-", get_help_text("match_burn_count", help_texts))
+
+    # Time Above 90% FTP
+    time_above = get_metric(activity, "time_above_90_ftp")
+    if time_above is not None and time_above > 0:
+        minutes = int(time_above // 60)
+        seconds = int(time_above % 60)
+        time_str = f"{minutes}:{seconds:02d}" if minutes > 0 else f"{seconds}s"
+
+        # Get percentage of ride
+        moving_time = get_metric(activity, "moving_time", 1)
+        pct = (time_above / moving_time * 100) if moving_time else 0
+
+        if time_above < 300:  # <5 min
+            time_emoji = "🟢"
+            time_label = "Light stimulus"
+        elif time_above < 900:  # <15 min
+            time_emoji = "🟡"
+            time_label = "Good stimulus"
+        elif time_above < 1800:  # <30 min
+            time_emoji = "🟠"
+            time_label = "Hard session"
+        else:
+            time_emoji = "🔴"
+            time_label = "Very hard session"
+
+        render_metric(
+            col3,
+            "Time in Red (>90% FTP)",
+            f"{time_emoji} {time_str}",
+            get_help_text("time_above_90_ftp", help_texts)
+        )
+        with col3:
+            st.caption(f"{time_label} ({pct:.1f}% of ride)")
+    else:
+        render_metric(col3, "Time in Red (>90% FTP)", "-", get_help_text("time_above_90_ftp", help_texts))
+
+
+def render_climbing_analysis(activity: Activity, help_texts: dict = None) -> None:
+    """Render climbing analysis section with VAM, climbing W/kg, and climbing time.
+
+    Args:
+        activity: Activity object to display
+        help_texts: Dictionary of help text strings
+    """
+    if help_texts is None:
+        help_texts = {}
+
+    st.markdown("#### ⛰️ Climbing Analysis")
+
+    col1, col2, col3 = st.columns(3)
+
+    # VAM
+    vam = get_metric(activity, "vam")
+    if vam:
+        # Categorize VAM
+        if vam < 800:
+            vam_label = "Recreational pace"
+            vam_emoji = "🟢"
+        elif vam < 1000:
+            vam_label = "Strong amateur"
+            vam_emoji = "🟡"
+        elif vam < 1200:
+            vam_label = "Cat 2-3 racer"
+            vam_emoji = "🟠"
+        elif vam < 1400:
+            vam_label = "Cat 1 / Pro domestic"
+            vam_emoji = "🔴"
+        else:
+            vam_label = "World Tour level"
+            vam_emoji = "🏆"
+
+        render_metric(
+            col1,
+            "VAM",
+            f"{vam_emoji} {vam:.0f} m/h",
+            get_help_text("vam", help_texts)
+        )
+        with col1:
+            st.caption(vam_label)
+    else:
+        render_metric(col1, "VAM", "-", get_help_text("vam", help_texts))
+
+    # Climbing W/kg
+    climbing_wkg = get_metric(activity, "climbing_power_per_kg")
+    if climbing_wkg:
+        # Categorize W/kg
+        if climbing_wkg < 3.0:
+            wkg_label = "Recreational"
+            wkg_emoji = "🟢"
+        elif climbing_wkg < 3.5:
+            wkg_label = "Strong amateur"
+            wkg_emoji = "🟡"
+        elif climbing_wkg < 4.0:
+            wkg_label = "Cat 2-3 racer"
+            wkg_emoji = "🟠"
+        elif climbing_wkg < 4.5:
+            wkg_label = "Cat 1 / Pro domestic"
+            wkg_emoji = "🔴"
+        else:
+            wkg_label = "World Tour level"
+            wkg_emoji = "🏆"
+
+        render_metric(
+            col2,
+            "Climbing W/kg",
+            f"{wkg_emoji} {climbing_wkg:.1f}",
+            get_help_text("climbing_power_per_kg", help_texts)
+        )
+        with col2:
+            st.caption(wkg_label)
+    else:
+        render_metric(col2, "Climbing W/kg", "-", get_help_text("climbing_power_per_kg", help_texts))
+
+    # Climbing Time
+    climbing_time = get_metric(activity, "climbing_time")
+    if climbing_time is not None and climbing_time > 0:
+        hours = int(climbing_time // 3600)
+        minutes = int((climbing_time % 3600) // 60)
+        seconds = int(climbing_time % 60)
+
+        if hours > 0:
+            time_str = f"{hours}h {minutes}m"
+        elif minutes > 0:
+            time_str = f"{minutes}:{seconds:02d}"
+        else:
+            time_str = f"{seconds}s"
+
+        # Get percentage of ride
+        moving_time = get_metric(activity, "moving_time", 1)
+        pct = (climbing_time / moving_time * 100) if moving_time else 0
+
+        render_metric(
+            col3,
+            "Climbing Time",
+            time_str,
+            get_help_text("climbing_time", help_texts)
+        )
+        with col3:
+            st.caption(f"{pct:.0f}% of ride")
+    else:
+        render_metric(col3, "Climbing Time", "-", get_help_text("climbing_time", help_texts))
+
+
 def render_overview_tab(activity: Activity, service: ActivityService, metric_view: str = "Moving Time", help_texts: dict = None) -> None:
     """Render the Overview tab with summary metrics, map, and time-series plots.
 
@@ -495,11 +710,11 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
 
     # Average HR
     avg_hr = get_metric(activity, "average_hr")
-    render_metric(col4, "❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
+    render_metric(col4, "❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-", get_help_text("average_hr", help_texts))
 
     # Max HR
     max_hr = get_metric(activity, "max_hr")
-    render_metric(col5, "💓 Max HR", f"{max_hr:.0f} bpm" if max_hr else "-")
+    render_metric(col5, "💓 Max HR", f"{max_hr:.0f} bpm" if max_hr else "-", get_help_text("max_hr", help_texts))
 
     # Row 3: Additional metrics
     col1, col2, col3, col4, col5 = st.columns(5)
@@ -517,11 +732,11 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
     if avg_cadence is None or pd.isna(avg_cadence):
         # Fall back if not available
         avg_cadence = get_metric(activity, "average_cadence")
-    render_metric(col3, "🔄 Cadence", f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-")
+    render_metric(col3, "🔄 Cadence", f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-", get_help_text("average_cadence", help_texts))
 
     # Calories
     calories = get_metric(activity, "kilojoules")
-    render_metric(col4, "🔥 Energy", f"{calories:.0f} kJ" if calories else "-")
+    render_metric(col4, "🔥 Energy", f"{calories:.0f} kJ" if calories else "-", get_help_text("kilojoules", help_texts))
 
     # Start time
     start_time = getattr(activity, "start_date_local", None)
@@ -534,6 +749,20 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
         time_str = "-"
     render_metric(col5, "🕐 Start", time_str)
 
+    st.divider()
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # NEW ANALYSIS SECTIONS
+    # ─────────────────────────────────────────────────────────────────────────
+
+    # Pacing Analysis - always show if we have power data
+    avg_power = get_metric(activity, "average_power")
+    if avg_power:
+        render_pacing_analysis(activity, help_texts)
+        st.divider()
+
+    # Climbing Analysis - always present
+    render_climbing_analysis(activity, help_texts)
     st.divider()
 
     # ─────────────────────────────────────────────────────────────────────────
@@ -846,13 +1075,13 @@ def render_power_hr_tab(
         max_pwr = get_metric(activity, "max_power")
         render_metric(c1, "Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-", get_help_text("avg_power", help_texts))
         render_metric(c2, "Norm Power", f"{np_val:.0f} W" if np_val else "-", get_help_text("normalized_power", help_texts))
-        render_metric(c3, "Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
+        render_metric(c3, "Max Power", f"{max_pwr:.0f} W" if max_pwr else "-", help_text="Peak power during activity")
 
         c1, c2, c3 = st.columns(3)
         w_kg = get_metric(activity, "power_per_kg")
         if_val = get_metric(activity, "intensity_factor")
         tss_val = get_metric(activity, "training_stress_score")
-        render_metric(c1, "W/kg", f"{w_kg:.2f}" if w_kg else "-")
+        render_metric(c1, "W/kg", f"{w_kg:.2f}" if w_kg else "-", help_text="Average power normalized to body weight")
         render_metric(c2, "IF", f"{if_val:.2f}" if if_val else "-", get_help_text("intensity_factor", help_texts))
         render_metric(c3, "TSS", f"{tss_val:.0f}" if tss_val else "-", get_help_text("tss", help_texts))
 
@@ -862,9 +1091,9 @@ def render_power_hr_tab(
         avg_hr = get_metric(activity, "average_hr")
         max_hr = get_metric(activity, "max_hr")
         hr_tss = get_metric(activity, "hr_training_stress")
-        render_metric(c1, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
-        render_metric(c2, "Max HR", f"{max_hr:.0f} bpm" if max_hr else "-")
-        render_metric(c3, "HR TSS", f"{hr_tss:.0f}" if hr_tss else "-")
+        render_metric(c1, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-", get_help_text("average_hr", help_texts))
+        render_metric(c2, "Max HR", f"{max_hr:.0f} bpm" if max_hr else "-", get_help_text("max_hr", help_texts))
+        render_metric(c3, "HR TSS", f"{hr_tss:.0f}" if hr_tss else "-", get_help_text("hr_training_stress", help_texts))
 
         c1, c2, c3 = st.columns(3)
         ef = get_metric(activity, "efficiency_factor")
@@ -872,7 +1101,72 @@ def render_power_hr_tab(
         hr_type = get_metric(activity, "hr_tid_classification")
         render_metric(c1, "EF", f"{ef:.2f}" if ef else "-", get_help_text("efficiency_factor", help_texts))
         render_metric(c2, "Decoupling", f"{decoupling:.1f}%" if decoupling else "-", get_help_text("decoupling", help_texts))
-        render_metric(c3, "Type", hr_type if hr_type else "-")
+        render_metric(c3, "Type", hr_type if hr_type else "-", get_help_text("tid_classification", help_texts))
+
+    st.divider()
+
+    # ===== SECTION 1.3: ENHANCED POWER-HR METRICS =====
+    st.markdown("### 💪 Anaerobic & Recovery Metrics")
+
+    col_wprime, col_recovery = st.columns(2)
+
+    # W' Balance Plot
+    with col_wprime:
+        st.markdown("#### ⚡ W' Balance")
+        w_prime = get_metric(activity, "w_prime")
+        w_prime_min = get_metric(activity, "w_prime_balance_min")
+
+        if w_prime and w_prime_min is not None:
+            # Display W' metrics
+            c1, c2 = st.columns(2)
+            render_metric(c1, "Total W'", f"{(w_prime/1000):.1f} kJ" if w_prime else "-", help_text="Anaerobic work capacity above critical power")
+            render_metric(c2, "Min W'", f"{(w_prime_min/1000):.1f} kJ" if w_prime_min else "-", help_text="Lowest W' balance reached during ride")
+
+            # W' depletion percentage
+            if w_prime > 0:
+                depletion_pct = (w_prime - w_prime_min) / w_prime * 100
+                if depletion_pct < 30:
+                    depl_color = "🟢"
+                    depl_label = "Low depletion"
+                elif depletion_pct < 60:
+                    depl_color = "🟡"
+                    depl_label = "Moderate depletion"
+                else:
+                    depl_color = "🔴"
+                    depl_label = "High depletion"
+                st.markdown(f"**W' Depletion:** {depl_color} {depletion_pct:.0f}% ({depl_label})")
+        else:
+            st.info("W' Balance data not available for this activity.")
+
+    # HR Recovery Rate
+    with col_recovery:
+        st.markdown("#### 💓 HR Recovery")
+        max_hr = get_metric(activity, "max_hr")
+        avg_hr = get_metric(activity, "average_hr")
+        hr_recovery = get_metric(activity, "hr_recovery_rate")
+
+        c1, c2 = st.columns(2)
+        render_metric(c1, "Max HR", f"{max_hr:.0f} bpm" if max_hr else "-", help_text="Peak heart rate during activity")
+        render_metric(c2, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-", help_text="Time-weighted average heart rate")
+
+        if hr_recovery is not None:
+            # HR recovery interpretation
+            if hr_recovery > 25:
+                recovery_emoji = "🟢"
+                recovery_label = "Excellent recovery"
+            elif hr_recovery > 15:
+                recovery_emoji = "🟡"
+                recovery_label = "Good recovery"
+            elif hr_recovery > 5:
+                recovery_emoji = "🟠"
+                recovery_label = "Fair recovery"
+            else:
+                recovery_emoji = "🔴"
+                recovery_label = "Poor recovery"
+            st.markdown(f"**Recovery Rate:** {recovery_emoji} {hr_recovery:.1f} bpm/min ({recovery_label})")
+            st.caption("HR drop per minute during rest periods")
+        else:
+            st.caption("HR recovery rate requires rest periods detected in the activity.")
 
     st.divider()
 
@@ -1186,18 +1480,18 @@ def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
     np_val = get_metric(activity, "normalized_power")
     max_pwr = get_metric(activity, "max_power")
 
-    render_metric(c1, "⚡ Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-")
-    render_metric(c2, "📊 Norm Power", f"{np_val:.0f} W" if np_val else "-")
-    render_metric(c3, "📈 Max Power", f"{max_pwr:.0f} W" if max_pwr else "-")
+    render_metric(c1, "⚡ Avg Power", f"{avg_pwr:.0f} W" if avg_pwr else "-", get_help_text("avg_power", help_texts))
+    render_metric(c2, "📊 Norm Power", f"{np_val:.0f} W" if np_val else "-", get_help_text("normalized_power", help_texts))
+    render_metric(c3, "📈 Max Power", f"{max_pwr:.0f} W" if max_pwr else "-", help_text="Peak power during activity")
 
     c1, c2, c3 = st.columns(3)
     w_kg = get_metric(activity, "power_per_kg")
     if_val = get_metric(activity, "intensity_factor")
     tss_val = get_metric(activity, "training_stress_score")
 
-    render_metric(c1, "🏋️ W/kg", f"{w_kg:.2f}" if w_kg else "-")
-    render_metric(c2, "🎯 IF", f"{if_val:.2f}" if if_val else "-")
-    render_metric(c3, "📈 TSS", f"{tss_val:.0f}" if tss_val else "-")
+    render_metric(c1, "🏋️ W/kg", f"{w_kg:.2f}" if w_kg else "-", help_text="Average power normalized to body weight")
+    render_metric(c2, "🎯 IF", f"{if_val:.2f}" if if_val else "-", get_help_text("intensity_factor", help_texts))
+    render_metric(c3, "📈 TSS", f"{tss_val:.0f}" if tss_val else "-", get_help_text("tss", help_texts))
 
     st.divider()
 
@@ -1314,9 +1608,9 @@ def render_durability_tab(
 
         st.markdown("##### 300s Interval Analysis")
         col_a, col_b, col_c = st.columns(3)
-        render_metric(col_a, "First Power", f"{first_power:.0f} W" if first_power else "-")
-        render_metric(col_b, "Last Power", f"{last_power:.0f} W" if last_power else "-")
-        render_metric(col_c, "Drop %", f"{power_drop_pct:.1f}%" if power_drop_pct is not None else "-")
+        render_metric(col_a, "First Power", f"{first_power:.0f} W" if first_power else "-", help_text="Power in first 300s of ride")
+        render_metric(col_b, "Last Power", f"{last_power:.0f} W" if last_power else "-", help_text="Power in final 300s of ride")
+        render_metric(col_c, "Drop %", f"{power_drop_pct:.1f}%" if power_drop_pct is not None else "-", get_help_text("interval_300s_decay_rate", help_texts))
 
     # --- Right Column: HR Fatigue ---
     with col2:
@@ -1325,6 +1619,7 @@ def render_durability_tab(
         # HR fatigue metrics from effort distribution
         hr_decoupling = get_metric(activity, "power_hr_decoupling")
         hr_tss = get_metric(activity, "hr_training_stress")
+        cardiac_drift = get_metric(activity, "cardiac_drift")
         first_half_ef = get_metric(activity, "first_half_ef")
         second_half_ef = get_metric(activity, "second_half_ef")
 
@@ -1335,7 +1630,26 @@ def render_durability_tab(
         st.markdown("##### Effort Distribution")
         col_a, col_b = st.columns(2)
         render_metric(col_a, "First Half EF", f"{first_half_ef:.2f}" if first_half_ef else "-", get_help_text("first_half_ef", help_texts))
-        render_metric(col_b, "Second Half EF", f"{second_half_ef:.2f}" if second_half_ef else "-", get_help_text("second_half_ef", help_texts))
+
+        # Cardiac Drift with interpretation
+        if cardiac_drift is not None:
+            if cardiac_drift < 3:
+                drift_emoji = "🟢"
+                drift_label = "Excellent"
+            elif cardiac_drift < 5:
+                drift_emoji = "🟡"
+                drift_label = "Good"
+            elif cardiac_drift < 8:
+                drift_emoji = "🟠"
+                drift_label = "Moderate"
+            else:
+                drift_emoji = "🔴"
+                drift_label = "Poor/Fatigued"
+            render_metric(col_b, "Cardiac Drift", f"{drift_emoji} {cardiac_drift:.1f}%", get_help_text("cardiac_drift", help_texts))
+            with col_b:
+                st.caption(drift_label)
+        else:
+            render_metric(col_b, "Cardiac Drift", "-", get_help_text("cardiac_drift", help_texts))
 
     st.divider()
 
@@ -1350,8 +1664,8 @@ def render_durability_tab(
         decay_rate = get_metric(activity, "interval_300s_decay_rate")
 
         col_a, col_b = st.columns(2)
-        render_metric(col_a, "Avg Change", f"{power_trend:.2f} W/int" if power_trend else "-")
-        render_metric(col_b, "Decay Rate", f"{decay_rate:.1f}%" if decay_rate else "-")
+        render_metric(col_a, "Avg Change", f"{power_trend:.2f} W/int" if power_trend else "-", get_help_text("interval_300s_power_trend", help_texts))
+        render_metric(col_b, "Decay Rate", f"{decay_rate:.1f}%" if decay_rate else "-", get_help_text("interval_300s_decay_rate", help_texts))
 
     with col2:
         st.markdown("##### HR Intervals")
