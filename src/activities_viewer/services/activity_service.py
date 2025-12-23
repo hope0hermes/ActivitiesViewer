@@ -3,7 +3,7 @@ Service layer for Activity-related business logic.
 """
 
 from typing import List, Optional
-from datetime import date
+from datetime import date, datetime
 import pandas as pd
 
 from activities_viewer.domain.models import Activity, YearSummary
@@ -19,20 +19,24 @@ class ActivityService:
     def __init__(self, repository: ActivityRepository):
         self.repository = repository
 
-    def get_activity(self, activity_id: int, metric_view: str = "Moving Time") -> Optional[Activity]:
+    def get_activity(
+        self, activity_id: int, metric_view: str = "Moving Time"
+    ) -> Optional[Activity]:
         """Get a single activity with support for metric_view selection."""
-        if metric_view == "Raw Time" and hasattr(self.repository, 'get_activity_raw'):
+        if metric_view == "Raw Time" and hasattr(self.repository, "get_activity_raw"):
             return self.repository.get_activity_raw(activity_id)
-        elif hasattr(self.repository, 'get_activity_moving'):
+        elif hasattr(self.repository, "get_activity_moving"):
             return self.repository.get_activity_moving(activity_id)
         return self.repository.get_activity(activity_id)
 
-    def get_activities_for_year(self, year: int, metric_view: str = "Moving Time") -> List[Activity]:
+    def get_activities_for_year(
+        self, year: int, metric_view: str = "Moving Time"
+    ) -> List[Activity]:
         start_date = date(year, 1, 1)
         end_date = date(year, 12, 31)
-        if metric_view == "Raw Time" and hasattr(self.repository, 'get_activities_raw'):
+        if metric_view == "Raw Time" and hasattr(self.repository, "get_activities_raw"):
             return self.repository.get_activities_raw(start_date, end_date)
-        elif hasattr(self.repository, 'get_activities_moving'):
+        elif hasattr(self.repository, "get_activities_moving"):
             return self.repository.get_activities_moving(start_date, end_date)
         return self.repository.get_activities(start_date, end_date)
 
@@ -57,9 +61,9 @@ class ActivityService:
         Args:
             metric_view: Either "Raw Time" or "Moving Time" to select dataset.
         """
-        if metric_view == "Raw Time" and hasattr(self.repository, 'get_dataframe_raw'):
+        if metric_view == "Raw Time" and hasattr(self.repository, "get_dataframe_raw"):
             return self.repository.get_dataframe_raw()
-        elif hasattr(self.repository, 'get_dataframe_moving'):
+        elif hasattr(self.repository, "get_dataframe_moving"):
             return self.repository.get_dataframe_moving()
 
         activities = self.repository.get_activities()
@@ -67,7 +71,9 @@ class ActivityService:
             return pd.DataFrame()
         return pd.DataFrame([a.model_dump() for a in activities])
 
-    def get_recent_activities(self, count: int = 10, metric_view: str = "Moving Time") -> "pd.DataFrame":
+    def get_recent_activities(
+        self, count: int = 10, metric_view: str = "Moving Time"
+    ) -> "pd.DataFrame":
         """
         Get the most recent activities as a pandas DataFrame.
 
@@ -92,6 +98,48 @@ class ActivityService:
         # This requires the repository to support streams, which the base protocol currently doesn't show.
         # Assuming the underlying repository might have it or we need to add it.
         # For now, let's check the repository implementation.
-        if hasattr(self.repository, 'get_activity_stream'):
-             return self.repository.get_activity_stream(activity_id)
+        if hasattr(self.repository, "get_activity_stream"):
+            return self.repository.get_activity_stream(activity_id)
         return pd.DataFrame()
+
+    def get_activities_in_range(
+        self, start_date: datetime, end_date: datetime, metric_view: str = "Moving Time"
+    ) -> pd.DataFrame:
+        """
+        Get activities within a specific date range as a DataFrame.
+
+        This method filters the cached dataframe rather than reloading CSVs,
+        providing efficient date range filtering for the Analysis page.
+
+        Args:
+            start_date: Start of the date range (inclusive)
+            end_date: End of the date range (inclusive)
+            metric_view: Either "Raw Time" or "Moving Time" to select dataset
+
+        Returns:
+            DataFrame with activities in the specified date range
+        """
+        # Get all activities using cached dataframe
+        df = self.get_all_activities(metric_view)
+
+        if df.empty:
+            return df
+
+        # Ensure start_date_local is datetime
+        if not pd.api.types.is_datetime64_any_dtype(df["start_date_local"]):
+            df["start_date_local"] = pd.to_datetime(df["start_date_local"])
+
+        # Filter by date range
+        # Convert start_date and end_date to timezone-naive if needed
+        if hasattr(start_date, "tzinfo") and start_date.tzinfo is not None:
+            start_date = start_date.replace(tzinfo=None)
+        if hasattr(end_date, "tzinfo") and end_date.tzinfo is not None:
+            end_date = end_date.replace(tzinfo=None)
+
+        # Make sure DataFrame datetimes are timezone-naive for comparison
+        df_filtered = df[
+            (df["start_date_local"].dt.tz_localize(None) >= start_date)
+            & (df["start_date_local"].dt.tz_localize(None) <= end_date)
+        ].copy()
+
+        return df_filtered

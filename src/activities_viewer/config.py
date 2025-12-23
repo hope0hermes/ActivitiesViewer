@@ -92,6 +92,10 @@ class Settings(BaseSettings):
         gt=0,
         description="FTP when goal was set (for tracking progress from baseline)",
     )
+    baseline_date: str | None = Field(
+        default=None,
+        description="Date when goal tracking began in YYYY-MM-DD format (e.g., '2024-12-01')",
+    )
 
     # --- Application Settings ---
     data_source_type: str = Field(
@@ -180,7 +184,9 @@ class Settings(BaseSettings):
 
         # Resolve activities_enriched_file (legacy format)
         if not self.activities_enriched_file.is_absolute():
-            self.activities_enriched_file = self.data_dir / self.activities_enriched_file
+            self.activities_enriched_file = (
+                self.data_dir / self.activities_enriched_file
+            )
         else:
             self.activities_enriched_file = self.activities_enriched_file.resolve()
 
@@ -216,7 +222,11 @@ class Settings(BaseSettings):
         # Check for new dual-file format
         has_raw = self.activities_raw_file.exists()
         has_moving = self.activities_moving_file.exists()
-        has_enriched = self.activities_enriched_file.exists() if self.activities_enriched_file else False
+        has_enriched = (
+            self.activities_enriched_file.exists()
+            if self.activities_enriched_file
+            else False
+        )
 
         # Require at least raw file (moving file is optional, will use raw as fallback)
         if not has_raw and not has_enriched:
@@ -236,11 +246,14 @@ class Settings(BaseSettings):
 
         # Streams directory is optional - may be populated after initial setup
         if not self.streams_dir.exists():
-            logger.warning(f"Streams directory not found: {self.streams_dir} (optional)")
+            logger.warning(
+                f"Streams directory not found: {self.streams_dir} (optional)"
+            )
 
         if errors:
             raise FileNotFoundError(
-                "Configuration validation failed:\n" + "\n".join(f"  - {e}" for e in errors)
+                "Configuration validation failed:\n"
+                + "\n".join(f"  - {e}" for e in errors)
             )
 
     def get_stream_path(self, activity_id: int) -> Path:
@@ -272,11 +285,17 @@ class Settings(BaseSettings):
         return {
             "data_dir": str(self.data_dir),
             "activities_enriched_file": str(self.activities_enriched_file),
+            "activities_raw_file": str(self.activities_raw_file),
+            "activities_moving_file": str(self.activities_moving_file),
             "activity_summary_file": str(self.activity_summary_file),
             "streams_dir": str(self.streams_dir),
             "ftp": self.ftp,
             "weight_kg": self.weight_kg,
             "max_hr": self.max_hr,
+            "target_wkg": self.target_wkg,
+            "target_date": self.target_date,
+            "baseline_ftp": self.baseline_ftp,
+            "baseline_date": self.baseline_date,
             "cache_ttl": self.cache_ttl,
             "page_title": self.page_title,
             "page_icon": self.page_icon,

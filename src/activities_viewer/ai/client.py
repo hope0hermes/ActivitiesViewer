@@ -79,4 +79,3 @@ class GeminiClient:
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             return f"Error: {str(e)}"
-

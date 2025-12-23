@@ -10,6 +10,7 @@ from activities_viewer.ai.context import ActivityContextBuilder
 
 st.set_page_config(page_title="AI Coach", page_icon="🤖", layout="wide")
 
+
 def main():
     st.title("🤖 AI Coach")
 
@@ -48,9 +49,10 @@ def main():
         )
 
     # Initialize AI components
-    if "ai_client" not in st.session_state or st.session_state.get(
-        "selected_model"
-    ) != selected_model:
+    if (
+        "ai_client" not in st.session_state
+        or st.session_state.get("selected_model") != selected_model
+    ):
         try:
             with st.spinner("Initializing AI Coach..."):
                 st.session_state.ai_client = GeminiClient(model=selected_model)
@@ -106,9 +108,8 @@ def main():
                 response = client.get_response(final_prompt)
 
             message_placeholder.markdown(response)
-            st.session_state.messages.append(
-                {"role": "assistant", "content": response}
-            )
+            st.session_state.messages.append({"role": "assistant", "content": response})
+
 
 if __name__ == "__main__":
     main()

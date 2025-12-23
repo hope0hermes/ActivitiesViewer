@@ -100,13 +100,13 @@ def run(config: Path, verbose: bool, port: int) -> None:
         logger.info(f"Open browser at http://localhost:{port}")
 
         # Create a temporary environment file with settings serialized as JSON
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
             json.dump(settings.to_dict_for_display(), f)
             settings_file = f.name
 
         try:
             env = os.environ.copy()
-            env['ACTIVITIES_VIEWER_CONFIG'] = json.dumps(settings.to_json_dict())
+            env["ACTIVITIES_VIEWER_CONFIG"] = json.dumps(settings.to_json_dict())
 
             subprocess.run(
                 [
@@ -125,6 +125,7 @@ def run(config: Path, verbose: bool, port: int) -> None:
         finally:
             # Clean up temporary file
             import os
+
             if os.path.exists(settings_file):
                 os.remove(settings_file)
 
@@ -170,19 +171,38 @@ def validate(config: Path) -> None:
         # Check activities file (support both dual-file and legacy single-file formats)
         try:
             if settings.activities_raw_file.exists():
-                activities_df = pd.read_csv(settings.activities_raw_file, sep=";", low_memory=False)
+                activities_df = pd.read_csv(
+                    settings.activities_raw_file, sep=";", low_memory=False
+                )
                 source_file = settings.activities_raw_file.name
-            elif settings.activities_enriched_file and settings.activities_enriched_file.exists():
-                activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", low_memory=False)
+            elif (
+                settings.activities_enriched_file
+                and settings.activities_enriched_file.exists()
+            ):
+                activities_df = pd.read_csv(
+                    settings.activities_enriched_file, sep=";", low_memory=False
+                )
                 source_file = settings.activities_enriched_file.name
             else:
                 raise FileNotFoundError("No activities file found")
         except UnicodeDecodeError:
             if settings.activities_raw_file.exists():
-                activities_df = pd.read_csv(settings.activities_raw_file, sep=";", encoding="latin-1", low_memory=False)
+                activities_df = pd.read_csv(
+                    settings.activities_raw_file,
+                    sep=";",
+                    encoding="latin-1",
+                    low_memory=False,
+                )
             else:
-                activities_df = pd.read_csv(settings.activities_enriched_file, sep=";", encoding="latin-1", low_memory=False)
-        logger.info(f"\n  Activities loaded: {len(activities_df)} records from {source_file}")
+                activities_df = pd.read_csv(
+                    settings.activities_enriched_file,
+                    sep=";",
+                    encoding="latin-1",
+                    low_memory=False,
+                )
+        logger.info(
+            f"\n  Activities loaded: {len(activities_df)} records from {source_file}"
+        )
         logger.info(f"  Columns: {len(activities_df.columns)}")
 
         # Check summary file

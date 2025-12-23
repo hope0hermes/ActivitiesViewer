@@ -1,8 +1,8 @@
 """
-Activity Detail Page.
-Displays detailed metrics, maps, and charts for a single activity.
+Activity Detail Page - Context-Aware Analysis (Phase 5).
 
-This page uses extracted components for modular organization.
+Displays detailed metrics, maps, and charts for a single activity.
+Enhanced with contextual header and metrics sections that adapt to activity type.
 """
 
 import pandas as pd
@@ -14,6 +14,8 @@ from activities_viewer.data import HELP_TEXTS
 from activities_viewer.pages.components.activity_detail_components import (
     render_activity_selector,
     render_activity_navigation,
+    render_contextual_header,
+    render_contextual_metrics,
     render_overview_tab,
     render_power_hr_tab,
     render_durability_tab,
@@ -40,8 +42,8 @@ __all__ = ["apply_smoothing", "get_metric"]
 
 
 def main():
-    """Main page orchestrator."""
-    st.title("🚴 Activity Detail")
+    """Main page orchestrator with context-aware layout."""
+    # Remove title - now using contextual header
 
     if "activity_service" not in st.session_state:
         st.error(
@@ -66,6 +68,24 @@ def main():
             help="Moving Time: Metrics calculated only during movement\nRaw Time: Metrics calculated for total activity duration",
         )
 
+        st.divider()
+
+        st.subheader("Filters")
+
+        # Get all activities to extract available sport types
+        all_activities = service.get_all_activities(metric_view)
+        if not all_activities.empty:
+            available_sports = sorted(all_activities["sport_type"].unique().tolist())
+            selected_sports = st.multiselect(
+                "Sport Types",
+                available_sports,
+                default=available_sports
+                if "detail_sport_filter" not in st.session_state
+                else st.session_state.detail_sport_filter,
+                help="Filter by sport type",
+            )
+            st.session_state.detail_sport_filter = selected_sports
+
     # Render activity selector with metric_view
     activity, activity_id = render_activity_selector(service, metric_view)
     if activity is None:
@@ -80,9 +100,30 @@ def main():
 
     st.divider()
 
+    # ═══════════════════════════════════════════════════════════════════════════
+    # PHASE 5: CONTEXTUAL HEADER & METRICS
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    # Contextual header shows top 4 metrics based on activity type
+    render_contextual_header(activity, metric_view, HELP_TEXTS)
+
+    # Contextual metrics section adapts to workout type and intensity
+    render_contextual_metrics(activity, service, metric_view, HELP_TEXTS)
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # DEEP DIVE TABS (Preserved from v1)
+    # ═══════════════════════════════════════════════════════════════════════════
+
     # Render tabs with components
     tab_overview, tab_power_hr, tab_durability, tab_training = st.tabs(
-        ["🗺️ Overview", "⚡ Power & Heart Rate", "🔋 Durability & Fatigue", "📊 Training Load & Power Profile"]
+        [
+            "🗺️ Overview & All Metrics",
+            "⚡ Power & Heart Rate",
+            "🔋 Durability & Fatigue",
+            "📊 Training Load & Power Profile",
+        ]
     )
 
     with tab_overview:

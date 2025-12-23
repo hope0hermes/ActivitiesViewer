@@ -39,6 +39,7 @@ max_hr: 185
 # target_wkg: 4.0  # Your target W/kg goal
 # target_date: "2025-08-01"  # Target date (YYYY-MM-DD format)
 # baseline_ftp: 285  # Your FTP when you set this goal (for progress tracking)
+# baseline_date: "2024-12-01"  # Date when you started tracking this goal (YYYY-MM-DD format)
 
 # --- Application Settings ---
 # Enable verbose logging

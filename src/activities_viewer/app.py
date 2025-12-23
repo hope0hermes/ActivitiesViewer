@@ -20,16 +20,31 @@ try:
     from activities_viewer.config import Settings, load_settings
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
-    from activities_viewer.components.goal_tracker import render_goal_progress
+    from activities_viewer.services.goal_service import GoalService
+    from activities_viewer.services.analysis_service import AnalysisService
+    from activities_viewer.domain.models import Goal
+    from activities_viewer.components.dashboard_components import (
+        render_goal_progress_card,
+        render_status_card,
+        render_recent_activity_sparklines,
+    )
 except ImportError:
     # Fallback for when running directly from source without package installation
     import sys
+
     sys.path.append(str(Path(__file__).resolve().parent.parent))
     from activities_viewer import __version__
     from activities_viewer.config import Settings, load_settings
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
-    from activities_viewer.components.goal_tracker import render_goal_progress
+    from activities_viewer.services.goal_service import GoalService
+    from activities_viewer.services.analysis_service import AnalysisService
+    from activities_viewer.domain.models import Goal
+    from activities_viewer.components.dashboard_components import (
+        render_goal_progress_card,
+        render_status_card,
+        render_recent_activity_sparklines,
+    )
 
 logger = logging.getLogger(__name__)
 
@@ -49,13 +64,29 @@ def init_services(settings: Settings) -> ActivityService:
     """Initialize application services."""
     if settings.data_source_type == "csv":
         # Use dual-file format (new) if available, fallback to enriched file (legacy)
-        raw_file = settings.activities_raw_file if hasattr(settings, 'activities_raw_file') else settings.activities_enriched_file
-        moving_file = settings.activities_moving_file if hasattr(settings, 'activities_moving_file') else None
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
         repo = CSVActivityRepository(raw_file, moving_file)
     else:
         # Fallback or future SQL implementation
-        raw_file = settings.activities_raw_file if hasattr(settings, 'activities_raw_file') else settings.activities_enriched_file
-        moving_file = settings.activities_moving_file if hasattr(settings, 'activities_moving_file') else None
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
         repo = CSVActivityRepository(raw_file, moving_file)
 
     return ActivityService(repo)
@@ -68,7 +99,7 @@ def main():
         settings = None
 
         # Try to load from environment variable first (set by CLI)
-        config_json = os.environ.get('ACTIVITIES_VIEWER_CONFIG')
+        config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
         if config_json:
             try:
                 config_data = json.loads(config_json)
@@ -119,87 +150,91 @@ def main():
 
     service = st.session_state.activity_service
 
-    # Get recent data for quick status
+    # Get all activities for dashboard
     df_all = service.get_all_activities()
-    if not df_all.empty:
-        # Current fitness status
-        st.header("📊 Current Status")
 
-        # Get most recent CTL/ATL/TSB values
-        df_sorted = df_all.sort_values("start_date_local")
-        latest = df_sorted.iloc[-1]
+    if df_all.empty:
+        st.warning("⚠️ No activity data found. Please check your configuration.")
+        st.stop()
 
-        col1, col2, col3, col4 = st.columns(4)
+    # ═══════════════════════════════════════════════════════════════════════════
+    # GOAL PROGRESS CARD (if goal is configured)
+    # ═══════════════════════════════════════════════════════════════════════════
 
-        with col1:
-            ctl = latest.get("chronic_training_load", 0)
-            if ctl and not pd.isna(ctl):
-                st.metric("Fitness (CTL)", f"{ctl:.0f}")
-            else:
-                st.metric("Fitness (CTL)", "N/A")
+    if settings.target_wkg and settings.target_date:
+        try:
+            from datetime import datetime
 
-        with col2:
-            atl = latest.get("acute_training_load", 0)
-            if atl and not pd.isna(atl):
-                st.metric("Fatigue (ATL)", f"{atl:.0f}")
-            else:
-                st.metric("Fatigue (ATL)", "N/A")
+            # Create Goal object from settings
+            baseline_ftp = (
+                settings.baseline_ftp
+                if hasattr(settings, "baseline_ftp") and settings.baseline_ftp
+                else settings.ftp
+            )
+            baseline_date = (
+                datetime.strptime(settings.baseline_date, "%Y-%m-%d")
+                if hasattr(settings, "baseline_date") and settings.baseline_date
+                else datetime.now()
+            )
+            target_date = datetime.strptime(settings.target_date, "%Y-%m-%d")
 
-        with col3:
-            tsb = latest.get("training_stress_balance", 0)
-            if tsb and not pd.isna(tsb):
-                status = "Fresh 🔋" if tsb > 10 else "Tired 😴" if tsb < -20 else "Ready 💪"
-                st.metric("Form (TSB)", f"{tsb:.0f}", status)
-            else:
-                st.metric("Form (TSB)", "N/A")
+            goal = Goal(
+                target_wkg=settings.target_wkg,
+                target_date=target_date,
+                start_wkg=baseline_ftp / settings.weight_kg,
+                start_date=baseline_date,
+            )
 
-        with col4:
-            # This week's TSS
-            from datetime import datetime, timedelta
-            week_start = datetime.now() - timedelta(days=datetime.now().weekday())
+            # Instantiate GoalService
+            goal_service = GoalService()
 
-            # Ensure date column is datetime
-            df_all_copy = df_all.copy()
-            df_all_copy["start_date_local"] = pd.to_datetime(df_all_copy["start_date_local"])
+            # Render goal progress card
+            render_goal_progress_card(
+                goal=goal,
+                current_ftp=settings.ftp,
+                weight_kg=settings.weight_kg,
+                goal_service=goal_service,
+            )
 
-            # Remove timezone if present
-            if df_all_copy["start_date_local"].dt.tz is not None:
-                df_all_copy["start_date_local"] = df_all_copy["start_date_local"].dt.tz_localize(None)
+            st.divider()
 
-            # Filter for this week
-            df_week = df_all_copy[df_all_copy["start_date_local"] >= week_start]
-            week_tss = df_week["training_stress_score"].sum() if not df_week.empty else 0
-            st.metric("This Week TSS", f"{week_tss:.0f}")
+        except Exception as e:
+            st.error(f"Error rendering goal progress: {e}")
 
-        st.divider()
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CURRENT STATUS CARD (PMC)
+    # ═══════════════════════════════════════════════════════════════════════════
 
-        # Recent activities
-        st.header("🕐 Recent Activities")
-        recent = df_sorted.tail(5).iloc[::-1]  # Last 5, reversed to show newest first
+    try:
+        analysis_service = AnalysisService()
+        pmc_data = analysis_service.get_pmc_data(df_all)
 
-        for _, row in recent.iterrows():
-            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
-            with col1:
-                st.write(f"**{row['name']}**")
-            with col2:
-                distance_km = row.get('distance', 0) / 1000 if row.get('distance') else 0
-                st.write(f"{distance_km:.1f} km")
-            with col3:
-                tss = row.get('training_stress_score', 0)
-                st.write(f"{tss:.0f} TSS" if tss else "-")
-            with col4:
-                date = pd.to_datetime(row['start_date_local'])
-                st.write(date.strftime("%b %d"))
+        render_status_card(pmc_data)
 
         st.divider()
 
-        # Goal Progress (if configured)
-        render_goal_progress(settings)
+    except Exception as e:
+        st.error(f"Error rendering status card: {e}")
 
-    # Keep existing welcome message but shorter
+    # ═══════════════════════════════════════════════════════════════════════════
+    # RECENT ACTIVITY SPARKLINES
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    try:
+        render_recent_activity_sparklines(df_all, days=7)
+
+        st.divider()
+
+    except Exception as e:
+        st.error(f"Error rendering activity sparklines: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # NAVIGATION INFO
+    # ═══════════════════════════════════════════════════════════════════════════
+
     st.markdown("""
     ### 🚀 Navigation
-    Use the sidebar to explore your training data in detail.
+    Use the sidebar to explore your training data in detail:
 
     - 📊 **Year Overview**: Annual summary and trends
     - 📅 **Monthly Analysis**: Deep-dive into monthly patterns

@@ -22,10 +22,7 @@ def safe_max(series: pd.Series) -> float:
 
 
 def get_metric_from_df(
-    df: pd.DataFrame,
-    column: str,
-    agg: str = "sum",
-    default: float = 0
+    df: pd.DataFrame, column: str, agg: str = "sum", default: float = 0
 ) -> float:
     """Safely get aggregated metric from DataFrame.
 
@@ -75,9 +72,7 @@ def get_metric_from_object(obj: Any, field: str, default: Any = None) -> Any:
 
 
 def calculate_tid(
-    df: pd.DataFrame,
-    metric_view: str = "Moving",
-    time_col: str = "moving_time"
+    df: pd.DataFrame, metric_view: str = "Moving", time_col: str = "moving_time"
 ) -> dict[str, float]:
     """Calculate time-weighted Training Intensity Distribution.
 

@@ -32,7 +32,9 @@ def render_goal_progress(settings: Settings, current_ftp: float | None = None) -
     # Calculate progress
     total_gain_needed = target_wkg - baseline_wkg
     current_gain = current_wkg - baseline_wkg
-    progress_pct = (current_gain / total_gain_needed * 100) if total_gain_needed > 0 else 0
+    progress_pct = (
+        (current_gain / total_gain_needed * 100) if total_gain_needed > 0 else 0
+    )
 
     # Time remaining
     weeks_remaining = None

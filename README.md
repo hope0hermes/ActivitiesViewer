@@ -1,41 +1,65 @@
 # ActivitiesViewer 🚴‍♂️📊
 
-A powerful Streamlit dashboard for visualizing and analyzing cycling activities data from Strava. Built for athletes who want deep insights into their training performance, trends, and metrics.
+**Version 2.0** - A goal-driven training companion with powerful analytics for Strava cyclists.
+
+A comprehensive Streamlit dashboard for visualizing and analyzing cycling activities data from Strava. Built for athletes who want deep insights into their training performance, trends, and metrics with a focus on achieving power-to-weight ratio goals.
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.28+-red.svg)](https://streamlit.io)
 [![UV](https://img.shields.io/badge/uv-package%20manager-green.svg)](https://github.com/astral-sh/uv)
 
-## 🌟 Features
+## 🌟 Features (v2.0)
 
-### 📊 Year Overview
-- Comprehensive annual statistics and performance metrics
-- Monthly trends for distance, elevation, and time
-- Training load visualization (CTL/ATL/TSB)
-- Power and heart rate zone distribution
-- Top performances and personal records
+### 🎯 Goal-Driven Dashboard
+- Visual progress tracking toward your power-to-weight goal (e.g., 4.0 W/kg)
+- Performance Management Chart (PMC) with CTL/ATL/TSB indicators
+- Recent activity sparklines for quick trend overview
+- Smart status indicators (Ahead, On Track, Behind, Critical)
 
-### 📅 Weekly Analysis
-- Recent performance tracking (last 12 weeks)
-- Week-over-week comparisons
-- Training load evolution
-- Recovery recommendations based on TSB and ACWR
-- Daily activity breakdown
+### 📊 Unified Analysis Page
+The new **fluid explorer** replaces separate Year/Month/Week pages with one powerful interface:
 
-### 🚴 Activity Details
-- Deep-dive analysis of individual activities
+#### Overview Mode
+- Volume trends (daily/weekly/monthly aggregation based on range)
+- Training Intensity Distribution (TID) with polarization analysis
+- Training type distribution with workout classification
+- Periodization check and phase identification
+- Cumulative charts (distance, elevation, TSS)
+
+#### Physiology Mode
+- Efficiency Factor trends (Z2 rides only)
+- Power-HR decoupling analysis
+- Daily intensity patterns (for periods ≤30 days)
+- Weekly TID evolution (for periods >4 weeks)
+- Physiological readiness indicators
+
+#### Power Profile Mode
+- Power curve (Mean Maximum Power) with yearly best comparison
+- Best performances across all durations (5s to 1hr)
+- Key power benchmarks (Sprint, VO2max, FTP, Endurance)
+- Clickable drill-down to activity details
+
+#### Recovery Mode
+- Monotony Index and Strain Index tracking
+- Rest day analysis and recommendations
+- Performance Management Chart (PMC) time series
+- CTL (Fitness), ATL (Fatigue), TSB (Form) tracking
+- Personalized recovery recommendations
+
+### 🚴 Context-Aware Activity Detail
+- Smart header showing top 4 metrics based on activity type
+- Contextual analysis sections (intervals, endurance, race, recovery)
 - Interactive route maps with GPS overlay
 - Power and heart rate profiles over time
-- Efficiency metrics and pacing analysis
+- Comprehensive metric grid with 100+ data points
 - Zone distribution and comparative analysis
 
-### 🔍 Segment Analysis *(Phase 2)*
-- Auto-detected recurring segments (climbs, flats, descents)
-- Performance trends over time
-- Effort-by-effort comparison
-- Personal records tracking
-- Vector similarity search for segment matching
+### 🤖 AI Coach
+- Natural language querying of your training data
+- Gemini-powered insights and recommendations
+- Training pattern analysis
+- Performance trend identification
 
 ## 🚀 Quick Start
 
@@ -47,42 +71,77 @@ A powerful Streamlit dashboard for visualizing and analyzing cycling activities 
 
 ### Installation
 
-```bash
-# Clone the repository
-git clone https://github.com/hope0hermes/ActivitiesViewer.git
-cd ActivitiesViewer
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/hope0hermes/ActivitiesViewer.git
+   cd ActivitiesViewer
+   ```
 
-# Install UV if not already installed
-curl -LsSf https://astral.sh/uv/install.sh | sh
+2. **Install UV** (if not already installed)
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh
+   ```
 
-# Create virtual environment and install dependencies
-uv sync
+3. **Install dependencies**
+   ```bash
+   uv sync
+   ```
 
-# Run the dashboard
-uv run streamlit run src/activities_viewer/app.py
-```
+4. **Configure your settings**
+   ```bash
+   cp examples/config.yaml config.yaml
+   # Edit config.v2.0 uses the dual-file format from StravaAnalyzer:
 
-The dashboard will open in your browser at `http://localhost:8501`.
-
-### Data Setup
-
-ActivitiesViewer requires enriched activity data from StravaAnalyzer:
-
-1. Run StravaAnalyzer to generate enriched data:
+1. **Generate enriched data** using StravaAnalyzer:
    ```bash
    strava-analyzer process --config config.yaml
    ```
 
-2. Configure ActivitiesViewer data paths in `.env`:
-   ```env
-   DATA_DIR=/home/hope0hermes/Workspace/ActivitiesViewer/dev/data
-   ACTIVITIES_PATH=/home/hope0hermes/Workspace/ActivitiesViewer/dev/data_processed/activities_enriched.csv
-   SUMMARY_PATH=/home/hope0hermes/Workspace/ActivitiesViewer/dev/data_processed/activity_summary.json
-   STREAMS_DIR=/home/hope0hermes/Workspace/ActivitiesViewer/dev/data/Streams
-   ```
+   This creates:
+   - `activities_raw.csv` - Metrics calculated over total elapsed time
+   - `activities_moving.csv` - Metrics calculated over moving time only
 
-3. Launch the dashboard:
-   ```bash
+2. **Configure data paths** in `config.yaml`:
+   ```yaml
+   # Athlete Settings
+   ftp: 250              # Your current FTP in watts
+   weight_kg: 70.0       # Your weight in kg
+   max_hr: 185           # Your maximum heart rate
+
+   # Goal Settings (optional)
+   target_wkg: 4.0       # Target power-to-weight ratio
+   target_date: "2026-06-01"  # Goal date
+
+   # Data Paths
+   data_dir: /path/to/your/data
+   activities_raw_file: activities_raw.csv
+   activities_moving_file: activities_moving.csv
+   streams_dir: Streams  # Optional:   # Main dashboard (goal-driven)
+│       ├── cli.py                     # Command-line interface
+│       ├── config.py                  # Configuration management
+│       ├── domain/                    # Domain models
+│       │   ├── models.py              # Activity, Goal models
+│       │   └── metrics.py             # MetricRegistry & definitions
+│       ├── services/                  # Business logic
+│       │   ├── activity_service.py    # Activity data access
+│       │   ├── analysis_service.py    # Metric aggregation
+│       │   └── goal_service.py        # Goal tracking logic
+│       ├── repository/                # Data access layer
+│       │   ├── base.py                # Repository interface
+│       │   └── csv_repo.py            # CSV implementation
+│       ├── pages/                     # Multi-page app
+│       │   ├── 1_analysis.py          # Unified analysis (4 view modes)
+│       │   ├── 3_detail.py            # Context-aware activity detail
+│       │   ├── 5_ai_coach.py          # AI-powered insights
+│       │   └── components/            # Reusable UI components
+│       │       ├── dashboard_components.py
+│       │       └── activity_detail_components.py
+│       ├── data/                      # Static data (help texts)
+│       └── utils/                     # Utility functions
+├── tests/                             # Test suite
+├── docs/                              # Documentation
+├── examples/                          # Example configurations
+└── pyproject.toml                     # Project metadata &
    uv run streamlit run src/activities_viewer/app.py
    ```
 

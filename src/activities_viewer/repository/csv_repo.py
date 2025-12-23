@@ -21,24 +21,31 @@ def _load_activities_df(file_path: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"Activities file not found: {file_path}")
 
     # Read CSV with semicolon separator
-    df = pd.read_csv(file_path, sep=';')
+    df = pd.read_csv(file_path, sep=";")
 
     # Convert date columns
-    df['start_date'] = pd.to_datetime(df['start_date'])
-    df['start_date_local'] = pd.to_datetime(df['start_date_local'])
+    df["start_date"] = pd.to_datetime(df["start_date"])
+    df["start_date_local"] = pd.to_datetime(df["start_date_local"])
 
     # Ensure numeric columns are correct types (handling potential NaNs)
     numeric_cols = [
-        'distance', 'moving_time', 'elapsed_time', 'total_elevation_gain',
-        'average_watts', 'normalized_power', 'training_stress_score',
-        'chronic_training_load', 'acute_training_load', 'training_stress_balance'
+        "distance",
+        "moving_time",
+        "elapsed_time",
+        "total_elevation_gain",
+        "average_watts",
+        "normalized_power",
+        "training_stress_score",
+        "chronic_training_load",
+        "acute_training_load",
+        "training_stress_balance",
     ]
     for col in numeric_cols:
         if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors='coerce')
+            df[col] = pd.to_numeric(df[col], errors="coerce")
 
     # Sort by date descending (most recent first)
-    df = df.sort_values('start_date_local', ascending=False).reset_index(drop=True)
+    df = df.sort_values("start_date_local", ascending=False).reset_index(drop=True)
 
     return df
 
@@ -72,7 +79,7 @@ class CSVActivityRepository(ActivityRepository):
     def get_activity(self, activity_id: int) -> Optional[Activity]:
         """Get activity from raw dataset (default)."""
         self._ensure_data_loaded()
-        row = self._df_raw[self._df_raw['id'] == activity_id]
+        row = self._df_raw[self._df_raw["id"] == activity_id]
         if row.empty:
             return None
 
@@ -81,7 +88,7 @@ class CSVActivityRepository(ActivityRepository):
     def get_activity_raw(self, activity_id: int) -> Optional[Activity]:
         """Get activity from raw dataset (all data points)."""
         self._ensure_data_loaded()
-        row = self._df_raw[self._df_raw['id'] == activity_id]
+        row = self._df_raw[self._df_raw["id"] == activity_id]
         if row.empty:
             return None
 
@@ -90,7 +97,7 @@ class CSVActivityRepository(ActivityRepository):
     def get_activity_moving(self, activity_id: int) -> Optional[Activity]:
         """Get activity from moving dataset (motion only)."""
         self._ensure_data_loaded()
-        row = self._df_moving[self._df_moving['id'] == activity_id]
+        row = self._df_moving[self._df_moving["id"] == activity_id]
         if row.empty:
             return None
 
@@ -115,26 +122,20 @@ class CSVActivityRepository(ActivityRepository):
         return self._get_activities_from_df(self._df_moving)
 
     def get_activities(
-        self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[Activity]:
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw, start_date, end_date)
 
     def get_activities_raw(
-        self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[Activity]:
         """Get activities from raw (all data points) dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw, start_date, end_date)
 
     def get_activities_moving(
-        self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[Activity]:
         """Get activities from moving (motion only) dataset."""
         self._ensure_data_loaded()
@@ -154,25 +155,29 @@ class CSVActivityRepository(ActivityRepository):
         self,
         df: pd.DataFrame,
         start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        end_date: Optional[date] = None,
     ) -> List[Activity]:
         """Helper to get activities from a specific dataframe."""
         df_filtered = df
 
         if start_date:
-            df_filtered = df_filtered[df_filtered['start_date_local'].dt.date >= start_date]
+            df_filtered = df_filtered[
+                df_filtered["start_date_local"].dt.date >= start_date
+            ]
 
         if end_date:
-            df_filtered = df_filtered[df_filtered['start_date_local'].dt.date <= end_date]
+            df_filtered = df_filtered[
+                df_filtered["start_date_local"].dt.date <= end_date
+            ]
 
         # Convert to list of Activity objects
         # iterrows is slow, but for <2000 activities it's acceptable for MVP.
         # For better performance, we can use to_dict('records')
-        return [Activity(**record) for record in df_filtered.to_dict('records')]
+        return [Activity(**record) for record in df_filtered.to_dict("records")]
 
     def get_year_summary(self, year: int) -> YearSummary:
         self._ensure_data_loaded()
-        df_year = self._df_raw[self._df_raw['start_date_local'].dt.year == year]
+        df_year = self._df_raw[self._df_raw["start_date_local"].dt.year == year]
 
         if df_year.empty:
             return YearSummary(
@@ -180,17 +185,21 @@ class CSVActivityRepository(ActivityRepository):
                 total_distance=0,
                 total_time=0,
                 total_elevation=0,
-                activity_count=0
+                activity_count=0,
             )
 
         return YearSummary(
             year=year,
-            total_distance=df_year['distance'].sum(),
-            total_time=df_year['moving_time'].sum(),
-            total_elevation=df_year['total_elevation_gain'].sum(),
+            total_distance=df_year["distance"].sum(),
+            total_time=df_year["moving_time"].sum(),
+            total_elevation=df_year["total_elevation_gain"].sum(),
             activity_count=len(df_year),
-            avg_power=df_year['normalized_power'].mean() if 'normalized_power' in df_year.columns else None,
-            total_tss=df_year['training_stress_score'].sum() if 'training_stress_score' in df_year.columns else None
+            avg_power=df_year["normalized_power"].mean()
+            if "normalized_power" in df_year.columns
+            else None,
+            total_tss=df_year["training_stress_score"].sum()
+            if "training_stress_score" in df_year.columns
+            else None,
         )
 
     def get_activity_stream(self, activity_id: int) -> pd.DataFrame:
@@ -207,6 +216,6 @@ class CSVActivityRepository(ActivityRepository):
             return pd.DataFrame()
 
         try:
-            return pd.read_csv(stream_file, sep=';')
+            return pd.read_csv(stream_file, sep=";")
         except Exception:
             return pd.DataFrame()

@@ -6,6 +6,7 @@ from typing import Protocol, List, Optional
 from datetime import date
 from activities_viewer.domain.models import Activity, YearSummary
 
+
 class ActivityRepository(Protocol):
     """
     Interface for accessing activity data.
@@ -17,9 +18,7 @@ class ActivityRepository(Protocol):
         ...
 
     def get_activities(
-        self,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None
+        self, start_date: Optional[date] = None, end_date: Optional[date] = None
     ) -> List[Activity]:
         """
         Retrieve a list of activities, optionally filtered by date range.
