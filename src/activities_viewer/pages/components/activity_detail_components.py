@@ -645,18 +645,12 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
         getattr(activity, "workout_type", None)
     )
 
-    # Row 1: Basic metrics
-    col1, col2, col3, col4, col5 = st.columns(5)
-
-    # Distance
+    # Pre-calculate key metrics
     distance_km = get_metric(activity, "distance")
     if distance_km:
         distance_km = distance_km / 1000
-    render_metric(col1, "🛣️ Distance", f"{distance_km:.1f} km" if distance_km else "-")
 
-    # Duration - use moving_time or elapsed_time based on selection
     time_field = "moving_time" if metric_view == "Moving Time" else "elapsed_time"
-    time_label = "⏱️ Moving Time" if metric_view == "Moving Time" else "⏱️ Total Time"
     duration = get_metric(activity, time_field)
     if duration:
         hours = int(duration // 3600)
@@ -664,59 +658,77 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
         duration_str = f"{hours}h {minutes}m" if hours > 0 else f"{minutes}m"
     else:
         duration_str = "-"
-    render_metric(col2, time_label, duration_str)
 
-    # Elevation
+    np_val = get_metric(activity, "normalized_power")
+    tss = get_metric(activity, "training_stress_score")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIER 1: HERO METRICS (3 columns, large, most important for single activity)
+    # ═══════════════════════════════════════════════════════════════════════════
+    st.markdown(f"##### {workout_emoji} {workout_type}")
+
+    hero1, hero2, hero3 = st.columns(3)
+
+    with hero1:
+        st.metric(
+            "🛣️ Distance",
+            f"{distance_km:.1f} km" if distance_km else "-",
+            help="Total distance covered in this activity."
+        )
+
+    with hero2:
+        st.metric(
+            "📈 Training Load",
+            f"{tss:.0f} TSS" if tss else "-",
+            help="Training Stress Score - quantifies the physiological cost of this workout."
+        )
+
+    with hero3:
+        st.metric(
+            "📊 Norm Power",
+            f"{np_val:.0f} W" if np_val else "-",
+            help="Normalized Power - represents the equivalent steady-state power for this effort."
+        )
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIER 2: CONTEXT METRICS (secondary details in smaller columns)
+    # ═══════════════════════════════════════════════════════════════════════════
+    st.caption("📊 Activity Details")
+
+    # Row 1: Time, Elevation, Speed, Power, HR
+    col1, col2, col3, col4, col5 = st.columns(5)
+
+    time_label = "⏱️ Moving Time" if metric_view == "Moving Time" else "⏱️ Total Time"
+    render_metric(col1, time_label, duration_str, get_help_text("moving_time", help_texts))
+
     elevation = get_metric(activity, "total_elevation_gain")
-    render_metric(col3, "⛰️ Elevation", f"{elevation:.0f} m" if elevation else "-")
+    render_metric(col2, "⛰️ Elevation", f"{elevation:.0f} m" if elevation else "-")
 
-    # Average Speed - try average_speed, then compute from distance/time
+    # Average Speed
     avg_speed = get_metric(activity, "average_speed")
     if avg_speed is None or pd.isna(avg_speed):
-        # Try computing from distance and time
-        pass
-    if avg_speed is None or pd.isna(avg_speed):
-        # Compute from distance and time if available (use moving_time or elapsed_time based on selection)
         distance = get_metric(activity, "distance")
-        time_value = get_metric(activity, time_field)  # Use the same time_field from above
+        time_value = get_metric(activity, time_field)
         if distance and time_value and time_value > 0:
-            avg_speed = distance / time_value  # In m/s
+            avg_speed = distance / time_value
         else:
             avg_speed = None
 
-    if avg_speed and avg_speed > 0:
-        avg_speed_kmh = avg_speed * 3.6
-    else:
-        avg_speed_kmh = None
-    render_metric(col4, "🚀 Avg Speed", f"{avg_speed_kmh:.1f} km/h" if avg_speed_kmh else "-")
-
-    # Workout Type
-    render_metric(col5, f"{workout_emoji} Type", workout_type)
-
-    # Row 2: Power & HR metrics (if available)
-    col1, col2, col3, col4, col5 = st.columns(5)
+    avg_speed_kmh = avg_speed * 3.6 if avg_speed and avg_speed > 0 else None
+    render_metric(col3, "🚀 Speed", f"{avg_speed_kmh:.1f} km/h" if avg_speed_kmh else "-")
 
     # Average Power
     avg_power = get_metric(activity, "average_power")
-    render_metric(col1, "⚡ Avg Power", f"{avg_power:.0f} W" if avg_power else "-", get_help_text("avg_power", help_texts))
-
-    # Normalized Power
-    np_val = get_metric(activity, "normalized_power")
-    render_metric(col2, "📊 Norm Power", f"{np_val:.0f} W" if np_val else "-", get_help_text("normalized_power", help_texts))
-
-    # TSS
-    tss = get_metric(activity, "training_stress_score")
-    render_metric(col3, "📈 TSS", f"{tss:.0f}" if tss else "-", get_help_text("tss", help_texts))
+    render_metric(col4, "⚡ Avg Power", f"{avg_power:.0f} W" if avg_power else "-", get_help_text("avg_power", help_texts))
 
     # Average HR
     avg_hr = get_metric(activity, "average_hr")
-    render_metric(col4, "❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-", get_help_text("average_hr", help_texts))
+    render_metric(col5, "❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-", get_help_text("average_hr", help_texts))
 
-    # Max HR
-    max_hr = get_metric(activity, "max_hr")
-    render_metric(col5, "💓 Max HR", f"{max_hr:.0f} bpm" if max_hr else "-", get_help_text("max_hr", help_texts))
-
-    # Row 3: Additional metrics
+    # Row 2: Intensity, efficiency, and other metrics
+    st.caption("⚡ Intensity & Efficiency")
     col1, col2, col3, col4, col5 = st.columns(5)
 
     # Intensity Factor
@@ -727,27 +739,17 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
     ef = get_metric(activity, "efficiency_factor")
     render_metric(col2, "⚙️ EF", f"{ef:.2f}" if ef else "-", get_help_text("efficiency_factor", help_texts))
 
+    # Max HR
+    max_hr = get_metric(activity, "max_hr")
+    render_metric(col3, "💓 Max HR", f"{max_hr:.0f} bpm" if max_hr else "-", get_help_text("max_hr", help_texts))
+
     # Average Cadence
     avg_cadence = get_metric(activity, "average_cadence")
-    if avg_cadence is None or pd.isna(avg_cadence):
-        # Fall back if not available
-        avg_cadence = get_metric(activity, "average_cadence")
-    render_metric(col3, "🔄 Cadence", f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-", get_help_text("average_cadence", help_texts))
+    render_metric(col4, "🔄 Cadence", f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-", get_help_text("average_cadence", help_texts))
 
-    # Calories
+    # Energy
     calories = get_metric(activity, "kilojoules")
-    render_metric(col4, "🔥 Energy", f"{calories:.0f} kJ" if calories else "-", get_help_text("kilojoules", help_texts))
-
-    # Start time
-    start_time = getattr(activity, "start_date_local", None)
-    if start_time:
-        if hasattr(start_time, "strftime"):
-            time_str = start_time.strftime("%H:%M")
-        else:
-            time_str = str(start_time)[:16]
-    else:
-        time_str = "-"
-    render_metric(col5, "🕐 Start", time_str)
+    render_metric(col5, "🔥 Energy", f"{calories:.0f} kJ" if calories else "-", get_help_text("kilojoules", help_texts))
 
     st.divider()
 
@@ -783,25 +785,24 @@ def render_overview_tab(activity: Activity, service: ActivityService, metric_vie
         else:
             map_data = pd.DataFrame()
 
-        st.subheader("Route Map")
-        if not map_data.empty:
-            start_loc = map_data["latlng"].iloc[0]
-            m = folium.Map(location=start_loc, zoom_start=12)
-            points = map_data["latlng"].tolist()
-            folium.PolyLine(points, color="#e74c3c", weight=4, opacity=0.8).add_to(m)
-            m.fit_bounds(m.get_bounds())
-            st_folium(m, width=None, height=400)
-        else:
-            st.info("No GPS data available.")
+        with st.expander("🗺️ Route Map", expanded=False):
+            if not map_data.empty:
+                start_loc = map_data["latlng"].iloc[0]
+                m = folium.Map(location=start_loc, zoom_start=12)
+                points = map_data["latlng"].tolist()
+                folium.PolyLine(points, color="#e74c3c", weight=4, opacity=0.8).add_to(m)
+                m.fit_bounds(m.get_bounds())
+                st_folium(m, width=None, height=400)
+            else:
+                st.info("No GPS data available.")
 
         # Create synchronized plots with shared x-axis
-        st.subheader("Activity Metrics")
-
-        # Smoothing control
-        smoothing = st.pills(
-            label="Apply rolling average smoothing to time-series plots",
-            options=ROLLING_WINDOW_SECONDS,
-        )
+        with st.expander("📈 Activity Metrics Time Series", expanded=False):
+            # Smoothing control
+            smoothing = st.pills(
+                label="Apply rolling average smoothing to time-series plots",
+                options=ROLLING_WINDOW_SECONDS,
+            )
 
         # Prepare all data - initialize with distance or time
         if "distance" in stream.columns:
@@ -1654,36 +1655,37 @@ def render_durability_tab(
     st.divider()
 
     # Interval Distribution Section
-    st.subheader("📊 Interval Analysis")
+    with st.expander("📊 Interval Analysis", expanded=False):
+        st.subheader("📊 Interval Analysis")
 
-    col1, col2 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("##### Power Intervals")
-        power_trend = get_metric(activity, "interval_300s_power_trend")
-        decay_rate = get_metric(activity, "interval_300s_decay_rate")
+        with col1:
+            st.markdown("##### Power Intervals")
+            power_trend = get_metric(activity, "interval_300s_power_trend")
+            decay_rate = get_metric(activity, "interval_300s_decay_rate")
 
-        col_a, col_b = st.columns(2)
-        render_metric(col_a, "Avg Change", f"{power_trend:.2f} W/int" if power_trend else "-", get_help_text("interval_300s_power_trend", help_texts))
-        render_metric(col_b, "Decay Rate", f"{decay_rate:.1f}%" if decay_rate else "-", get_help_text("interval_300s_decay_rate", help_texts))
+            col_a, col_b = st.columns(2)
+            render_metric(col_a, "Avg Change", f"{power_trend:.2f} W/int" if power_trend else "-", get_help_text("interval_300s_power_trend", help_texts))
+            render_metric(col_b, "Decay Rate", f"{decay_rate:.1f}%" if decay_rate else "-", get_help_text("interval_300s_decay_rate", help_texts))
 
-    with col2:
-        st.markdown("##### HR Intervals")
+        with col2:
+            st.markdown("##### HR Intervals")
 
-        # HR TID metrics
-        hr_tid_z1 = get_metric(activity, "hr_tid_z1_percentage")
-        hr_tid_z2 = get_metric(activity, "hr_tid_z2_percentage")
-        hr_tid_z3 = get_metric(activity, "hr_tid_z3_percentage")
-        hr_polarization = get_metric(activity, "hr_polarization_index")
+            # HR TID metrics
+            hr_tid_z1 = get_metric(activity, "hr_tid_z1_percentage")
+            hr_tid_z2 = get_metric(activity, "hr_tid_z2_percentage")
+            hr_tid_z3 = get_metric(activity, "hr_tid_z3_percentage")
+            hr_polarization = get_metric(activity, "hr_polarization_index")
 
-        col_a, col_b = st.columns(2)
-        render_metric(col_a, "Polarization Index", f"{hr_polarization:.2f}" if hr_polarization else "-", get_help_text("hr_polarization_index", help_texts))
+            col_a, col_b = st.columns(2)
+            render_metric(col_a, "Polarization Index", f"{hr_polarization:.2f}" if hr_polarization else "-", get_help_text("hr_polarization_index", help_texts))
 
-        st.markdown("**HR Zone Distribution (TID):**")
-        col_x, col_y, col_z = st.columns(3)
-        render_metric(col_x, "Z1 %", f"{hr_tid_z1:.1f}%" if hr_tid_z1 else "-", get_help_text("hr_tid_z1_percentage", help_texts))
-        render_metric(col_y, "Z2 %", f"{hr_tid_z2:.1f}%" if hr_tid_z2 else "-", get_help_text("hr_tid_z2_percentage", help_texts))
-        render_metric(col_z, "Z3 %", f"{hr_tid_z3:.1f}%" if hr_tid_z3 else "-", get_help_text("hr_tid_z3_percentage", help_texts))
+            st.markdown("**HR Zone Distribution (TID):**")
+            col_x, col_y, col_z = st.columns(3)
+            render_metric(col_x, "Z1 %", f"{hr_tid_z1:.1f}%" if hr_tid_z1 else "-", get_help_text("hr_tid_z1_percentage", help_texts))
+            render_metric(col_y, "Z2 %", f"{hr_tid_z2:.1f}%" if hr_tid_z2 else "-", get_help_text("hr_tid_z2_percentage", help_texts))
+            render_metric(col_z, "Z3 %", f"{hr_tid_z3:.1f}%" if hr_tid_z3 else "-", get_help_text("hr_tid_z3_percentage", help_texts))
 
 
 def render_training_load_tab(
@@ -1814,14 +1816,15 @@ def render_training_load_tab(
         get_help_text("aei", help_texts)
     )
 
-    # Model details
-    st.markdown("#### Model Details")
-    col1, col2 = st.columns(2)
+    # Model details - wrapped in expander
+    with st.expander("🔍 Model Details & Technical Notes", expanded=False):
+        st.markdown("#### Model Details")
+        col1, col2 = st.columns(2)
 
-    with col1:
-        st.markdown("**Hyperbolic Model:** P(t) = CP + W'/t")
-        if cp is not None:
-            st.markdown(f"""
+        with col1:
+            st.markdown("**Hyperbolic Model:** P(t) = CP + W'/t")
+            if cp is not None:
+                st.markdown(f"""
 - **CP** = {cp:.0f}W - Sustainable power for extended efforts
 - **W'** = {w_prime/1000:.1f}kJ - Anaerobic work capacity
 - **AEI** = {aei:.1f}J/kg - Normalized anaerobic capacity
@@ -1837,8 +1840,8 @@ def render_training_load_tab(
 - **Data Points** = Multiple durations in power curve
             """)
 
-    st.markdown("---")
-    st.markdown("""
+        st.markdown("---")
+        st.markdown("""
 **Notes:**
 - Metrics computed from 90-day rolling power curve (most recent 90 calendar days)
 - CP model evolves as fitness changes

@@ -12,6 +12,8 @@ import pandas as pd
 import streamlit as st
 
 from activities_viewer.services.activity_service import ActivityService
+from activities_viewer.utils import format_duration, safe_mean, safe_sum, calculate_tid
+from activities_viewer.data import HELP_TEXTS
 from activities_viewer.pages.components.year_overview_components import (
     render_year_selector,
     render_sport_filter,
@@ -34,113 +36,6 @@ from activities_viewer.pages.components.year_overview_components import (
 
 st.set_page_config(page_title="Year Overview", page_icon="📊", layout="wide")
 
-# ============================================================================
-# HELP TEXTS
-# ============================================================================
-HELP_TEXTS = {
-    "tss": """**Training Stress Score (TSS)**
-    Quantifies total training load for the year. Higher values indicate more training stress accumulated.
-    - <3000: Light training year
-    - 3000-6000: Moderate training year
-    - 6000-10000: Serious amateur
-    - >10000: Elite/Professional level training""",
-    "tid": """**Training Intensity Distribution (TID)**
-    How your training is distributed across intensity zones:
-    - **Zone 1 (Low)**: Below aerobic threshold - recovery and base building
-    - **Zone 2 (Moderate)**: Between thresholds - tempo/sweetspot work
-    - **Zone 3 (High)**: Above lactate threshold - hard intervals
-
-    **Polarized training** targets 80% Zone 1, minimal Zone 2, 15-20% Zone 3.""",
-    "polarization_index": """**Polarization Index**
-    Measures how polarized your training is:
-    - **>2.0**: Well-polarized (good for endurance)
-    - **1.5-2.0**: Moderately polarized
-    - **<1.5**: Threshold-focused (more Zone 2)
-
-    Research suggests polarized training is most effective for endurance.""",
-    "efficiency_factor": """**Efficiency Factor (EF)**
-    Ratio of Normalized Power to Average Heart Rate (NP/HR).
-    - **Higher is better** - more power for same cardiac effort
-    - Trending upward over year = improving aerobic fitness
-    - Seasonal variations are normal""",
-    "fatigue_index": """**Fatigue Index**
-    Measures power degradation over activities:
-    - **<5%**: Excellent fatigue resistance
-    - **5-10%**: Good endurance
-    - **10-15%**: Average
-    - **>15%**: Indicates fatigue issues
-
-    Lower is better - shows ability to maintain power.""",
-    "power_curve": """**Power Curve PRs**
-    Best power outputs for various durations throughout the year.
-    These represent your peak performance capabilities:
-    - **5s-30s**: Neuromuscular power (sprints)
-    - **1-5min**: Anaerobic capacity (VO2max efforts)
-    - **20min-1hr**: Threshold/FTP power (sustained efforts)""",
-    "gear_usage": """**Gear Usage Statistics**
-    Breakdown of distance, time, and elevation by equipment.
-    Helps track:
-    - Equipment wear and maintenance needs
-    - Training distribution across bikes
-    - Preferred equipment for different activities""",    # Section 4: Performance Trajectory
-    "ftp_trajectory": """**FTP Evolution**
-    Track estimated FTP changes throughout the year.
-    Upward trend indicates improving fitness.
-    Monthly averages smooth out daily fluctuations.""",
-    "peak_metrics": """**Peak Performance Metrics**
-    Highest values achieved during the year.
-    Peak FTP, CTL, and W/kg indicate best fitness state.""",
-    # Section 4: Season Phases
-    "season_phases": """**Season Phase Detection**
-    Automatic classification based on CTL trends and intensity:
-    - OFF-SEASON: Low volume recovery period
-    - BASE: Building aerobic foundation (low IF)
-    - BUILD: Increasing intensity and volume
-    - PEAK/RACE: Tapering for peak performance
-    - RECOVERY: Active recovery after hard blocks
-    - TRANSITION: Between defined phases""",
-    # Section 4: Year-over-Year
-    "yoy_comparison": """**Year-over-Year Progress**
-    Compare key metrics against previous year.
-    Positive trends indicate consistent improvement.""",
-    # Section 4: Annual Statistics
-    "total_hours": """Total training time for the year.
-    Elite cyclists: 500-800h/year
-    Serious amateurs: 300-500h/year
-    Recreational: <300h/year""",
-    "biggest_week": """Week with highest training volume.
-    Useful for tracking peak training blocks.""",
-    "highest_np": """Highest normalized power for any single activity.
-    Indicates peak sustained power output capability.""",
-    # Section 4: Risk Analysis
-    "high_acwr_weeks": """Weeks with Acute:Chronic Workload Ratio > 1.5.
-    High ACWR increases injury risk.
-    Target: Keep ACWR between 0.8-1.3""",
-    "longest_break": """Longest consecutive period without training.
-    • 1-3 days: Normal recovery
-    • 4-7 days: Planned rest week
-    • >7 days: Extended break (illness, vacation, etc.)""",}
-
-
-def format_duration(seconds: float) -> str:
-    """Format seconds into hours and minutes."""
-    if pd.isna(seconds) or seconds == 0:
-        return "0h 0m"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    return f"{hours}h {minutes}m"
-
-
-def safe_mean(series: pd.Series) -> float:
-    """Calculate mean, handling NaN values."""
-    valid = series.dropna()
-    return valid.mean() if len(valid) > 0 else 0.0
-
-
-def safe_sum(series: pd.Series) -> float:
-    """Calculate sum, handling NaN values."""
-    return series.fillna(0).sum()
-
 
 def get_gear_name(gear_id: str | None, settings) -> str:
     """Get human-readable gear name from ID."""
@@ -149,33 +44,11 @@ def get_gear_name(gear_id: str | None, settings) -> str:
     return settings.gear_names.get(gear_id, gear_id)
 
 
-def calculate_time_weighted_tid(df: pd.DataFrame, metric_view: str = "Moving Time") -> dict:
-    """Calculate time-weighted TID percentages for a group of activities."""
-    # Note: Column names no longer have prefixes (raw and moving are in separate files)
-    z1_col = "power_tid_z1_percentage"
-    z2_col = "power_tid_z2_percentage"
-    z3_col = "power_tid_z3_percentage"
-
-    # Filter to activities that have TID data
-    valid_df = df.dropna(subset=[z1_col, z2_col, z3_col])
-
-    if valid_df.empty:
-        return {"z1": 0, "z2": 0, "z3": 0}
-
-    # Weight by moving time
-    total_time = valid_df["moving_time"].sum()
-    if total_time == 0:
-        return {"z1": 0, "z2": 0, "z3": 0}
-
-    weighted_z1 = (valid_df[z1_col] * valid_df["moving_time"]).sum() / total_time
-    weighted_z2 = (valid_df[z2_col] * valid_df["moving_time"]).sum() / total_time
-    weighted_z3 = (valid_df[z3_col] * valid_df["moving_time"]).sum() / total_time
-
-    return {"z1": weighted_z1, "z2": weighted_z2, "z3": weighted_z3}
-
+# Alias for backward compatibility with components
+calculate_time_weighted_tid = calculate_tid
 
 # This is used by components module for imports
-__all__ = ["format_duration", "safe_mean", "safe_sum", "get_gear_name", "calculate_time_weighted_tid"]
+__all__ = ["get_gear_name", "calculate_time_weighted_tid"]
 
 
 def main():
@@ -248,19 +121,19 @@ def main():
     st.divider()
 
     # Power Curve PRs
-    render_power_curve_section(df, HELP_TEXTS)
-    st.divider()
+    with st.expander("🏆 Power Curve PRs", expanded=False):
+        render_power_curve_section(df, HELP_TEXTS)
 
     # TID Analysis
-    render_tid_section(
-        df,
-        metric_view,
-        calculate_time_weighted_tid,
-        safe_mean,
-        HELP_TEXTS,
-        selected_year,
-    )
-    st.divider()
+    with st.expander("📊 Training Intensity Distribution", expanded=False):
+        render_tid_section(
+            df,
+            metric_view,
+            calculate_time_weighted_tid,
+            safe_mean,
+            HELP_TEXTS,
+            selected_year,
+        )
 
     # Training Load Progression (CTL/ATL/TSB)
     render_training_load_section(df)
@@ -297,25 +170,26 @@ def main():
 
     # Activity Extremes
     render_extremes_section(df, metric_view, format_duration)
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # SECTION 4: Advanced Annual Analysis
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     # Section 4.1: Performance Trajectory
-    render_performance_trajectory(df, selected_year, HELP_TEXTS)
-    
-    # Section 4.2: Season Phases
-    render_season_phases(df, selected_year, HELP_TEXTS)
-    
-    # Section 4.3: Year-over-Year Comparison
-    render_year_over_year_comparison(df, df_prev_filtered, selected_year, HELP_TEXTS)
-    
-    # Section 4.4: Annual Statistics
-    render_annual_statistics(df, selected_year, format_duration, HELP_TEXTS)
-    
-    # Section 4.5: Risk Analysis
-    render_risk_analysis(df, selected_year, HELP_TEXTS)
+    with st.expander("📈 Performance Trajectory", expanded=False):
+        render_performance_trajectory(df, selected_year, HELP_TEXTS)
+
+    with st.expander("📅 Season Phases", expanded=False):
+        render_season_phases(df, selected_year, HELP_TEXTS)
+
+    with st.expander("📊 Year-over-Year Comparison", expanded=False):
+        render_year_over_year_comparison(df, df_prev_filtered, selected_year, HELP_TEXTS)
+
+    with st.expander("📋 Annual Statistics", expanded=False):
+        render_annual_statistics(df, selected_year, format_duration, HELP_TEXTS)
+
+    with st.expander("⚠️ Risk Analysis", expanded=False):
+        render_risk_analysis(df, selected_year, HELP_TEXTS)
 
 
 if __name__ == "__main__":

@@ -77,6 +77,22 @@ class Settings(BaseSettings):
         description="Maximum heart rate in bpm",
     )
 
+    # --- Goal Tracking (Optional) ---
+    target_wkg: float | None = Field(
+        default=None,
+        gt=0,
+        description="Target W/kg goal (e.g., 4.0)",
+    )
+    target_date: str | None = Field(
+        default=None,
+        description="Target date for goal in YYYY-MM-DD format (e.g., '2025-08-01')",
+    )
+    baseline_ftp: float | None = Field(
+        default=None,
+        gt=0,
+        description="FTP when goal was set (for tracking progress from baseline)",
+    )
+
     # --- Application Settings ---
     data_source_type: str = Field(
         default="csv",

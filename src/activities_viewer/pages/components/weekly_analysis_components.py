@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 import streamlit as st
 from plotly.subplots import make_subplots
 from activities_viewer.pages.components.activity_detail_components import render_metric
+from activities_viewer.analytics.insights import generate_weekly_insights, render_insights
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # COMPONENT: Week Selector & Navigation
@@ -150,7 +151,7 @@ def render_kpi_section(
     get_metric_fn,
 ) -> None:
     """
-    Render KPI metrics section with volume and intensity metrics.
+    Render KPI metrics section with hero and context metrics.
 
     Args:
         df_week: Current week activities
@@ -160,7 +161,7 @@ def render_kpi_section(
         format_duration_fn: Function to format duration
         get_metric_fn: Function to safely get metrics
     """
-    # Row 1: Volume Metrics
+    # Calculate metrics
     total_dist = df_week["distance"].sum() / 1000
     total_time = df_week["moving_time"].sum()
     total_elev = df_week["total_elevation_gain"].sum()
@@ -177,16 +178,86 @@ def render_kpi_section(
         else 0
     )
 
+    # Get training load state from latest activity
+    ctl = atl = tsb = acwr = None
+    if not df_week.empty:
+        latest_activity = df_week.sort_values("start_date", ascending=False).iloc[0]
+        ctl = latest_activity.get("chronic_training_load", None)
+        atl = latest_activity.get("acute_training_load", None)
+        tsb = latest_activity.get("training_stress_balance", None)
+        acwr = latest_activity.get("acwr", None)
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIER 1: HERO METRICS (3 columns, large, most important)
+    # ═══════════════════════════════════════════════════════════════════════════
+    st.markdown("##### 📊 Week at a Glance")
+
+    hero1, hero2, hero3 = st.columns(3)
+
+    with hero1:
+        tss_delta = f"{total_tss - prev_tss:+.0f}" if prev_tss else None
+        st.metric(
+            "💪 Training Load",
+            f"{total_tss:.0f} TSS",
+            delta=tss_delta,
+            help="Total Training Stress Score this week. Typical range: 300-700 TSS/week."
+        )
+
+    with hero2:
+        if pd.notna(tsb):
+            if tsb > 20:
+                status_emoji, status = "🔋", "Fresh"
+            elif 0 <= tsb <= 20:
+                status_emoji, status = "🎯", "Ready"
+            elif -10 <= tsb < 0:
+                status_emoji, status = "⚠️", "Fatigued"
+            else:
+                status_emoji, status = "🔴", "Tired"
+            tsb_value = f"{tsb:.0f}"
+        else:
+            status_emoji, status = "❓", "Unknown"
+            tsb_value = "-"
+
+        st.metric(
+            f"{status_emoji} Form (TSB)",
+            tsb_value,
+            delta=status,
+            delta_color="off",
+            help="Training Stress Balance = CTL - ATL. Indicates freshness."
+        )
+
+    with hero3:
+        time_delta = f"{(total_time - prev_time) / 3600:+.1f}h" if prev_time else None
+        hours = int(total_time // 3600)
+        mins = int((total_time % 3600) // 60)
+        time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+        st.metric(
+            "⏱️ Training Time",
+            time_str,
+            delta=time_delta,
+            help="Total moving time this week."
+        )
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TIER 2: CONTEXT METRICS (volume and secondary metrics)
+    # ═══════════════════════════════════════════════════════════════════════════
+    st.caption("📊 Volume & Training Load Details")
+
     col1, col2, col3, col4, col5, col6 = st.columns(6)
+    render_metric(col1, "🚴 Distance", f"{total_dist:.1f} km", f"{total_dist - prev_dist:+.1f}" if prev_dist else None)
+    render_metric(col2, "⛰️ Elevation", f"{total_elev:,.0f} m")
+    render_metric(col3, "📝 Activities", f"{count}")
+    render_metric(col4, "⚡ Work", f"{total_work:,.0f} kJ")
 
-    render_metric(col1, "Distance", f"{total_dist:,.1f} km", f"{total_dist - prev_dist:+.1f} km" if prev_dist else None)
-    render_metric(col2, "Time", format_duration_fn(total_time), f"{(total_time - prev_time) / 3600:+.1f}h" if prev_time else None)
-    render_metric(col3, "Elevation", f"{total_elev:,.0f} m")
-    render_metric(col4, "Activities", f"{count}")
-    render_metric(col5, "TSS", f"{total_tss:,.0f}", f"{total_tss - prev_tss:+.0f}" if prev_tss else None)
-    render_metric(col6, "Work", f"{total_work:,.0f} kJ")
+    # CTL and ATL
+    ctl_value = f"{ctl:.0f}" if pd.notna(ctl) else "-"
+    atl_value = f"{atl:.0f}" if pd.notna(atl) else "-"
+    render_metric(col5, "📊 CTL (Fitness)", ctl_value, help_texts.get("chronic_training_load", ""))
+    render_metric(col6, "⚡ ATL (Fatigue)", atl_value, help_texts.get("acute_training_load", ""))
 
-    # Row 2: Intensity & Efficiency Metrics
+    # Intensity row
     avg_np = get_metric_fn(df_week, "normalized_power", "mean")
     avg_if = get_metric_fn(df_week, "intensity_factor", "mean")
     avg_ef = get_metric_fn(df_week, "efficiency_factor", "mean")
@@ -194,90 +265,63 @@ def render_kpi_section(
     avg_fatigue = get_metric_fn(df_week, "fatigue_index", "mean")
     avg_hr = get_metric_fn(df_week, "average_hr", "mean")
 
+    st.caption("⚡ Intensity & Efficiency")
     t1, t2, t3, t4, t5, t6 = st.columns(6)
-    render_metric(t1, "Avg NP", f"{avg_np:.0f} W" if avg_np else "-")
-    render_metric(t2, "Avg IF", f"{avg_if:.2f}" if avg_if else "-")
-    render_metric(t3, "Avg EF", f"{avg_ef:.2f}" if avg_ef else "-", help_texts.get("avg_ef", ""))
-    render_metric(t4, "Avg VI", f"{avg_vi:.2f}" if avg_vi else "-")
-    render_metric(t5, "Avg Fatigue", f"{avg_fatigue:.1f}%" if avg_fatigue else "-", help_texts.get("fatigue_trend", ""))
-    render_metric(t6, "Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
+    render_metric(t1, "Avg NP", f"{avg_np:.0f} W" if avg_np else "-", help_texts.get("normalized_power", ""))
+    render_metric(t2, "Avg IF", f"{avg_if:.2f}" if avg_if else "-", help_texts.get("intensity_factor", ""))
+    render_metric(t3, "Avg EF", f"{avg_ef:.2f}" if avg_ef else "-", help_texts.get("efficiency_factor", ""))
+    render_metric(t4, "Avg VI", f"{avg_vi:.2f}" if avg_vi else "-", help_texts.get("variability_index", ""))
+    render_metric(t5, "Fatigue Idx", f"{avg_fatigue:.1f}%" if avg_fatigue else "-", help_texts.get("fatigue_index", ""))
 
-    # Row 3: Training Load State (from end of week)
+    # ACWR with status
+    acwr_value = f"{acwr:.2f}" if pd.notna(acwr) else "-"
+    acwr_status = (
+        " ✅" if pd.notna(acwr) and 0.8 <= acwr <= 1.3 else
+        " ⚠️" if pd.notna(acwr) and acwr > 1.3 else
+        " 📉" if pd.notna(acwr) else ""
+    )
+    render_metric(t6, "ACWR", f"{acwr_value}{acwr_status}", help_texts.get("acwr", ""))
+
+    # Training State Summary
+    if pd.notna(tsb):
+        if tsb > 20:
+            state = "✅ Well-rested - Good for intensity work"
+            state_color = "green"
+        elif 0 <= tsb <= 20:
+            state = "🎯 Optimal zone - Productive training"
+            state_color = "blue"
+        elif -10 <= tsb < 0:
+            state = "⚠️ Elevated fatigue - Productive but stressed"
+            state_color = "orange"
+        else:  # tsb < -10
+            state = "🔴 Overreached - Recovery needed"
+            state_color = "red"
+
+        st.markdown(f"**Training State:** <span style='color:{state_color}'>{state}</span>", unsafe_allow_html=True)
+
+    # ════════════════════════════════════════════════════════════════════════════
+    # INSIGHTS & RECOMMENDATIONS
+    # ════════════════════════════════════════════════════════════════════════════
+
+    # Only show insights if we have valid training load data
+    if pd.notna(ctl) and pd.notna(atl) and pd.notna(tsb) and pd.notna(acwr):
+        st.divider()
+        insights = generate_weekly_insights(
+            df_week=df_week,
+            ctl=ctl,
+            atl=atl,
+            tsb=tsb,
+            acwr=acwr,
+            weekly_tss=total_tss,
+        )
+        render_insights(insights)
+
+    # Row 4: CP Model & Durability metrics
     st.divider()
-    st.markdown("#### 📊 Training Load State (End of Week)")
+    st.markdown("#### 💪 Power Profile & Durability")
 
     if not df_week.empty:
-        # Get latest activity metrics for training load
         latest_activity = df_week.sort_values("start_date", ascending=False).iloc[0]
-
-        # Training Load Metrics (from latest activity)
-        ctl = latest_activity.get("chronic_training_load", None)
-        atl = latest_activity.get("acute_training_load", None)
-        tsb = latest_activity.get("training_stress_balance", None)
-        acwr = latest_activity.get("acwr", None)
-
-        # Display metrics in 4 columns using render_metric
-        col1, col2, col3, col4 = st.columns(4)
-
-        # CTL (Chronic Training Load)
-        ctl_value = f"{ctl:.0f}" if pd.notna(ctl) else "-"
-        ctl_help = "42-day fitness level. Optimal: 80-120\nStatus: " + (
-            "Building - Early in training block" if pd.notna(ctl) and ctl < 50 else
-            "Consistent - Normal training load" if pd.notna(ctl) and ctl < 100 else
-            "High - Peak training phase" if pd.notna(ctl) and ctl < 150 else
-            "Elite - Competition ready"
-        )
-        render_metric(col1, "📊 CTL (Fitness)", ctl_value, ctl_help)
-
-        # ATL (Acute Training Load)
-        atl_value = f"{atl:.0f}" if pd.notna(atl) else "-"
-        atl_help = "7-day fatigue level. Optimal: 30-70\nStatus: " + (
-            "Fresh - Low recent fatigue" if pd.notna(atl) and atl < 50 else
-            "Normal - Healthy training week" if pd.notna(atl) and atl < 100 else
-            "High - Accumulating fatigue"
-        )
-        render_metric(col2, "⚡ ATL (Fatigue)", atl_value, atl_help)
-
-        # TSB (Training Stress Balance)
-        tsb_value = f"{tsb:.0f}" if pd.notna(tsb) else "-"
-        tsb_help = "Form/freshness (CTL - ATL). Optimal: -10 to +20\nStatus: " + (
-            "Exhausted - Avoid racing!" if pd.notna(tsb) and tsb < -50 else
-            "Fatigued - Recovery needed" if pd.notna(tsb) and tsb < -10 else
-            "Optimal - Ready for performance" if pd.notna(tsb) and tsb <= 20 else
-            "Very fresh - Consider intensity"
-        )
-        render_metric(col3, "🎯 TSB (Form)", tsb_value, tsb_help)
-
-        # ACWR (Acute:Chronic Workload Ratio)
-        acwr_value = f"{acwr:.2f}" if pd.notna(acwr) else "-"
-        acwr_help = "Injury risk indicator (ATL ÷ CTL). Optimal: 0.8-1.3\nStatus: " + (
-            "Undertraining - Low injury risk" if pd.notna(acwr) and acwr < 0.8 else
-            "Safe - Optimal training load" if pd.notna(acwr) and acwr <= 1.3 else
-            "Caution - Moderate injury risk" if pd.notna(acwr) and acwr <= 1.5 else
-            "High Risk - Reduce load!"
-        )
-        render_metric(col4, "⚠️ ACWR (Risk)", acwr_value, acwr_help)
-
-        # Training State Summary
-        if pd.notna(tsb):
-            if tsb > 20:
-                state = "✅ Well-rested - Good for intensity work"
-                state_color = "green"
-            elif 0 <= tsb <= 20:
-                state = "🎯 Optimal zone - Productive training"
-                state_color = "blue"
-            elif -10 <= tsb < 0:
-                state = "⚠️ Elevated fatigue - Productive but stressed"
-                state_color = "orange"
-            else:  # tsb < -10
-                state = "🔴 Overreached - Recovery needed"
-                state_color = "red"
-
-            st.markdown(f"**Training State:** <span style='color:{state_color}'>{state}</span>", unsafe_allow_html=True)
-
-        # Row 4: CP Model & Durability metrics
-        st.divider()
-        st.markdown("#### 💪 Power Profile & Durability")
 
         # CP model metrics (from latest activity)
         cp = latest_activity.get("cp", None)
@@ -557,31 +601,35 @@ def render_overview_tab(
         st.plotly_chart(fig_gear, use_container_width=True)
     else:
         st.info("No gear data available.")
-    
+
     # ═══════════════════════════════════════════════════════════════════════════
     # SECTION 2: New Physiological Metrics
     # ═══════════════════════════════════════════════════════════════════════════
-    
+
     if help_texts is not None and df_all_activities is not None:
         st.divider()
-        
+
         # Section 2.1: Recovery & Readiness
-        render_recovery_readiness_section(df_week, df_all_activities, selected_week, help_texts)
-        
+        with st.expander("🔋 Recovery & Readiness", expanded=False):
+            render_recovery_readiness_section(df_week, df_all_activities, selected_week, help_texts)
+
         st.divider()
-        
+
         # Section 2.2: Training Type Distribution
-        render_training_type_distribution(df_week, help_texts)
-        
+        with st.expander("🎯 Training Type Distribution", expanded=False):
+            render_training_type_distribution(df_week, help_texts)
+
         st.divider()
-        
+
         # Section 2.3: Progressive Overload
-        render_progressive_overload(df_week, df_all_activities, selected_week, help_texts)
-        
+        with st.expander("📈 Progressive Overload", expanded=False):
+            render_progressive_overload(df_week, df_all_activities, selected_week, help_texts)
+
         st.divider()
-        
+
         # Section 2.4: Intensity-Specific Volume
-        render_intensity_specific_volume(df_week, help_texts)
+        with st.expander("⏱️ Intensity-Specific Volume", expanded=False):
+            render_intensity_specific_volume(df_week, help_texts)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -605,43 +653,43 @@ def render_recovery_readiness_section(
         help_texts: Dictionary of help text strings
     """
     st.markdown("### 💤 Recovery & Readiness")
-    
+
     # Calculate daily TSS
     tss_col = "training_stress_score"
     if tss_col not in df_week.columns:
         st.info("TSS data not available for recovery analysis.")
         return
-    
+
     # Create complete week with all 7 days
     week_start = selected_week.normalize() if isinstance(selected_week, pd.Timestamp) else pd.Timestamp(selected_week)
     week_dates = pd.date_range(start=week_start, periods=7, freq='D')
-    
+
     # Group activities by date and sum TSS
     df_week_copy = df_week.copy()
     df_week_copy["date_local"] = df_week_copy["start_date_local"].dt.date
     daily_tss = df_week_copy.groupby("date_local")[tss_col].sum()
-    
+
     # Create full week with 0 for days without activities
     daily_tss_full = pd.Series(0.0, index=week_dates.date)
     daily_tss_full.update(daily_tss)
     daily_tss_values = daily_tss_full.values
-    
+
     # Calculate Monotony Index
     if len(daily_tss_values) > 1 and daily_tss_values.std() > 0:
         monotony = daily_tss_values.mean() / daily_tss_values.std()
     else:
         monotony = 0.0
-    
+
     # Calculate Strain Index
     weekly_tss = daily_tss_values.sum()
     strain = weekly_tss * monotony
-    
+
     # Calculate Rest Days (TSS < 20)
     rest_days = (daily_tss_values < 20).sum()
-    
+
     # 3-column layout
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         render_metric(
             col1,
@@ -655,7 +703,7 @@ def render_recovery_readiness_section(
             st.warning("⚠️ Consider more rest")
         else:
             st.error("🔴 Insufficient recovery")
-    
+
     with col2:
         render_metric(
             col2,
@@ -669,7 +717,7 @@ def render_recovery_readiness_section(
             st.warning("⚠️ Monitor - moderate risk")
         else:
             st.error("🔴 High risk - too repetitive")
-    
+
     with col3:
         render_metric(
             col3,
@@ -683,7 +731,7 @@ def render_recovery_readiness_section(
             st.warning("⚠️ Moderate strain")
         else:
             st.error("🔴 High strain - recovery critical")
-    
+
     # Interpretation guide
     with st.expander("📊 Recovery Metrics Guide"):
         st.markdown("""
@@ -691,12 +739,12 @@ def render_recovery_readiness_section(
         - <1.5: ✅ Safe - Good training variety
         - 1.5-2.0: ⚠️ Monitor - Moderate risk of overtraining
         - >2.0: 🔴 High risk - Training too repetitive
-        
+
         **Strain Index:**
         - <3000: ✅ Appropriate load
         - 3000-6000: ⚠️ Moderate - Monitor recovery
         - >6000: 🔴 High - Prioritize recovery
-        
+
         **Rest Days:**
         - 2+: ✅ Adequate recovery for most athletes
         - 1: ⚠️ May need more rest depending on intensity
@@ -721,12 +769,12 @@ def render_training_type_distribution(
         help_texts: Dictionary of help text strings
     """
     st.markdown("### 🎯 Training Type Distribution")
-    
+
     # Check if IF data is available
     if "intensity_factor" not in df_week.columns or df_week["intensity_factor"].isna().all():
         st.info("Intensity Factor (IF) data not available for training type classification.")
         return
-    
+
     # Classify rides by IF
     def classify_training_type(if_value):
         if pd.isna(if_value):
@@ -741,22 +789,22 @@ def render_training_type_distribution(
             return "⚡ Threshold"
         else:
             return "🚀 VO2max+"
-    
+
     df_week_copy = df_week.copy()
     df_week_copy["training_type"] = df_week_copy["intensity_factor"].apply(classify_training_type)
-    
+
     # Count rides by type
     type_counts = df_week_copy["training_type"].value_counts()
     total_rides = len(df_week_copy[df_week_copy["training_type"] != "Unknown"])
-    
+
     if total_rides == 0:
         st.info("No rides with valid IF data this week.")
         return
-    
+
     # Create ordered categories
     type_order = ["💤 Recovery", "🚴 Endurance", "🔥 Tempo", "⚡ Threshold", "🚀 VO2max+"]
     type_data = []
-    
+
     for ttype in type_order:
         count = type_counts.get(ttype, 0)
         percentage = (count / total_rides * 100) if total_rides > 0 else 0
@@ -766,21 +814,21 @@ def render_training_type_distribution(
                 "Count": count,
                 "Percentage": percentage
             })
-    
+
     if type_data:
         # Create stacked bar chart
         import plotly.graph_objects as go
-        
+
         fig = go.Figure()
-        
+
         colors = {
             "💤 Recovery": "#95a5a6",
-            "🚴 Endurance": "#2ecc71", 
+            "🚴 Endurance": "#2ecc71",
             "🔥 Tempo": "#f39c12",
             "⚡ Threshold": "#e74c3c",
             "🚀 VO2max+": "#9b59b6"
         }
-        
+
         for item in type_data:
             fig.add_trace(go.Bar(
                 name=item["Type"],
@@ -792,7 +840,7 @@ def render_training_type_distribution(
                 textposition='auto',
                 hovertemplate=f"<b>{item['Type']}</b><br>{item['Count']} rides ({item['Percentage']:.1f}%)<extra></extra>"
             ))
-        
+
         fig.update_layout(
             barmode='stack',
             height=150,
@@ -803,33 +851,33 @@ def render_training_type_distribution(
             yaxis=dict(showticklabels=False)
         )
         fig.update_xaxes(range=[0, 100])
-        
+
         st.plotly_chart(fig, use_container_width=True)
-        
+
         # Show breakdown table
         st.markdown("**Training Type Breakdown:**")
         for item in type_data:
             st.markdown(f"- {item['Type']}: **{item['Count']} rides** ({item['Percentage']:.1f}%)")
-    
+
     # Training type guide
     with st.expander("📊 Training Type Classification (IF-based)"):
         st.markdown("""
         **Recovery (IF < 0.65)** 💤
         - Active recovery, easy spin
         - Focus: Muscle repair, blood flow
-        
+
         **Endurance (IF 0.65-0.75)** 🚴
         - Aerobic base building
         - Focus: Mitochondrial adaptation, fat oxidation
-        
+
         **Tempo (IF 0.75-0.85)** 🔥
         - Sweet spot training
         - Focus: Lactate clearance, muscular endurance
-        
+
         **Threshold (IF 0.85-0.95)** ⚡
         - FTP/CP intervals
         - Focus: Lactate threshold improvement
-        
+
         **VO2max+ (IF > 0.95)** 🚀
         - High intensity intervals
         - Focus: Maximal aerobic power, anaerobic capacity
@@ -857,26 +905,26 @@ def render_progressive_overload(
         help_texts: Dictionary of help text strings
     """
     st.markdown("### 📈 Progressive Overload")
-    
+
     tss_col = "training_stress_score"
     if tss_col not in df_week.columns or tss_col not in df_all_activities.columns:
         st.info("TSS data not available for progressive overload analysis.")
         return
-    
+
     # This week TSS
     this_week_tss = df_week[tss_col].sum()
-    
+
     # Calculate 4-week average TSS (excluding current week)
     week_start = selected_week.normalize() if isinstance(selected_week, pd.Timestamp) else pd.Timestamp(selected_week)
     week_end = week_start + pd.Timedelta(days=7)
-    
+
     # Get last 4 weeks before current week
     four_weeks_ago = week_start - pd.Timedelta(days=28)
     df_previous_4weeks = df_all_activities[
         (df_all_activities["start_date_local"] >= four_weeks_ago) &
         (df_all_activities["start_date_local"] < week_start)
     ]
-    
+
     if len(df_previous_4weeks) > 0:
         # Group by week and sum TSS
         df_previous_4weeks_copy = df_previous_4weeks.copy()
@@ -885,16 +933,16 @@ def render_progressive_overload(
         four_week_avg_tss = weekly_tss.mean()
     else:
         four_week_avg_tss = 0
-    
+
     # Calculate progression percentage
     if four_week_avg_tss > 0:
         progression_pct = ((this_week_tss - four_week_avg_tss) / four_week_avg_tss) * 100
     else:
         progression_pct = 0
-    
+
     # 3-column layout
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         render_metric(
             col1,
@@ -902,7 +950,7 @@ def render_progressive_overload(
             f"{this_week_tss:.0f}",
             help_texts.get("this_week_tss", "Total Training Stress Score for the current week")
         )
-    
+
     with col2:
         render_metric(
             col2,
@@ -910,7 +958,7 @@ def render_progressive_overload(
             f"{four_week_avg_tss:.0f}",
             help_texts.get("four_week_avg_tss", "Average weekly TSS over the previous 4 weeks")
         )
-    
+
     with col3:
         delta_symbol = "📈" if progression_pct > 0 else "📉" if progression_pct < 0 else "➡️"
         render_metric(
@@ -919,7 +967,7 @@ def render_progressive_overload(
             f"{delta_symbol} {progression_pct:+.1f}%",
             help_texts.get("progression", "Week-over-week TSS change. Optimal: 3-10% increase")
         )
-        
+
         if 3 <= progression_pct <= 10:
             st.success("✅ Optimal progression")
         elif progression_pct > 10:
@@ -928,7 +976,7 @@ def render_progressive_overload(
             st.info("💤 Recovery week detected")
         else:
             st.info("➡️ Maintaining load")
-    
+
     # Progression guide
     with st.expander("📊 Progressive Overload Guide"):
         st.markdown("""
@@ -938,7 +986,7 @@ def render_progressive_overload(
         - **>+20%**: 🔴 High risk - consider reducing load
         - **-10% to +3%**: ➡️ Maintenance phase
         - **<-10%**: 💤 Recovery/taper week
-        
+
         **Guidelines:**
         - Increase load gradually (rule of thumb: <10% per week)
         - Plan recovery weeks every 3-4 weeks (20-40% reduction)
@@ -964,31 +1012,31 @@ def render_intensity_specific_volume(
         help_texts: Dictionary of help text strings
     """
     st.markdown("### ⏱️ Intensity-Specific Volume")
-    
+
     # Calculate total moving time
     total_time_seconds = df_week["moving_time"].sum() if "moving_time" in df_week.columns else 0
-    
+
     if total_time_seconds == 0:
         st.info("No activity data available for intensity-specific volume analysis.")
         return
-    
+
     # Z2 Volume (from power_z2_percentage)
     z2_time_seconds = 0
     if "power_z2_percentage" in df_week.columns and "moving_time" in df_week.columns:
         df_week_copy = df_week.copy()
         df_week_copy["z2_time"] = (df_week_copy["power_z2_percentage"] / 100) * df_week_copy["moving_time"]
         z2_time_seconds = df_week_copy["z2_time"].sum()
-    
+
     # Sweet Spot time (pre-computed in StravaAnalyzer)
     ss_time_seconds = 0
     if "time_sweet_spot" in df_week.columns:
         ss_time_seconds = df_week["time_sweet_spot"].sum()
-    
+
     # VO2max time (time above 90% FTP, pre-computed in StravaAnalyzer)
     vo2max_time_seconds = 0
     if "time_above_90_ftp" in df_week.columns:
         vo2max_time_seconds = df_week["time_above_90_ftp"].sum()
-    
+
     # Format durations
     def format_time(seconds):
         if seconds == 0:
@@ -999,15 +1047,15 @@ def render_intensity_specific_volume(
             return f"{hours}h {minutes}min"
         else:
             return f"{minutes}min"
-    
+
     # Calculate percentages
     z2_pct = (z2_time_seconds / total_time_seconds * 100) if total_time_seconds > 0 else 0
     ss_pct = (ss_time_seconds / total_time_seconds * 100) if total_time_seconds > 0 else 0
     vo2max_pct = (vo2max_time_seconds / total_time_seconds * 100) if total_time_seconds > 0 else 0
-    
+
     # 3-column layout
     col1, col2, col3 = st.columns(3)
-    
+
     with col1:
         render_metric(
             col1,
@@ -1016,7 +1064,7 @@ def render_intensity_specific_volume(
             help_texts.get("z2_volume", "Time in Zone 2 (56-75% FTP). Aerobic base building")
         )
         st.caption(f"**{z2_pct:.1f}%** of total time")
-    
+
     with col2:
         render_metric(
             col2,
@@ -1025,7 +1073,7 @@ def render_intensity_specific_volume(
             help_texts.get("sweet_spot_time", "Time at 88-94% FTP. Highly effective for FTP improvement")
         )
         st.caption(f"**{ss_pct:.1f}%** of total time")
-    
+
     with col3:
         render_metric(
             col3,
@@ -1034,7 +1082,7 @@ def render_intensity_specific_volume(
             help_texts.get("vo2max_time", "Time above 90% FTP. High intensity training for maximal aerobic power")
         )
         st.caption(f"**{vo2max_pct:.1f}%** of total time")
-    
+
     # Intensity distribution guide
     with st.expander("📊 Intensity-Specific Training Guide"):
         st.markdown("""
@@ -1042,17 +1090,17 @@ def render_intensity_specific_volume(
         - Primary adaptation: Mitochondrial density, fat oxidation
         - Recommended: 60-80% of total weekly volume for base building
         - Benefits: Aerobic base, recovery, metabolic efficiency
-        
+
         **Sweet Spot - 88-94% FTP:**
         - Primary adaptation: FTP improvement, lactate clearance
         - Recommended: 10-20% of weekly volume during build phase
         - Benefits: Time-efficient FTP gains, muscular endurance
-        
+
         **VO2max - >90% FTP:**
         - Primary adaptation: Maximal aerobic power, anaerobic capacity
         - Recommended: 5-10% of weekly volume
         - Benefits: Peak power, race-specific fitness
-        
+
         **Polarized Model (80/20 Rule):**
         - 80% low intensity (Z1-Z2)
         - 20% high intensity (Threshold, VO2max)

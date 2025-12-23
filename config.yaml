@@ -33,6 +33,13 @@ weight_kg: 77.0
 # Your maximum heart rate in bpm
 max_hr: 185
 
+# --- Goal Tracking (Optional) ---
+# Set a W/kg improvement goal to track your progress
+# Uncomment and configure these fields to enable goal tracking on home page
+target_wkg: 4.0
+target_date: "2026-08-01"
+baseline_ftp: 285
+
 # --- Application Settings ---
 # Enable verbose logging
 verbose: false

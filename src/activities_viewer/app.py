@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 try:
@@ -19,6 +20,7 @@ try:
     from activities_viewer.config import Settings, load_settings
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
+    from activities_viewer.components.goal_tracker import render_goal_progress
 except ImportError:
     # Fallback for when running directly from source without package installation
     import sys
@@ -27,6 +29,7 @@ except ImportError:
     from activities_viewer.config import Settings, load_settings
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
+    from activities_viewer.components.goal_tracker import render_goal_progress
 
 logger = logging.getLogger(__name__)
 
@@ -114,27 +117,96 @@ def main():
     # Main content
     st.title(f"{settings.page_icon} {settings.page_title}")
 
-    st.markdown(
-        """
-        ## Welcome to Activities Viewer
+    service = st.session_state.activity_service
 
-        A comprehensive dashboard for analyzing your cycling activities from Strava.
+    # Get recent data for quick status
+    df_all = service.get_all_activities()
+    if not df_all.empty:
+        # Current fitness status
+        st.header("📊 Current Status")
 
-        ### 📊 Features
+        # Get most recent CTL/ATL/TSB values
+        df_sorted = df_all.sort_values("start_date_local")
+        latest = df_sorted.iloc[-1]
 
-        - **Year Overview**: Annual statistics, training load trends, and zone distribution
-        - **Weekly Analysis**: Recent performance tracking and week-over-week comparisons
-        - **Activity Details**: Deep-dive analysis with route maps and power profiles
+        col1, col2, col3, col4 = st.columns(4)
 
-        ### 🚀 Getting Started
+        with col1:
+            ctl = latest.get("chronic_training_load", 0)
+            if ctl and not pd.isna(ctl):
+                st.metric("Fitness (CTL)", f"{ctl:.0f}")
+            else:
+                st.metric("Fitness (CTL)", "N/A")
 
-        Use the sidebar to navigate between different views of your training data.
+        with col2:
+            atl = latest.get("acute_training_load", 0)
+            if atl and not pd.isna(atl):
+                st.metric("Fatigue (ATL)", f"{atl:.0f}")
+            else:
+                st.metric("Fatigue (ATL)", "N/A")
 
-        ---
+        with col3:
+            tsb = latest.get("training_stress_balance", 0)
+            if tsb and not pd.isna(tsb):
+                status = "Fresh 🔋" if tsb > 10 else "Tired 😴" if tsb < -20 else "Ready 💪"
+                st.metric("Form (TSB)", f"{tsb:.0f}", status)
+            else:
+                st.metric("Form (TSB)", "N/A")
 
-        **Status**: 🚧 Under Development - Phase 1 (MVP)
-        """
-    )
+        with col4:
+            # This week's TSS
+            from datetime import datetime, timedelta
+            week_start = datetime.now() - timedelta(days=datetime.now().weekday())
+
+            # Ensure date column is datetime
+            df_all_copy = df_all.copy()
+            df_all_copy["start_date_local"] = pd.to_datetime(df_all_copy["start_date_local"])
+
+            # Remove timezone if present
+            if df_all_copy["start_date_local"].dt.tz is not None:
+                df_all_copy["start_date_local"] = df_all_copy["start_date_local"].dt.tz_localize(None)
+
+            # Filter for this week
+            df_week = df_all_copy[df_all_copy["start_date_local"] >= week_start]
+            week_tss = df_week["training_stress_score"].sum() if not df_week.empty else 0
+            st.metric("This Week TSS", f"{week_tss:.0f}")
+
+        st.divider()
+
+        # Recent activities
+        st.header("🕐 Recent Activities")
+        recent = df_sorted.tail(5).iloc[::-1]  # Last 5, reversed to show newest first
+
+        for _, row in recent.iterrows():
+            col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+            with col1:
+                st.write(f"**{row['name']}**")
+            with col2:
+                distance_km = row.get('distance', 0) / 1000 if row.get('distance') else 0
+                st.write(f"{distance_km:.1f} km")
+            with col3:
+                tss = row.get('training_stress_score', 0)
+                st.write(f"{tss:.0f} TSS" if tss else "-")
+            with col4:
+                date = pd.to_datetime(row['start_date_local'])
+                st.write(date.strftime("%b %d"))
+
+        st.divider()
+
+        # Goal Progress (if configured)
+        render_goal_progress(settings)
+
+    # Keep existing welcome message but shorter
+    st.markdown("""
+    ### 🚀 Navigation
+    Use the sidebar to explore your training data in detail.
+
+    - 📊 **Year Overview**: Annual summary and trends
+    - 📅 **Monthly Analysis**: Deep-dive into monthly patterns
+    - 📅 **Weekly Analysis**: Recent performance tracking
+    - 🚴 **Activity Detail**: Individual ride analysis
+    - 🤖 **AI Coach**: Ask questions about your training
+    """)
 
     # Sidebar
     with st.sidebar:
@@ -151,29 +223,29 @@ def main():
 
         st.divider()
 
-        st.header("⚙️ Athlete Settings")
-        st.metric("FTP", f"{settings.ftp:.0f} W")
-        st.metric("Weight", f"{settings.weight_kg:.1f} kg")
-        st.metric("Max HR", f"{settings.max_hr} bpm")
+        with st.expander("⚙️ Athlete Settings", expanded=False):
+            st.metric("FTP", f"{settings.ftp:.0f} W")
+            st.metric("Weight", f"{settings.weight_kg:.1f} kg")
+            st.metric("Max HR", f"{settings.max_hr} bpm")
 
         st.divider()
 
-        st.header("📁 Data Configuration")
-        try:
-            settings.validate_files()
-            st.success("✅ All data files found and valid")
+        with st.expander("📁 Data Configuration", expanded=False):
+            try:
+                settings.validate_files()
+                st.success("✅ All data files found and valid")
 
-            # Show data summary
-            col1, col2 = st.columns(2)
-            with col1:
-                st.caption("📍 Data Directory")
-                st.code(str(settings.data_dir), language="text")
-            with col2:
-                st.caption("📊 Enriched File")
-                st.code(settings.activities_enriched_file.name, language="text")
+                # Show data summary
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.caption("📍 Data Directory")
+                    st.code(str(settings.data_dir), language="text")
+                with col2:
+                    st.caption("📊 Enriched File")
+                    st.code(settings.activities_enriched_file.name, language="text")
 
-        except FileNotFoundError as e:
-            st.error(f"❌ Configuration Error\n\n{e}")
+            except FileNotFoundError as e:
+                st.error(f"❌ Configuration Error\n\n{e}")
 
         st.divider()
         st.caption(f"ActivitiesViewer v{__version__}")

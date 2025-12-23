@@ -2,12 +2,20 @@
 # Copy this file to your project directory and update paths and settings
 
 # --- Data Directory Configuration ---
-# Path to the directory containing enriched activities data
+# Path to the directory containing activities data
 # Can be absolute or relative to this config file
 data_dir: "../dev/data_enriched"
 
-# Filename of enriched activities CSV (relative to data_dir)
-activities_enriched_file: "activities_enriched.csv"
+# New dual-file format (StravaAnalyzer v2.0+)
+# Filename of raw activities CSV - all data points (relative to data_dir)
+activities_raw_file: "activities_raw.csv"
+
+# Filename of moving activities CSV - motion-only data (relative to data_dir)
+activities_moving_file: "activities_moving.csv"
+
+# Legacy single-file format (for backward compatibility, optional)
+# Uncomment this if you only have the old activities_enriched.csv file
+# activities_enriched_file: "activities_enriched.csv"
 
 # Filename of activity summary JSON (relative to data_dir)
 activity_summary_file: "activity_summary.json"
@@ -25,6 +33,13 @@ weight_kg: 77.0
 # Your maximum heart rate in bpm
 max_hr: 185
 
+# --- Goal Tracking (Optional) ---
+# Set a W/kg improvement goal to track your progress
+# Uncomment and configure these fields to enable goal tracking on home page
+# target_wkg: 4.0  # Your target W/kg goal
+# target_date: "2025-08-01"  # Target date (YYYY-MM-DD format)
+# baseline_ftp: 285  # Your FTP when you set this goal (for progress tracking)
+
 # --- Application Settings ---
 # Enable verbose logging
 verbose: false
@@ -38,24 +53,6 @@ page_title: "Activities Viewer"
 
 # Page icon (emoji) shown in browser tab and sidebar
 page_icon: "🚴"
-
-# --- Gear Mapping ---
-# Map your Strava gear IDs to human-readable names
-# Find gear IDs in your enriched activities CSV (gear_id column)
-gear_names:
-  b14302691: "Zwift TT Bike"
-  b13021367: "Canyon Aeroad"
-  # Add more gear mappings as needed:
-  # b12345678: "My Road Bike"
-
-# --- Workout Type Mapping ---
-# Standard Strava workout types
-# You can add custom names if needed
-workout_type_names:
-  0: "Default"
-  10: "Race"
-  11: "Long Run"
-  12: "Workout"
 
 # --- Optional: AI Features Configuration (Phase 2) ---
 # Uncomment and set your Google Gemini API key to enable AI features

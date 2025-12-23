@@ -9,6 +9,8 @@ import pandas as pd
 import streamlit as st
 
 from activities_viewer.services.activity_service import ActivityService
+from activities_viewer.utils import format_duration, get_metric_from_df, calculate_tid
+from activities_viewer.data import HELP_TEXTS
 from activities_viewer.pages.components.monthly_analysis_components import (
     render_activities_tab,
     render_intensity_tab,
@@ -22,144 +24,11 @@ from activities_viewer.pages.components.monthly_analysis_components import (
 st.set_page_config(page_title="Monthly Analysis", page_icon="📅", layout="wide")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# HELP TEXTS
-# ═══════════════════════════════════════════════════════════════════════════════
-HELP_TEXTS = {
-    "ctl": """**Chronic Training Load (CTL)** - 42-day exponentially weighted average of daily TSS.
-Represents your 'fitness' accumulated over training.
-- <50: Building/recovery phase
-- 50-80: Moderate training
-- 80-120: High performance level
-- >120: Elite/peak fitness""",
-    "atl": """**Acute Training Load (ATL)** - 7-day exponentially weighted average of daily TSS.
-Represents recent training stress ('fatigue').
-- Low ATL = well recovered
-- High ATL = accumulated fatigue""",
-    "tsb": """**Training Stress Balance (TSB)** - Form indicator (CTL - ATL).
-- TSB > 20: Very fresh, might need more load
-- TSB 0-20: Optimal zone for racing
-- TSB -10-0: Productive training zone
-- TSB < -10: Overreached, recovery needed""",
-    "acwr": """**Acute:Chronic Workload Ratio (ACWR)** - Injury risk indicator.
-- <0.8: Undertraining, might lose fitness
-- 0.8-1.3: Sweet spot for adaptation
-- 1.3-1.5: Caution zone
-- >1.5: High injury risk!""",
-    "cp": """**Critical Power (CP)** - The boundary between steady-state and non-steady-state exercise.
-Maximum power sustainable for efforts >3 minutes.
-Your aerobic ceiling - higher CP = better endurance capacity.""",
-    "w_prime": """**W' (W-prime)** - Anaerobic work capacity above CP.
-The amount of work you can do above CP before exhaustion.
-- <15kJ: Lower sprint reserve
-- 15-25kJ: Average
-- >25kJ: Strong anaerobic capacity""",
-    "r_squared": """**R² (R-squared)** - Goodness of fit for CP model.
-How well the mathematical model fits your power data.
-- <0.90: Fair (use estimates cautiously)
-- 0.90-0.95: Good (reliable)
-- >0.95: Excellent (very reliable)""",
-    "aei": """**Aerobic Endurance Index (AEI)** - Ratio indicating aerobic vs anaerobic profile.
-- >0.85: Very aerobic profile
-- 0.70-0.85: Aerobic profile
-- 0.55-0.70: Balanced
-- <0.55: Anaerobic profile""",
-    "ef": """**Efficiency Factor (EF)** - Power produced per heartbeat (NP/Avg HR).
-Higher EF = better aerobic efficiency. Improves with fitness.
-Track over time to monitor aerobic development.""",
-    "fatigue_trend": """**Fatigue Index** - Cardiac drift during activity.
-Measures how much HR rises relative to power over time.
-- Low (<5%): Good durability
-- Medium (5-10%): Normal fatigue
-- High (>10%): Significant drift""",
-    "avg_ef": """Average Efficiency Factor across all rides this month.
-Higher values indicate better overall aerobic efficiency.""",
-    "tid": """**Training Intensity Distribution (TID)** - Time spent in each intensity zone.
-- Z1 Low: Below aerobic threshold (<80% LTHR)
-- Z2 Moderate: Between thresholds (80-100% LTHR)
-- Z3 High: Above lactate threshold (>100% LTHR)
-
-Polarized training (80% Z1, 20% Z3) is optimal for most athletes.""",
-    # Section 3: Fitness Evolution
-    "ftp_start": """Estimated FTP at the beginning of the month.
-Based on power duration curve analysis from recent activities.""",
-    "ftp_end": """Estimated FTP at the end of the month.
-Based on power duration curve analysis from recent activities.""",
-    "ftp_change": """Change in estimated FTP over the month.
-• Positive: Fitness improvement ✅
-• Negative: May need recovery or training adjustment ⚠️
-• Stable (±2W): Maintenance phase ➡️""",
-    # Section 3: Periodization Check
-    "volume_vs_avg": """Monthly training volume compared to 3-month rolling average.
-• +10% or more: High volume block 📈
-• -10% or less: Recovery/taper block 📉
-• ±10%: Maintenance ➡️""",
-    "intensity_vs_avg": """Average ride intensity (IF) compared to 3-month rolling average.
-• Higher: BUILD/PEAK phase (harder efforts) ⚡
-• Lower: BASE phase (endurance focus) 🏗️
-• Similar: Maintenance ➡️""",
-    "long_rides": """Number of rides longer than 3 hours.
-Critical for endurance development and aerobic capacity.
-Target: 1-2 per week during base phase.""",
-    # Section 3: Aerobic Development
-    "ef_trend": """Weekly rate of change in Efficiency Factor.
-Positive trend = improving aerobic efficiency ✅
-• >0.02/week: Significant improvement
-• 0-0.02/week: Gradual improvement
-• <0: May need more Z2 volume or recovery""",
-    "avg_decoupling": """Average cardiac drift across all activities this month.
-Lower values indicate better aerobic fitness.
-• <5%: Excellent aerobic fitness ✅
-• 5-10%: Good aerobic fitness ➡️
-• >10%: May need more Z2 base work ⚠️""",
-    "decoupling_trend": """Weekly rate of change in cardiac drift.
-Negative trend (decreasing drift) = improving aerobic fitness ✅
-• <-0.2%/week: Significant improvement
-• -0.2 to 0: Gradual improvement
-• >0: Increasing fatigue or deconditioning""",
-    # Section 3: Training Consistency
-    "training_days": """Number of days with at least one activity.
-Higher consistency = better adaptation and fitness gains.
-• 70%+: Excellent consistency ✅
-• 50-70%: Good consistency ➡️
-• <50%: Consider improving consistency ⚠️""",
-    "longest_streak": """Longest run of consecutive training days.
-Very long streaks (>14 days) may indicate need for rest days.""",
-    "longest_gap": """Longest period without training.
-• 1-3 days: Normal recovery ✅
-• 4-7 days: Planned rest week ➡️
-• >7 days: Extended break (illness, vacation, etc.) ⚠️""",
-}
-
-
-# ═══════════════════════════════════════════════════════════════════════════════
 # HELPER FUNCTIONS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-
-def format_duration(seconds: float) -> str:
-    """Convert seconds to HH:MM:SS format."""
-    if pd.isna(seconds) or seconds == 0:
-        return "-"
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    secs = int(seconds % 60)
-    if hours > 0:
-        return f"{hours}:{minutes:02d}:{secs:02d}"
-    return f"{minutes}:{secs:02d}"
-
-
-def get_metric(df: pd.DataFrame, column: str, agg: str = "sum") -> float:
-    """Safely get aggregated metric from DataFrame."""
-    if column not in df.columns:
-        return 0
-    series = df[column].dropna()
-    if series.empty:
-        return 0
-    if agg == "sum":
-        return series.sum()
-    elif agg == "mean":
-        return series.mean()
-    return 0
+# Alias for backward compatibility
+get_metric = get_metric_from_df
 
 
 def calculate_monthly_tid(df: pd.DataFrame, metric_view: str) -> dict:
