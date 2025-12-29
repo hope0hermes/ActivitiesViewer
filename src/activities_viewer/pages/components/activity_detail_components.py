@@ -17,6 +17,7 @@ from streamlit_folium import st_folium
 
 from activities_viewer.domain.models import Activity
 from activities_viewer.services.activity_service import ActivityService
+from activities_viewer.utils.formatting import render_metric
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS & COLORS
@@ -120,117 +121,6 @@ def get_metric(activity, field: str, default=None):
     return default
 
 
-def render_metric(column, label: str, value: str, help_text: str = None) -> None:
-    """
-    Render a metric with responsive sizing that doesn't get truncated.
-    Uses custom HTML instead of st.metric() for better control.
-
-    Args:
-        column: Streamlit column to render in
-        label: Metric label (e.g., "Average Power")
-        value: Metric value to display (e.g., "245 W")
-        help_text: Optional help/documentation text shown on hover
-    """
-    with column:
-        # Create a responsive metric card with proper text sizing and help text support
-        if help_text:
-            # Convert newlines to HTML entity and escape quotes for HTML attribute
-            help_escaped = help_text.replace("\n", "&#10;").replace('"', "&quot;")
-            # HTML with tooltip on hover
-            metric_html = f"""
-            <div style="
-                position: relative;
-                padding: 12px 6px;
-                background-color: rgba(240, 242, 246, 0.7);
-                border-radius: 6px;
-                text-align: center;
-                min-height: 70px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                cursor: help;
-                border: 1px solid rgba(200, 200, 200, 0.3);
-            " title="{help_escaped}">
-                <div style="
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 3px;
-                    width: 100%;
-                    min-height: 16px;
-                    flex-wrap: wrap;
-                ">
-                    <div style="
-                        font-size: 11px;
-                        color: #888;
-                        font-weight: 500;
-                        text-align: center;
-                    ">{label}</div>
-                    <div style="
-                        font-size: 10px;
-                        color: #0066cc;
-                        font-weight: bold;
-                        width: 12px;
-                        height: 12px;
-                        border-radius: 50%;
-                        border: 1px solid #0066cc;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        flex-shrink: 0;
-                        line-height: 1;
-                    ">ℹ</div>
-                </div>
-                <div style="
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #262730;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    line-height: 1.4;
-                    width: 100%;
-                    text-align: center;
-                    margin-top: 4px;
-                ">{value}</div>
-            </div>
-            """
-        else:
-            # HTML without tooltip
-            metric_html = f"""
-            <div style="
-                padding: 12px 6px;
-                background-color: rgba(240, 242, 246, 0.7);
-                border-radius: 6px;
-                text-align: center;
-                min-height: 70px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-            ">
-                <div style="
-                    font-size: 11px;
-                    color: #888;
-                    margin-bottom: 6px;
-                    font-weight: 500;
-                    text-align: center;
-                ">{label}</div>
-                <div style="
-                    font-size: 16px;
-                    font-weight: bold;
-                    color: #262730;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    line-height: 1.4;
-                    width: 100%;
-                    text-align: center;
-                ">{value}</div>
-            </div>
-            """
-        st.markdown(metric_html, unsafe_allow_html=True)
-
-
 def get_workout_type_info(workout_type: Optional[float]) -> tuple[str, str]:
     """
     Get workout type label and emoji based on Strava workout_type code.
@@ -308,7 +198,8 @@ def render_contextual_header(
         distance_str = "-"
 
     # Create contextual metrics based on activity type and available data
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
 
     # Context 1: Rides (cycling activities)
     if activity.type.lower() in ["ride", "virtualride", "ebikeride"]:
@@ -316,31 +207,36 @@ def render_contextual_header(
         avg_hr = get_metric(activity, "average_hr")
         tss = get_metric(activity, "training_stress_score")
 
-        with col1:
-            st.metric(
-                "⚡ Avg Power",
-                f"{avg_power:.0f} W" if avg_power else "-",
-                help="Average power output during the activity",
-            )
+        render_metric(
+            col1,
+            label="⚡ Avg Power",
+            value=f"{avg_power:.0f} W" if avg_power else "-",
+            help_text=get_help_text("average_power", help_texts),
+        )
 
-        with col2:
-            st.metric(
-                "❤️ Avg HR",
-                f"{avg_hr:.0f} bpm" if avg_hr else "-",
-                help="Average heart rate",
-            )
+        render_metric(
+            col2,
+            label="❤️ Avg HR",
+            value=f"{avg_hr:.0f} bpm" if avg_hr else "-",
+            help_text=get_help_text("average_hr", help_texts),
+        )
 
-        with col3:
-            st.metric(
-                "⏱️ Time",
-                duration_str,
-                help=f"{'Moving' if metric_view == 'Moving Time' else 'Elapsed'} time",
-            )
+        render_metric(
+            col3,
+            label="⏱️ Time",
+            value=duration_str,
+            help_text=get_help_text(
+                "moving_time" if metric_view == "Moving Time" else "elapsed_time",
+                help_texts,
+            ),
+        )
 
-        with col4:
-            st.metric(
-                "📈 TSS", f"{tss:.0f}" if tss else "-", help="Training Stress Score"
-            )
+        render_metric(
+            col4,
+            label="📈 TSS",
+            value=f"{tss:.0f}" if tss else "-",
+            help_text=get_help_text("training_stress_score", help_texts),
+        )
 
     # Context 2: Runs
     elif activity.type.lower() in ["run", "virtualrun", "trailrun"]:
@@ -356,25 +252,36 @@ def render_contextual_header(
         else:
             pace_str = "-"
 
-        with col1:
-            st.metric("⏱️ Pace", pace_str, help="Average pace per kilometer")
+        render_metric(
+            col1,
+            label="⏱️ Pace",
+            value=pace_str,
+            help_text=get_help_text("average_speed", help_texts),
+        )
 
-        with col2:
-            st.metric(
-                "❤️ Avg HR",
-                f"{avg_hr:.0f} bpm" if avg_hr else "-",
-                help="Average heart rate",
-            )
+        render_metric(
+            col2,
+            label="❤️ Avg HR",
+            value=f"{avg_hr:.0f} bpm" if avg_hr else "-",
+            help_text=get_help_text("average_hr", help_texts),
+        )
 
-        with col3:
-            st.metric(
-                "⏱️ Time",
-                duration_str,
-                help=f"{'Moving' if metric_view == 'Moving Time' else 'Elapsed'} time",
-            )
+        render_metric(
+            col3,
+            label="⏱️ Time",
+            value=duration_str,
+            help_text=get_help_text(
+                "moving_time" if metric_view == "Moving Time" else "elapsed_time",
+                help_texts,
+            ),
+        )
 
-        with col4:
-            st.metric("🛣️ Distance", distance_str, help="Total distance covered")
+        render_metric(
+            col4,
+            label="🛣️ Distance",
+            value=distance_str,
+            help_text=get_help_text("distance", help_texts),
+        )
 
     # Context 3: Other activities (default to basic metrics)
     else:
@@ -382,29 +289,36 @@ def render_contextual_header(
         elevation = get_metric(activity, "total_elevation_gain")
         calories = get_metric(activity, "kilojoules")
 
-        with col1:
-            st.metric(
-                "⏱️ Time",
-                duration_str,
-                help=f"{'Moving' if metric_view == 'Moving Time' else 'Elapsed'} time",
-            )
+        render_metric(
+            col1,
+            label="⏱️ Time",
+            value=duration_str,
+            help_text=get_help_text(
+                "moving_time" if metric_view == "Moving Time" else "elapsed_time",
+                help_texts,
+            ),
+        )
 
-        with col2:
-            st.metric("🛣️ Distance", distance_str, help="Total distance covered")
+        render_metric(
+            col2,
+            label="🛣️ Distance",
+            value=distance_str,
+            help_text=get_help_text("distance", help_texts),
+        )
 
-        with col3:
-            st.metric(
-                "❤️ Avg HR",
-                f"{avg_hr:.0f} bpm" if avg_hr else "-",
-                help="Average heart rate",
-            )
+        render_metric(
+            col3,
+            label="❤️ Avg HR",
+            value=f"{avg_hr:.0f} bpm" if avg_hr else "-",
+            help_text=get_help_text("average_hr", help_texts),
+        )
 
-        with col4:
-            st.metric(
-                "⛰️ Elevation",
-                f"{elevation:.0f} m" if elevation else "-",
-                help="Total elevation gain",
-            )
+        render_metric(
+            col4,
+            label="⛰️ Elevation",
+            value=f"{elevation:.0f} m" if elevation else "-",
+            help_text=get_help_text("total_elevation_gain", help_texts),
+        )
 
 
 def render_contextual_metrics(
@@ -470,6 +384,30 @@ def render_contextual_metrics(
 
         # Show key interval metrics
         col1, col2, col3 = st.columns(3)
+
+        render_metric(
+            col1,
+            label="Variability Index",
+            value=(
+                f"{get_metric(activity, 'variability_index'):.2f}"
+                if variability_index else "-"
+            ),
+            help_text="VI = NP/Avg Power. Higher VI = more variable pacing",
+        )
+
+        render_metric(
+            col2,
+            label="Max Power",
+            value=f"{get_metric(activity, 'max_power'):.0f} W" if max_power else "-",
+            help_text="Peak 1-second power",
+        )
+
+        render_metric(
+            col3,
+            label="Max HR",
+            value=f"{get_metric(activity, 'max_hr'):.0f} bpm" if max_hr else "-",
+            help_text="Peak heart rate",
+        )
 
         with col1:
             variability_index = get_metric(activity, "variability_index")
@@ -602,44 +540,60 @@ def render_contextual_metrics(
         st.markdown("**🏁 Race Analysis**")
         st.caption("Race effort detected - showing performance metrics")
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2 = st.columns(2)
+        col3, col4 = st.columns(2)
 
-        with col1:
-            np_val = get_metric(activity, "normalized_power")
-            st.metric(
-                "⚡ Norm Power",
-                f"{np_val:.0f} W" if np_val else "-",
-                help="Normalized Power for race effort",
-            )
+        render_metric(
+            col1,
+            label="⚡ Norm Power",
+            value=f"{get_metric(activity, 'normalized_power'):.0f} W"
+            if get_metric(activity, "normalized_power")
+            else "-",
+            help_text="Normalized Power for race effort",
+        )
 
-        with col2:
-            if_metric = get_metric(activity, "intensity_factor")
-            st.metric(
-                "🎯 IF",
-                f"{if_metric:.2f}" if if_metric else "-",
-                help="Intensity Factor for race",
-            )
+        render_metric(
+            col2,
+            label="🎯 IF",
+            value=f"{get_metric(activity, 'intensity_factor'):.2f}"
+            if get_metric(activity, "intensity_factor")
+            else "-",
+            help_text="Intensity Factor for race",
+        )
 
-        with col3:
-            avg_hr = get_metric(activity, "average_hr")
-            st.metric("❤️ Avg HR", f"{avg_hr:.0f} bpm" if avg_hr else "-")
+        render_metric(
+            col3,
+            label="❤️ Avg HR",
+            value=f"{get_metric(activity, 'average_hr'):.0f} bpm"
+            if get_metric(activity, "average_hr")
+            else "-",
+        )
 
-        with col4:
-            avg_power = get_metric(activity, "average_power")
-            weight = 75  # TODO: Get from settings
-            if avg_power and weight:
-                w_kg = avg_power / weight
-                st.metric(
-                    "⚖️ W/kg", f"{w_kg:.2f}", help="Power-to-weight ratio for race"
-                )
-            else:
-                st.metric("⚡ Avg Power", f"{avg_power:.0f} W" if avg_power else "-")
+        avg_power = get_metric(activity, "average_power")
+        weight = 75  # TODO: Get from settings
+        if avg_power and weight:
+            power_value = f"{(avg_power / weight):.2f}"
+            label = "⚖️ W/kg"
+            help_texts = "Power-to-weight ratio for race"
+        else:
+            power_value = f"{avg_power:.0f} W" if avg_power else "-"
+            label = "⚡ Avg Power"
+            help_texts = "Average power for race"
+        render_metric(
+            col4,
+            label=label,
+            value=power_value,
+            help_text=help_texts,
+        )
 
     # Context 5: Default (no specific context)
     else:
         st.markdown("**📊 General Metrics**")
 
-        col1, col2, col3, col4 = st.columns(4)
+        col1, col2 = st.columns(2)
+        col3, col4 = st.columns(2)
+
+        render_metric()
 
         with col1:
             if_metric = get_metric(activity, "intensity_factor")
@@ -718,6 +672,17 @@ def render_activity_selector(
     # Get date range for calendar
     min_date = df_activities["start_date_local"].min().date()
     max_date = df_activities["start_date_local"].max().date()
+
+    # Check if activity was passed via query parameter (from external link)
+    if "activity_id" in st.query_params:
+        try:
+            pre_selected_id = int(st.query_params["activity_id"])
+            if pre_selected_id in df_activities["id"].values:
+                activity_id = pre_selected_id
+                activity = service.get_activity(activity_id, metric_view)
+                return activity, activity_id
+        except (ValueError, KeyError):
+            pass
 
     # Check if activity was pre-selected via navigation buttons
     if "selected_activity_id" in st.session_state:

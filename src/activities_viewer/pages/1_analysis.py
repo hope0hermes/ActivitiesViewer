@@ -11,7 +11,8 @@ Time Range [Last 4 Weeks | This Year | All Time | Custom] and a View Mode
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+import json
+import os
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
@@ -19,12 +20,42 @@ from plotly.subplots import make_subplots
 
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.services.analysis_service import AnalysisService
-from activities_viewer.utils.formatting import format_duration, format_watts, format_wkg
-from activities_viewer.utils.metrics import safe_mean, safe_sum
-from activities_viewer.domain.metrics import MetricRegistry
+from activities_viewer.config import Settings
+from activities_viewer.repository.csv_repo import CSVActivityRepository
+from activities_viewer.utils.formatting import format_watts, render_metric
 from activities_viewer.data import HELP_TEXTS
 
 st.set_page_config(page_title="Training Analysis", page_icon="📈", layout="wide")
+
+
+def init_services(settings: Settings) -> ActivityService:
+    """Initialize application services."""
+    if settings.data_source_type == "csv":
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
+        repo = CSVActivityRepository(raw_file, moving_file)
+    else:
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
+        repo = CSVActivityRepository(raw_file, moving_file)
+
+    return ActivityService(repo)
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -115,31 +146,38 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        st.metric(
-            "Total Volume",
-            f"{load_stats['total_hours']:.1f}h",
-            help="Total moving time",
-        )
+    value_size = 28
+    render_metric(
+        col1,
+        label="Total Volume",
+        value=f"{load_stats['total_hours']:.1f}h",
+        help_text="Total moving time",
+        value_size=value_size,
+    )
 
-    with col2:
-        st.metric(
-            "Total TSS",
-            f"{load_stats['total_tss']:.0f}",
-            help=HELP_TEXTS.get("tss", "Total Training Stress Score"),
-        )
+    render_metric(
+        col2,
+        label="Total TSS",
+        value=f"{load_stats['total_tss']:.0f}",
+        help_text=HELP_TEXTS.get("tss", "Total Training Stress Score"),
+        value_size=value_size,
+    )
 
-    with col3:
-        st.metric(
-            "Total Distance",
-            f"{load_stats['total_distance_km']:.0f} km",
-            help="Total distance covered",
-        )
+    render_metric(
+        col3,
+        label="Total Distance",
+        value=f"{load_stats['total_distance_km']:.0f} km",
+        help_text="Total distance covered",
+        value_size=value_size,
+    )
 
-    with col4:
-        st.metric(
-            "Activities", f"{load_stats['activity_count']}", help="Number of activities"
-        )
+    render_metric(
+        col4,
+        label="Activities",
+        value=f"{load_stats['activity_count']}",
+        help_text="Number of activities",
+        value_size=value_size,
+    )
 
     st.divider()
 
@@ -191,11 +229,23 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     # Create dual-axis chart
     fig = make_subplots(
-        rows=2,
+        rows=3,
         cols=1,
-        subplot_titles=(f"{freq_label} Volume", f"{freq_label} Training Stress"),
         vertical_spacing=0.12,
-        row_heights=[0.5, 0.5],
+        row_heights=[0.35, 0.35, 0.3],
+    )
+
+    # Distance (km)
+    fig.add_trace(
+        go.Bar(
+            x=period_stats["period"],
+            y=period_stats["distance_km"],
+            name="km",
+            marker_color="#dc3545",
+            hovertemplate="<b>%{x}</b><br>Distance: %{y:.1f} km<extra></extra>",
+        ),
+        row=1,
+        col=1,
     )
 
     # Volume (hours)
@@ -207,7 +257,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
             marker_color="#17a2b8",
             hovertemplate="<b>%{x}</b><br>Volume: %{y:.1f}h<extra></extra>",
         ),
-        row=1,
+        row=2,
         col=1,
     )
 
@@ -220,17 +270,19 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
             marker_color="#28a745",
             hovertemplate="<b>%{x}</b><br>TSS: %{y:.0f}<extra></extra>",
         ),
-        row=2,
+        row=3,
         col=1,
     )
 
     fig.update_xaxes(title_text="", row=1, col=1)
-    fig.update_xaxes(title_text="Date", row=2, col=1)
+    fig.update_xaxes(title_text="", row=2, col=1)
+    fig.update_xaxes(title_text="Date", row=3, col=1)
 
-    fig.update_yaxes(title_text="Hours", row=1, col=1)
-    fig.update_yaxes(title_text="TSS", row=2, col=1)
+    fig.update_yaxes(title_text="Km", row=1, col=1)
+    fig.update_yaxes(title_text="Hours", row=2, col=1)
+    fig.update_yaxes(title_text="TSS", row=3, col=1)
 
-    fig.update_layout(height=500, showlegend=False, hovermode="x unified")
+    fig.update_layout(height=700, showlegend=False, hovermode="x unified")
 
     st.plotly_chart(fig, use_container_width=True)
 
@@ -246,26 +298,30 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-        st.metric(
-            "Zone 1 (Easy)",
-            f"{tid_stats['tid_z1_percentage']:.1f}%",
-            help="<55% FTP - Recovery and base building",
-        )
+    value_size = 32
+    render_metric(
+        col1,
+        label="Zone 1 (Easy)",
+        value=f"{tid_stats['tid_z1_percentage']:.1f}%",
+        help_text="<55% FTP - Recovery and base building",
+        value_size=value_size,
+    )
 
-    with col2:
-        st.metric(
-            "Zone 2 (Moderate)",
-            f"{tid_stats['tid_z2_percentage']:.1f}%",
-            help="55-90% FTP - Tempo and threshold work",
-        )
+    render_metric(
+        col2,
+        label="Zone 2 (Moderate)",
+        value=f"{tid_stats['tid_z2_percentage']:.1f}%",
+        help_text="55-90% FTP - Tempo and threshold work",
+        value_size=value_size,
+    )
 
-    with col3:
-        st.metric(
-            "Zone 3 (Hard)",
-            f"{tid_stats['tid_z3_percentage']:.1f}%",
-            help=">90% FTP - High intensity intervals",
-        )
+    render_metric(
+        col3,
+        label="Zone 3 (Hard)",
+        value=f"{tid_stats['tid_z3_percentage']:.1f}%",
+        help_text=">90% FTP - High intensity intervals",
+        value_size=value_size,
+    )
 
     # TID Pie Chart
     fig = go.Figure(
@@ -285,7 +341,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     )
 
     fig.update_layout(
-        height=400,
+        height=500,
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5),
     )
@@ -296,24 +352,24 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     with st.expander("ℹ️ Understanding Training Intensity Distribution (TID)"):
         st.markdown("""
         **What is TID?**
-        
+
         Training Intensity Distribution shows how you split your training time across intensity zones:
         - **Zone 1** (0-55% FTP): Easy recovery rides, base building
         - **Zone 2** (55-90% FTP): Tempo and threshold work, "sweet spot"
         - **Zone 3** (>90% FTP): VO2max intervals, sprints, races
-        
+
         **Ideal Distribution** (80/20 Rule):
         - **~75-80%** in Zone 1 (low intensity)
         - **~5-10%** in Zone 2 (threshold)
         - **~15-20%** in Zone 3 (high intensity)
-        
-        This "polarized" approach maximizes aerobic development while minimizing fatigue. 
-        
+
+        This "polarized" approach maximizes aerobic development while minimizing fatigue.
+
         **Common Mistakes**:
         - ❌ Too much Zone 2 (threshold) - accumulates fatigue without clear benefits
         - ❌ Not enough easy miles - limits aerobic base
         - ❌ Not enough high intensity - misses specific adaptations
-        
+
         **Source**: Seiler & Tønnessen (2009), *Intervals, Thresholds, and Long Slow Distance*
         """)
 
@@ -344,76 +400,6 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         st.warning(polarization_msg, icon="⚡")
 
     # ═══════════════════════════════════════════════════════════════════════════
-    # TRAINING TYPE DISTRIBUTION (NEW - Phase 5.6)
-    # ═══════════════════════════════════════════════════════════════════════════
-
-    st.divider()
-    st.subheader("🏋️ Training Type Distribution")
-
-    # Map workout types
-    workout_type_map = {
-        10: "Race",
-        11: "Long Ride/Run",
-        12: "Intervals/Workout",
-        1: "Easy",
-        2: "Tempo",
-        3: "Threshold",
-    }
-
-    if "workout_type" in df.columns:
-        df_workout = df.copy()
-        df_workout["workout_label"] = df_workout["workout_type"].apply(
-            lambda x: workout_type_map.get(int(x), "General")
-            if pd.notna(x)
-            else "General"
-        )
-
-        workout_counts = df_workout["workout_label"].value_counts().reset_index()
-        workout_counts.columns = ["Type", "Count"]
-
-        col1, col2 = st.columns(2)
-
-        with col1:
-            fig_workout = go.Figure(
-                data=[
-                    go.Pie(
-                        labels=workout_counts["Type"],
-                        values=workout_counts["Count"],
-                        marker=dict(
-                            colors=[
-                                "#e74c3c",
-                                "#3498db",
-                                "#f39c12",
-                                "#2ecc71",
-                                "#9b59b6",
-                                "#1abc9c",
-                            ]
-                        ),
-                        hole=0.3,
-                        hovertemplate="<b>%{label}</b><br>%{value} activities (%{percent})<extra></extra>",
-                    )
-                ]
-            )
-
-            fig_workout.update_layout(
-                title="Activities by Workout Type",
-                height=350,
-                showlegend=True,
-                legend=dict(
-                    orientation="v", yanchor="middle", y=0.5, xanchor="left", x=1.02
-                ),
-            )
-            st.plotly_chart(fig_workout, use_container_width=True)
-
-        with col2:
-            st.markdown("**Distribution Summary**")
-            for _, row in workout_counts.iterrows():
-                pct = (row["Count"] / workout_counts["Count"].sum()) * 100
-                st.metric(row["Type"], f"{row['Count']} ({pct:.1f}%)")
-    else:
-        st.info("Workout type data not available")
-
-    # ═══════════════════════════════════════════════════════════════════════════
     # PERIODIZATION CHECK (NEW - Phase 5.6)
     # ═══════════════════════════════════════════════════════════════════════════
 
@@ -437,38 +423,39 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     }
 
     phase = phase_info["phase"]
-    confidence = phase_info["confidence"]
-    description = phase_info["description"]
 
     col1, col2, col3 = st.columns([2, 1, 1])
 
-    with col1:
-        st.markdown(f"### {phase}")
-        st.caption(description)
-        st.progress(confidence, text=f"Confidence: {confidence * 100:.0f}%")
-
-    with col2:
-        st.metric(
-            "Volume Trend",
-            f"{phase_info.get('current_volume_hours', 0):.1f}h",
-            delta=f"{phase_info.get('volume_trend', 0):.1f}%"
-            if phase_info.get("volume_trend")
-            else None,
-        )
-
-    with col3:
-        st.metric(
-            "Intensity (IF)",
-            f"{phase_info.get('current_avg_if', 0):.2f}",
-            delta=f"{phase_info.get('intensity_trend', 0):.1f}%"
-            if phase_info.get("intensity_trend")
-            else None,
-        )
+    value_size = 28
+    render_metric(
+        col1,
+        label="Current Phase",
+        value=phase,
+        help_text="\n".join(key for key, _ in phase_colors.items()),
+        value_size=value_size,
+    )
+    render_metric(
+        col2,
+        label="Volume Trend",
+        value=f"{phase_info.get('current_volume_hours', 0):.1f}h",
+        help_text="Total volume in current period",
+        value_size=value_size,
+    )
+    render_metric(
+        col3,
+        label="Intensity (IF)",
+        value=f"{phase_info.get('current_avg_if', 0):.2f}",
+        help_text="Average Intensity Factor in current period",
+        value_size=value_size,
+    )
 
     # Phase recommendations
     if phase == "Overload (Risky)":
         st.error(
-            "⚠️ **Warning**: Both volume and intensity increasing simultaneously. High injury risk. Consider reducing one parameter.",
+            (
+                "⚠️ **Warning**: Both volume and intensity increasing simultaneously. "
+                "High injury risk. Consider reducing one parameter."
+            ),
             icon="🚨",
         )
     elif phase == "Base Building":
@@ -500,15 +487,35 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     df_cum["cumulative_time_hours"] = df_cum["moving_time"].cumsum() / 3600
     df_cum["cumulative_elevation_m"] = df_cum["total_elevation_gain"].cumsum()
 
+    # Summary stats
+    col1, col2, col3 = st.columns(3)
+    value_size = 28
+    render_metric(
+        col1,
+        label="Total Distance",
+        value=f"{df_cum['cumulative_distance_km'].iloc[-1]:.0f} km",
+        help_text="Total distance covered",
+        value_size=value_size,
+    )
+    render_metric(
+        col2,
+        label="Total Time",
+        value=f"{df_cum['cumulative_time_hours'].iloc[-1]:.0f} hours",
+        help_text="Total moving time",
+        value_size=value_size,
+    )
+    render_metric(
+        col3,
+        label="Total Climbing",
+        value=f"{df_cum['cumulative_elevation_m'].iloc[-1]:.0f} m",
+        help_text="Total elevation gain",
+        value_size=value_size,
+    )
+
     # Create three-panel cumulative chart
     fig_cum = make_subplots(
         rows=3,
         cols=1,
-        subplot_titles=(
-            "Cumulative Distance",
-            "Cumulative Time",
-            "Cumulative Elevation",
-        ),
         vertical_spacing=0.08,
         row_heights=[0.33, 0.33, 0.33],
     )
@@ -572,19 +579,6 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     st.plotly_chart(fig_cum, use_container_width=True)
 
-    # Summary stats
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric(
-            "Total Distance", f"{df_cum['cumulative_distance_km'].iloc[-1]:.0f} km"
-        )
-    with col2:
-        st.metric("Total Time", f"{df_cum['cumulative_time_hours'].iloc[-1]:.0f} hours")
-    with col3:
-        st.metric(
-            "Total Climbing", f"{df_cum['cumulative_elevation_m'].iloc[-1]:.0f} m"
-        )
-
 
 def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
     """
@@ -609,30 +603,33 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     col1, col2, col3 = st.columns(3)
 
-    with col1:
-        st.metric(
-            "Avg Efficiency Factor",
-            f"{physio_stats['avg_efficiency_factor']:.2f}",
-            help="Average EF from steady-state rides (Z2 only)",
-        )
-
-    with col2:
-        st.metric(
-            "Avg Decoupling",
-            f"{physio_stats['avg_decoupling']:.2f}%",
-            help="Average Pw:HR decoupling from steady rides (<5% is good)",
-        )
-
-    with col3:
-        st.metric(
-            "Filtered Activities",
-            f"{physio_stats['filtered_activity_count']}",
-            help="Number of steady-state rides used for analysis",
-        )
+    value_size=32
+    render_metric(
+        col1,
+        label="Avg Efficiency Factor",
+        value=f"{physio_stats['avg_efficiency_factor']:.2f}",
+        help_text="Average EF from steady-state rides (Z2 only)",
+        value_size=value_size,
+    )
+    render_metric(
+        col2,
+        label="Avg Decoupling",
+        value=f"{physio_stats['avg_decoupling']:.2f}%",
+        help_text="Average Pw:HR decoupling from steady rides (<5% is good)",
+        value_size=value_size,
+    )
+    render_metric(
+        col3,
+        label="Filtered Activities",
+        value=f"{physio_stats['filtered_activity_count']}",
+        help_text="Number of steady-state rides used for analysis",
+        value_size=value_size,
+    )
 
     if physio_stats["filtered_activity_count"] == 0:
         st.warning(
-            "No steady-state rides found in this period. Efficiency metrics require rides with IF < 0.75 and no race designation."
+            "No steady-state rides found in this period. Efficiency metrics require "
+            "rides with IF < 0.75 and no race designation."
         )
         return
 
@@ -644,13 +641,50 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     st.subheader("📈 Efficiency Factor Trend")
 
-    # Get efficiency trends with smart filtering
-    ef_trends = analysis_service.get_efficiency_trends(df, filter_steady_state=True)
+    # Filter to Rides only (exclude Runs and other activity types)
+    df_rides = df[df["type"] == "Ride"].copy()
 
-    if ef_trends.empty:
-        st.info("No steady-state activities for efficiency trend analysis.")
+    if df_rides.empty:
+        st.info("No cycling rides available for efficiency trend analysis. Try adjusting your filters.")
     else:
-        # Create scatter plot with trendline
+        # Get efficiency trends with smart filtering (using rides-only data)
+        ef_trends = analysis_service.get_efficiency_trends(df_rides, filter_steady_state=True)
+
+        if ef_trends.empty:
+            st.info("No steady-state cycling rides for efficiency trend analysis.")
+        else:
+            # Calculate thresholds dynamically based on DISPLAYED data (not hardcoded!)
+            # This ensures percentiles match the actual time range being viewed
+            import numpy as np
+            ef_values = ef_trends["efficiency_factor"].values
+            threshold_poor = np.percentile(ef_values, 25)      # Bottom 25%
+            threshold_moderate = np.percentile(ef_values, 66)  # Middle 66%
+            threshold_good = np.percentile(ef_values, 90)      # Top 10%
+
+            # Create discrete color categories based on DATA-DRIVEN thresholds
+            def categorize_ef(val):
+                if val > threshold_good:
+                    return "Excellent"
+                elif val > threshold_moderate:
+                    return "Good"
+                elif val > threshold_poor:
+                    return "Moderate"
+                else:
+                    return "Poor"
+
+        ef_trends["ef_category"] = ef_trends["efficiency_factor"].apply(categorize_ef)
+
+        # Define discrete colors
+        ef_color_map = {
+            "Excellent": "#28a745",
+            "Good": "#17a2b8",
+            "Moderate": "#ffc107",
+            "Poor": "#dc3545"
+        }
+
+        ef_trends["color"] = ef_trends["ef_category"].map(ef_color_map)
+
+        # Create scatter plot with discrete colors
         fig = go.Figure()
 
         fig.add_trace(
@@ -659,9 +693,37 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 y=ef_trends["efficiency_factor"],
                 mode="markers",
                 name="Efficiency Factor",
-                marker=dict(size=8, color="#17a2b8"),
+                marker=dict(size=8, color=ef_trends["color"]),
                 hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
             )
+        )
+
+        # Add threshold reference lines (using dynamic thresholds)
+        fig.add_hline(
+            y=threshold_good,
+            line_dash="dash",
+            line_color="#28a745",
+            line_width=2,
+            annotation_text=f"Excellent ({threshold_good:.2f})",
+            annotation_position="right",
+        )
+
+        fig.add_hline(
+            y=threshold_moderate,
+            line_dash="dash",
+            line_color="#17a2b8",
+            line_width=2,
+            annotation_text=f"Good ({threshold_moderate:.2f})",
+            annotation_position="right",
+        )
+
+        fig.add_hline(
+            y=threshold_poor,
+            line_dash="dash",
+            line_color="#ffc107",
+            line_width=2,
+            annotation_text=f"Moderate ({threshold_poor:.2f})",
+            annotation_position="right",
         )
 
         # Add trendline if enough data points
@@ -687,7 +749,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                         y=trendline_y,
                         mode="lines",
                         name="Trend",
-                        line=dict(color="rgba(23, 162, 184, 0.5)", dash="dash"),
+                        line=dict(color="rgba(0, 0, 0, 0.3)", dash="dash", width=2),
                         hovertemplate="Trend: %{y:.2f}<extra></extra>",
                     )
                 )
@@ -711,6 +773,71 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
         st.plotly_chart(fig, use_container_width=True)
 
+        # EF interpretation (using dynamic thresholds)
+        avg_ef = ef_trends["efficiency_factor"].mean()
+        if avg_ef > threshold_good:
+            st.success(
+                f"✅ **Excellent aerobic power** - Top 10% for this period (> {threshold_good:.2f})",
+                icon="💪",
+            )
+        elif avg_ef > threshold_moderate:
+            st.success(
+                f"✅ **Good aerobic power** - Above average for this period ({threshold_moderate:.2f}-{threshold_good:.2f})",
+                icon="👍",
+            )
+        elif avg_ef > threshold_poor:
+            st.info(
+                f"ℹ️ **Moderate aerobic power** - Typical for this period ({threshold_poor:.2f}-{threshold_moderate:.2f})",
+                icon="📊",
+            )
+        else:
+            st.warning(
+                f"⚠️ **Below average** - Bottom 25% for this period (< {threshold_poor:.2f})", icon="🏃"
+            )
+
+    # Educational note about Efficiency Factor
+    with st.expander("ℹ️ Understanding Efficiency Factor (EF)", expanded=False):
+        st.markdown(f"""
+        **Efficiency Factor** is a measure of your aerobic power output relative
+            to heart rate effort.
+
+        **Formula**: EF = Average Power (W) ÷ Average Heart Rate (bpm)
+
+        **What it means**:
+        - Higher EF = more power output for the same heart rate effort
+        - Indicates improved aerobic efficiency and fitness
+        - Typical range: 1.5-2.0 W/bpm for most trained cyclists
+
+        **Your performance categories** (based on rides in the current view):
+        - **Excellent (> {threshold_good:.2f} W/bpm)**: Top 10% - your best rides
+            in this period
+        - **Good ({threshold_moderate:.2f}-{threshold_good:.2f} W/bpm)**: 66-90th
+            percentile - above average
+        - **Moderate ({threshold_poor:.2f}-{threshold_moderate:.2f} W/bpm)**:
+            25-66th percentile - typical performance
+        - **Poor (< {threshold_poor:.2f} W/bpm)**: Bottom 25% - below your standard
+            for this period
+
+        **Why it matters**:
+        - Tracks your aerobic fitness gains over time
+        - Shows if your training is building aerobic capacity efficiently
+        - Better fitness = more power for the same heart rate effort
+
+        **How to improve**:
+        - **Zone 2 base building**: Most effective for aerobic development
+        - **Long, steady efforts**: 60-180 min rides build aerobic capacity
+        - **Consistency**: Regular training matters more than intensity
+        - **Recovery**: Adequate sleep and stress management support fitness gains
+        - **Avoid overtraining**: Excessive hard efforts can impair aerobic development
+
+        **Note**: EF is personal and sport-specific. These thresholds are
+        **dynamically calculated** from the cycling rides displayed in your current
+        time range. Compare your rides to your own performance, not external standards.
+
+        **Data shown**: Only steady-state cycling rides (IF < 0.75, non-race) with
+        power meter data
+        """)
+
     st.divider()
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -719,7 +846,30 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     st.subheader("💔 Power:HR Decoupling")
 
-    if not ef_trends.empty and "decoupling" in ef_trends.columns:
+    if 'ef_trends' in locals() and not ef_trends.empty and "decoupling" in ef_trends.columns:
+        # Create discrete color categories (mirroring cardiac drift categories)
+        def categorize_decoupling(val):
+            if val > -3:
+                return "Excellent"
+            elif val > -5:
+                return "Good"
+            elif val > -8:
+                return "Moderate"
+            else:
+                return "Poor"
+
+        ef_trends["decoupling_category"] = ef_trends["decoupling"].apply(categorize_decoupling)
+
+        # Define discrete colors
+        color_map = {
+            "Excellent": "#28a745",
+            "Good": "#17a2b8",
+            "Moderate": "#ffc107",
+            "Poor": "#dc3545"
+        }
+
+        ef_trends["color"] = ef_trends["decoupling_category"].map(color_map)
+
         fig = go.Figure()
 
         fig.add_trace(
@@ -730,21 +880,37 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 name="Decoupling",
                 marker=dict(
                     size=8,
-                    color=ef_trends["decoupling"],
-                    colorscale=[[0, "#28a745"], [0.05, "#ffc107"], [1, "#dc3545"]],
-                    showscale=True,
-                    colorbar=dict(title="Decoupling %"),
+                    color=ef_trends["color"],
                 ),
                 hovertemplate="<b>%{x}</b><br>Decoupling: %{y:.2f}%<extra></extra>",
             )
         )
 
-        # Add reference line at 5% (good threshold)
+        # Add threshold reference lines
         fig.add_hline(
-            y=5,
+            y=-3,
             line_dash="dash",
-            line_color="orange",
-            annotation_text="5% threshold (good endurance)",
+            line_color="#28a745",
+            line_width=2,
+            annotation_text="Excellent (-3%)",
+            annotation_position="right",
+        )
+
+        fig.add_hline(
+            y=-5,
+            line_dash="dash",
+            line_color="#17a2b8",
+            line_width=2,
+            annotation_text="Good (-5%)",
+            annotation_position="right",
+        )
+
+        fig.add_hline(
+            y=-8,
+            line_dash="dash",
+            line_color="#ffc107",
+            line_width=2,
+            annotation_text="Moderate (-8%)",
             annotation_position="right",
         )
 
@@ -759,20 +925,231 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
         # Decoupling interpretation
         avg_decoupling = ef_trends["decoupling"].mean()
-        if avg_decoupling < 5:
+        if avg_decoupling > -3:
             st.success(
-                "✅ **Excellent aerobic endurance** - Decoupling consistently under 5%",
+                "✅ **Excellent aerobic endurance** - Minimal efficiency drop (< 3%)",
                 icon="💪",
             )
-        elif avg_decoupling < 8:
+        elif avg_decoupling > -5:
+            st.success(
+                "✅ **Good aerobic endurance** - Low efficiency decline",
+                icon="👍",
+            )
+        elif avg_decoupling > -8:
             st.info(
-                "ℹ️ **Good endurance** - Room for improvement in aerobic efficiency",
+                "ℹ️ **Moderate drift** - Room for improvement in aerobic base",
                 icon="📈",
             )
         else:
             st.warning(
-                "⚠️ **Work on aerobic base** - Consider more Z2 volume", icon="🏃"
+                "⚠️ **Significant drift** - Focus on building aerobic endurance", icon="🏃"
             )
+
+        # Educational note about Power:HR Decoupling
+        with st.expander("ℹ️ Understanding Power:HR Decoupling", expanded=False):
+            st.markdown("""
+            **Power:HR Decoupling** measures how your Efficiency Factor (Power/HR)
+            changes from the first half to the second half of a ride.
+
+            **Formula**: Decoupling % = (2nd Half EF - 1st Half EF) / 1st Half EF × 100
+
+            **What it means**:
+            - **Negative values** = EF decreased = HR drifted upward for same
+                power output (normal fatigue)
+            - **Positive values** = EF increased = HR stayed lower = unusual
+                (better in 2nd half)
+            - More negative = more cardiac drift = less aerobic endurance
+
+            **Interpretation** (typical values are negative):
+            - **> -3%**: Excellent aerobic endurance (minimal EF drop/HR drift)
+            - **-3% to -5%**: Good endurance fitness
+            - **-5% to -8%**: Moderate drift (room for improvement)
+            - **> -5%**: Excellent aerobic endurance (minimal EF drop/HR drift)
+            - **-5% to -8%**: Good endurance fitness
+            - **< -8%**: Significant fatigue/drift (work on aerobic base)
+
+            **What causes EF to drop (HR to drift up)**:
+            - Depletion of muscle glycogen (carbohydrate stores)
+            - Accumulation of lactate and metabolic byproducts
+            - Dehydration and rising core temperature
+            - Increased sympathetic nervous system activation
+            - Less aerobic base = more reliance on glycolytic metabolism
+
+            **How to improve** (minimize negative decoupling):
+            - **More Z2 volume**: Build deep aerobic base for glycogen sparing
+            - **Better fueling**: Take in carbs during rides > 90 min (60-90g/hr)
+            - **Hydration**: Maintain fluid balance to prevent cardiac drift
+            - **Recovery**: Adequate sleep and stress management
+            - **Long, steady rides**: Trains your body to maintain efficiency
+
+            **Note**: This metric tracks EF decline, not raw HR drift. Values near
+            zero or slightly positive indicate excellent endurance.
+
+            **Data shown**: Only steady-state rides (IF < 0.75, non-race) with
+            power meter data
+            """)
+
+    st.divider()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CARDIAC DRIFT ANALYSIS
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    st.subheader("💓 Cardiac Drift")
+
+    if 'ef_trends' in locals() and not ef_trends.empty and "cardiac_drift" in ef_trends.columns:
+        # Filter out zero/NaN cardiac drift values
+        drift_data = ef_trends[
+            ef_trends["cardiac_drift"].notna() & (ef_trends["cardiac_drift"] > 0)
+        ].copy()
+
+        if drift_data.empty:
+            st.info("No cardiac drift data available for this period.")
+        else:
+            # Create discrete color categories (positive values = drift occurred)
+            def categorize_drift(val):
+                if val < 3:
+                    return "Excellent"
+                elif val < 5:
+                    return "Good"
+                elif val < 8:
+                    return "Moderate"
+                else:
+                    return "Poor"
+
+            drift_data["drift_category"] = drift_data["cardiac_drift"].apply(categorize_drift)
+
+            # Define discrete colors
+            drift_color_map = {
+                "Excellent": "#28a745",
+                "Good": "#17a2b8",
+                "Moderate": "#ffc107",
+                "Poor": "#dc3545"
+            }
+
+            drift_data["color"] = drift_data["drift_category"].map(drift_color_map)
+
+            fig = go.Figure()
+
+            fig.add_trace(
+                go.Scatter(
+                    x=drift_data["date"],
+                    y=drift_data["cardiac_drift"],
+                    mode="markers",
+                    name="Cardiac Drift",
+                    marker=dict(
+                        size=8,
+                        color=drift_data["color"],
+                    ),
+                    hovertemplate="<b>%{x}</b><br>Cardiac Drift: %{y:.2f}%<extra></extra>",
+                )
+            )
+
+            # Add threshold reference lines
+            fig.add_hline(
+                y=3,
+                line_dash="dash",
+                line_color="#28a745",
+                line_width=2,
+                annotation_text="Excellent (3%)",
+                annotation_position="right",
+            )
+
+            fig.add_hline(
+                y=5,
+                line_dash="dash",
+                line_color="#17a2b8",
+                line_width=2,
+                annotation_text="Good (5%)",
+                annotation_position="right",
+            )
+
+            fig.add_hline(
+                y=8,
+                line_dash="dash",
+                line_color="#ffc107",
+                line_width=2,
+                annotation_text="Moderate (8%)",
+                annotation_position="right",
+            )
+
+            fig.update_layout(
+                height=400,
+                xaxis_title="Date",
+                yaxis_title="Cardiac Drift (%)",
+                hovermode="closest",
+            )
+
+            st.plotly_chart(fig, use_container_width=True)
+
+            # Drift interpretation
+            avg_drift = drift_data["cardiac_drift"].mean()
+            if avg_drift < 3:
+                st.success(
+                    "✅ **Excellent aerobic fitness** - Minimal cardiac drift (< 3%)",
+                    icon="💪",
+                )
+            elif avg_drift < 5:
+                st.success(
+                    "✅ **Good aerobic fitness** - Low cardiac drift",
+                    icon="👍",
+                )
+            elif avg_drift < 8:
+                st.info(
+                    "ℹ️ **Moderate drift** - Room for improvement in aerobic base",
+                    icon="📈",
+                )
+            else:
+                st.warning(
+                    "⚠️ **Significant drift** - Focus on building aerobic endurance", icon="🏃"
+                )
+
+            # Educational note about Cardiac Drift
+            with st.expander("ℹ️ Understanding Cardiac Drift", expanded=False):
+                st.markdown("""
+                **Cardiac Drift** measures how much your heart rate increases relative
+                to power output during a ride.
+
+                **Formula**: Drift % = (1st Half EF - 2nd Half EF) / 1st Half EF × 100
+
+                **What it means**:
+                - **Positive values** = EF decreased = HR drifted upward for same power output
+                - **Higher values** = more cardiac drift = less aerobic fitness
+                - This is the **inverse** of Power:HR Decoupling (same physiological
+                    phenomenon, opposite sign)
+
+                **Interpretation** (typical values are positive):
+                - **< 3%**: Excellent aerobic fitness (minimal HR drift)
+                - **3-5%**: Good aerobic fitness
+                - **5-8%**: Moderate drift (room for improvement)
+                - **> 8%**: Significant drift (work on aerobic base)
+
+                **What causes cardiac drift**:
+                - Depletion of muscle glycogen (carbohydrate stores)
+                - Accumulation of lactate and metabolic byproducts
+                - Dehydration and rising core temperature
+                - Increased sympathetic nervous system activation
+                - Less aerobic base = more reliance on glycolytic metabolism
+
+                **How to improve** (minimize cardiac drift):
+                - **More Z2 volume**: Build deep aerobic base for glycogen sparing
+                - **Better fueling**: Take in carbs during rides > 90 min (60-90g/hr)
+                - **Hydration**: Maintain fluid balance to prevent cardiac drift
+                - **Recovery**: Adequate sleep and stress management
+                - **Long, steady rides**: Trains your body to maintain efficiency
+
+                **Relationship to Decoupling**:
+                - Cardiac Drift = (1st - 2nd) / 1st × 100 → **positive** values
+                    indicate drift
+                - Power:HR Decoupling = (2nd - 1st) / 1st × 100 → **negative**
+                    values indicate drift
+                - They measure the same thing with opposite mathematical signs
+
+                **Data shown**: Only steady-state rides (IF < 0.75, non-race)
+                with power meter data
+                """)
+    else:
+        st.info("No cardiac drift data available for this period.")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # DAILY INTENSITY PATTERN (Phase 5.7 - NEW)
@@ -884,12 +1261,28 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
             hard_days = len(daily_if[daily_if["avg_if"] >= 0.90])
 
             col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Recovery Days", recovery_days, help="IF < 0.55")
-            with col2:
-                st.metric("Endurance Days", endurance_days, help="0.55 ≤ IF < 0.75")
-            with col3:
-                st.metric("Hard Days", hard_days, help="IF ≥ 0.90")
+            value_size = 32
+            render_metric(
+                col1,
+                label="Recovery Days",
+                value=recovery_days,
+                help_text="Number of easy days with IF < 0.55",
+                value_size=value_size,
+            )
+            render_metric(
+                col2,
+                label="Endurance Days",
+                value=endurance_days,
+                help_text="Number of moderate days with 0.55 ≤ IF < 0.75",
+                value_size=value_size,
+            )
+            render_metric(
+                col3,
+                label="Hard Days",
+                value=hard_days,
+                help_text="Number of hard days with IF ≥ 0.90",
+                value_size=value_size,
+            )
 
             # Provide guidance
             total_days = len(daily_if)
@@ -899,7 +1292,10 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
                 if hard_ratio > 0.4:
                     st.warning(
-                        "⚠️ **High hard day frequency** - Consider more recovery/endurance days to prevent overtraining",
+                        (
+                            "⚠️ **High hard day frequency** - Consider more recovery"
+                            "/endurance days to prevent overtraining"
+                        ),
                         icon="🔴",
                     )
                 elif recovery_ratio < 0.2 and total_days >= 7:
@@ -1017,7 +1413,8 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                         cols=1,
                         row_heights=[0.7, 0.3],
                         subplot_titles=(
-                            "Weekly TID Distribution",
+                            # "Weekly TID Distribution",
+                            "",
                             "Polarization Index",
                         ),
                         vertical_spacing=0.15,
@@ -1122,45 +1519,72 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                         else "decreasing"
                     )
 
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric(
-                            "Avg Polarization Index",
-                            f"{avg_polarization:.2f}",
-                            help="(Z1+Z3)/Z2 ratio. Higher = more polarized (good)",
+                    col1 = st.columns(1)[0]
+                    render_metric(
+                        col1,
+                        label="Avg Polarization Index",
+                        value=f"{avg_polarization:.2f}",
+                        help_text="(Z1+Z3)/Z2 ratio. Higher = more polarized (good)",
+                        value_size=32,
+
+                    )
+                    if avg_polarization >= 3.0:
+                        st.success(
+                            f"✅ **Highly polarized training**",
+                            icon="💪",
                         )
-                    with col2:
-                        if avg_polarization >= 3.0:
-                            st.success(
-                                f"✅ **Highly polarized training** - Trend: {polarization_trend}",
-                                icon="💪",
-                            )
-                        elif avg_polarization >= 2.0:
-                            st.info(
-                                f"ℹ️ **Moderately polarized** - Trend: {polarization_trend}",
-                                icon="📈",
-                            )
-                        else:
-                            st.warning(
-                                f"⚠️ **Low polarization** - Consider 80/20 approach: more Z1/Z2, less threshold",
-                                icon="📘",
-                            )
+                    elif avg_polarization >= 2.0:
+                        st.info(
+                            f"ℹ️ **Moderately polarized**",
+                            icon="📈",
+                        )
+                    else:
+                        st.warning(
+                            (
+                                f"⚠️ **Low polarization** - Consider 80/20 approach: "
+                                "more Z1/Z2, less threshold"
+                            ),
+                            icon="📘",
+                        )
+                    # with col2:
+                    #     if avg_polarization >= 3.0:
+                    #         st.success(
+                    #             f"✅ **Highly polarized training**",
+                    #             icon="💪",
+                    #         )
+                    #     elif avg_polarization >= 2.0:
+                    #         st.info(
+                    #             f"ℹ️ **Moderately polarized**",
+                    #             icon="📈",
+                    #         )
+                    #     else:
+                    #         st.warning(
+                    #             (
+                    #                 f"⚠️ **Low polarization** - Consider 80/20 approach: "
+                    #                 "more Z1/Z2, less threshold"
+                    #             ),
+                    #             icon="📘",
+                    #         )
+                    st.info(f"Trend: {polarization_trend}")
 
                     # Educational note
                     with st.expander("ℹ️ Understanding Polarized Training"):
                         st.markdown("""
-                        **Polarized Training** means spending most time at LOW or HIGH intensity, avoiding the "middle zone":
-                        
+                        **Polarized Training** means spending most time at LOW
+                        or HIGH intensity, avoiding the "middle zone":
+
                         - **~75-80%** in Z1-Z2 (Low/Moderate intensity)
                         - **~5-10%** in Z2 (Threshold/Tempo)
                         - **~15-20%** in Z3+ (High intensity intervals)
-                        
+
                         **Polarization Index**: Ratio of (Z1+Z3) time to Z2 time
                         - **>3.0**: Highly polarized (ideal for most athletes)
                         - **2.0-3.0**: Moderately polarized
                         - **<2.0**: Too much threshold work (common mistake)
-                        
-                        **Why it works**: Low intensity builds aerobic base without excessive fatigue. High intensity provides specific adaptations. Middle zones accumulate fatigue without clear benefits.
+
+                        **Why it works**: Low intensity builds aerobic base without
+                        excessive fatigue. High intensity provides specific adaptations.
+                        Middle zones accumulate fatigue without clear benefits.
                         """)
 
 
@@ -1319,22 +1743,27 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
                     )
 
         if best_efforts:
-            # Display efforts with clickable dates
-            for effort in best_efforts:
-                col_dur, col_pow, col_link = st.columns([2, 2, 1.5])
-                with col_dur:
-                    st.text(effort["Duration"])
-                with col_pow:
-                    st.text(f"{effort['Power (W)']} W")
-                with col_link:
-                    if effort["ID"] is not None:
-                        if st.button(
-                            effort["Date"],
-                            key=f"pc_{effort['ID']}_{effort['Duration']}",
-                            use_container_width=True,
-                        ):
-                            st.session_state.selected_activity_id = effort["ID"]
-                            st.switch_page("pages/3_detail.py")
+            # Display as a scrollable table with clickable dates
+            df_efforts = pd.DataFrame(best_efforts)
+
+            # Create a column with activity URLs for LinkColumn pointing to detail page
+            df_efforts["Activity URL"] = df_efforts.apply(
+                lambda row: f"/detail?activity_id={row['ID']}" if row["ID"] is not None else "",
+                axis=1
+            )
+
+            st.markdown("**Best Efforts**")
+            st.dataframe(
+                df_efforts[["Duration", "Power (W)", "Date", "Activity URL"]],
+                column_config={
+                    "Duration": st.column_config.Column("Duration"),
+                    "Power (W)": st.column_config.NumberColumn("Power (W)", format="%d W"),
+                    "Date": st.column_config.Column("Date"),
+                    "Activity URL": st.column_config.LinkColumn("Activity", display_text="link"),
+                },
+                hide_index=True,
+                use_container_width=True,
+            )
         else:
             st.info("No data")
 
@@ -1346,39 +1775,49 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
 
     col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        sprint = power_curve.get("power_curve_5sec", 0)
-        st.metric("5s (Sprint)", format_watts(sprint), help="Anaerobic power")
+    render_metric(
+        col1,
+        label="5s (Sprint)",
+        value=format_watts(power_curve.get("power_curve_5sec", 0)),
+        help_text="Anaerobic power",
+    )
 
-    with col2:
-        vo2 = power_curve.get("power_curve_5min", 0)
-        st.metric("5min (VO2max)", format_watts(vo2), help="VO2 max power")
+    render_metric(
+        col2,
+        label="5min (VO2max)",
+        value=format_watts(power_curve.get("power_curve_5min", 0)),
+        help_text="VO2 max power",
+    )
 
-    with col3:
-        ftp_est = (
+    render_metric(
+        col3,
+        label="FTP (20min×0.95)",
+        value=format_watts(
             power_curve.get("power_curve_20min", 0) * 0.95
             if power_curve.get("power_curve_20min", 0) > 0
             else 0
-        )
-        st.metric(
-            "FTP (20min×0.95)",
-            format_watts(ftp_est),
-            help="Estimated FTP from 20min power",
-        )
+        ),
+        help_text="Estimated FTP from 20min power",
+    )
 
-    with col4:
-        endurance = power_curve.get("power_curve_1hr", 0)
-        st.metric("1hr (Endurance)", format_watts(endurance), help="Sustainable power")
+    render_metric(
+        col4,
+        label="1hr (Endurance)",
+        value=format_watts(power_curve.get("power_curve_1hr", 0)),
+        help_text="Sustainable power",
+    )
 
     # Power Curve Educational Content (Phase 5.9)
     with st.expander("ℹ️ Understanding Your Power Curve"):
         st.markdown("""
         **What is a Power Curve?**
-        
-        Your power curve (also called Mean Maximum Power or MMP) shows the highest average power you can sustain for different durations. It's like a "personal best" chart for power output.
-        
+
+        Your power curve (also called Mean Maximum Power or MMP) shows the highest
+        average power you can sustain for different durations. It's like a "personal
+        best" chart for power output.
+
         **Key Durations & What They Mean**:
-        
+
         - **1-5 seconds**: **Neuromuscular Power** - Pure sprint capability, largely genetic
         - **5-10 seconds**: **Anaerobic Capacity** - Sprint finishing power
         - **1-2 minutes**: **Anaerobic Threshold** - Track sprint / finishing kick power
@@ -1386,23 +1825,23 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
         - **20 minutes**: **Functional Threshold Power** - FTP estimate (multiply by 0.95)
         - **1 hour**: **Sustained Threshold** - True FTP / time trial power
         - **6+ hours**: **Endurance Power** - Gran fondo / ultra-distance capability
-        
+
         **How to Improve Each Zone**:
-        
+
         - **Sprint (1-10s)**: Sprint intervals, track work, power starts
         - **VO2max (3-8min)**: 4-6 minute intervals at 105-120% FTP
         - **FTP (20-60min)**: Sweet spot (88-93% FTP), threshold intervals
         - **Endurance (1+ hrs)**: Long Z2 rides, base training
-        
+
         **What's "Good"?**
-        
+
         Power-to-weight ratios (W/kg) for FTP:
         - **5.0+ W/kg**: World Tour professional
         - **4.0-5.0 W/kg**: Elite amateur / domestic pro
         - **3.0-4.0 W/kg**: Competitive racer
         - **2.5-3.0 W/kg**: Strong recreational cyclist
         - **<2.5 W/kg**: Developing fitness
-        
+
         **Source**: Coggan Power Profile, Allen & Coggan (2010)
         """)
 
@@ -1571,11 +2010,14 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     col1, col2, col3 = st.columns(3)
 
+    value_size = 24
     with col1:
-        st.metric(
-            "Rest Days",
-            f"{recovery['rest_days']}",
-            help=HELP_TEXTS.get("rest_days", "Days with TSS < 20"),
+        render_metric(
+            col1,
+            label="Rest Days",
+            value=recovery["rest_days"],
+            help_text="Days with TSS < 20",
+            value_size=value_size,
         )
         if recovery["rest_days"] >= 2:
             st.success("✅ Adequate recovery")
@@ -1586,12 +2028,14 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     with col2:
         monotony = recovery["monotony_index"]
-        st.metric(
-            "Monotony Index",
-            f"{monotony:.2f}",
-            help=HELP_TEXTS.get(
+        render_metric(
+            col2,
+            label="Monotony Index",
+            value=f"{monotony:.2f}",
+            help_text=HELP_TEXTS.get(
                 "monotony_index", "Daily TSS variability. Lower = more varied training"
             ),
+            value_size=value_size,
         )
         if monotony < 1.5:
             st.success("✅ Low risk")
@@ -1602,12 +2046,14 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     with col3:
         strain = recovery["strain_index"]
-        st.metric(
-            "Strain Index",
-            f"{strain:.0f}",
-            help=HELP_TEXTS.get(
+        render_metric(
+            col3,
+            label="Strain Index",
+            value=f"{strain:.0f}",
+            help_text=HELP_TEXTS.get(
                 "strain_index", "Weekly TSS × Monotony. Combines load and variation"
             ),
+            value_size=value_size,
         )
         if strain < 3000:
             st.success("✅ Manageable")
@@ -1622,19 +2068,20 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
         **Monotony Index:**
         - <1.5: ✅ Safe - Good training variety
         - 1.5-2.0: ⚠️ Monitor - Moderate risk of overtraining
-        - >2.0: 🔴 High risk - Training too repetitive
+        - \\>2.0: 🔴 High risk - Training too repetitive
 
         **Strain Index:**
         - <3000: ✅ Appropriate load
         - 3000-6000: ⚠️ Moderate - Monitor recovery
-        - >6000: 🔴 High - Prioritize recovery
+        - \\>6000: 🔴 High - Prioritize recovery
 
         **Rest Days:**
         - 2+: ✅ Adequate recovery for most athletes
         - 1: ⚠️ May need more rest depending on intensity
         - 0: 🔴 Critical - Recovery day needed immediately
-        
-        **Source**: Foster (1998), Monitoring training in athletes with reference to overtraining syndrome
+
+        **Source**: Foster (1998), Monitoring training in athletes with reference
+        to overtraining syndrome
         """)
 
     st.divider()
@@ -1703,12 +2150,25 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
         # Daily stats
         col1, col2, col3 = st.columns(3)
-        with col1:
-            st.metric("Avg Daily TSS", f"{recovery['avg_daily_tss']:.0f}")
-        with col2:
-            st.metric("Max Daily TSS", f"{recovery['max_daily_tss']:.0f}")
-        with col3:
-            st.metric("Total TSS", f"{recovery['weekly_tss']:.0f}")
+        value_size = 32
+        render_metric(
+            col1,
+            label="Avg Daily TSS",
+            value=f"{recovery['avg_daily_tss']:.0f}",
+            value_size=value_size,
+        )
+        render_metric(
+            col2,
+            label="Max Daily TSS",
+            value=f"{recovery['max_daily_tss']:.0f}",
+            value_size=value_size,
+        )
+        render_metric(
+            col3,
+            label="Total TSS",
+            value=f"{recovery['weekly_tss']:.0f}",
+            value_size=value_size,
+        )
 
     st.divider()
 
@@ -1797,52 +2257,57 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
         latest = pmc_data.iloc[-1]
         col1, col2, col3 = st.columns(3)
 
-        with col1:
-            st.metric(
-                "Current CTL",
-                f"{latest['ctl']:.0f}",
-                help="Chronic Training Load (42-day avg)",
-            )
+        value_size = 32
+        render_metric(
+            col1,
+            label="Current CTL",
+            value=f"{latest['ctl']:.0f}",
+            help_text="Chronic Training Load (42-day avg)",
+            value_size=value_size,
+        )
+        render_metric(
+            col2,
+            label="Current ATL",
+            value=f"{latest['atl']:.0f}",
+            help_text="Acute Training Load (7-day avg)",
+            value_size=value_size,
+        )
+        render_metric(
+            col3,
+            label="Current TSB",
+            value=f"{latest['tsb']:.0f}",
+            help_text="Training Stress Balance (CTL - ATL)",
+            value_size=value_size,
+        )
 
-        with col2:
-            st.metric(
-                "Current ATL",
-                f"{latest['atl']:.0f}",
-                help="Acute Training Load (7-day avg)",
-            )
-
-        with col3:
-            tsb = latest["tsb"]
-            st.metric(
-                "Current TSB", f"{tsb:.0f}", help="Training Stress Balance (CTL - ATL)"
-            )
-
-            if -30 <= tsb <= -10:
-                st.success("✅ Race Ready Zone", icon="🏁")
-            elif tsb < -30:
-                st.error("⚠️ Overreached - Recovery needed", icon="🛑")
-            elif tsb > 5:
-                st.info("📈 Fresh - Good for hard training", icon="💪")
+        tsb = latest["tsb"]
+        if -30 <= tsb <= -10:
+            st.success("✅ Race Ready Zone", icon="🏁")
+        elif tsb < -30:
+            st.error("⚠️ Overreached - Recovery needed", icon="🛑")
+        elif tsb > 5:
+            st.info("📈 Fresh - Good for hard training", icon="💪")
 
         # PMC Educational Content (Phase 5.9)
         with st.expander("ℹ️ Understanding the Performance Management Chart"):
             st.markdown("""
             **What is PMC?**
-            
-            The Performance Management Chart tracks your training load and recovery state using three metrics:
-            
+
+            The Performance Management Chart tracks your training load and recovery
+            state using three metrics:
+
             **CTL (Chronic Training Load) - "Fitness"**
             - 42-day exponentially weighted average of daily TSS
             - Formula: Today's CTL = Yesterday's CTL + (Today's TSS - Yesterday's CTL) / 42
             - Represents your long-term fitness level
             - Higher CTL = better aerobic fitness (but slower to build)
-            
+
             **ATL (Acute Training Load) - "Fatigue"**
             - 7-day exponentially weighted average of daily TSS
             - Formula: Today's ATL = Yesterday's ATL + (Today's TSS - Yesterday's ATL) / 7
             - Represents recent training stress
             - Spikes quickly with hard training
-            
+
             **TSB (Training Stress Balance) - "Form"**
             - Formula: TSB = CTL - ATL
             - Represents your current recovery state:
@@ -1850,13 +2315,13 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
               * **TSB -10 to +5**: Neutral - Normal training
               * **TSB -30 to -10**: Race Ready - Optimal performance zone
               * **TSB < -30**: Overreached - Recovery needed immediately
-            
+
             **How to Use It**:
             - Build CTL gradually during base/build phases (3-5 TSS/day increase)
             - Taper for races: Reduce volume 2-3 weeks out to let TSB rise into race-ready zone
             - Monitor ATL spikes: Sudden increases = injury/burnout risk
             - Never let TSB drop below -30 for extended periods
-            
+
             **Source**: Coggan (2003), *Training and Racing with a Power Meter*
             """)
     else:
@@ -1875,38 +2340,45 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     if recovery["monotony_index"] > 2.0:
         recommendations.append(
-            "🎯 **Add Training Variety**: High monotony detected. Mix up your workout types and intensities."
+            "🎯 **Add Training Variety**: High monotony detected. Mix up your "
+            "workout types and intensities."
         )
 
     if recovery["strain_index"] > 6000:
         recommendations.append(
-            "⚠️ **Reduce Load**: Very high strain index. Consider taking an easy week or rest days."
+            "⚠️ **Reduce Load**: Very high strain index. Consider taking an easy "
+            "week or rest days."
         )
 
     if recovery["rest_days"] < 2:
         recommendations.append(
-            "💤 **Schedule Rest**: You need at least 2 rest/easy days per week for optimal recovery."
+            "💤 **Schedule Rest**: You need at least 2 rest/easy days per week "
+            "for optimal recovery."
         )
 
     if pmc_data is not None and not pmc_data.empty:
         latest_tsb = pmc_data.iloc[-1]["tsb"]
         if latest_tsb < -30:
             recommendations.append(
-                "🛑 **Recovery Week Needed**: TSB < -30 indicates overreaching. Take 3-5 easy days."
+                "🛑 **Recovery Week Needed**: TSB < -30 indicates overreaching. "
+                "Take 3-5 easy days."
             )
         elif latest_tsb > 10:
             recommendations.append(
-                "💪 **Good Time for Hard Training**: TSB > 10 indicates you're fresh and recovered."
+                "💪 **Good Time for Hard Training**: TSB > 10 indicates you're "
+                "fresh and recovered."
             )
 
     if recovery["max_daily_tss"] > 400:
         recommendations.append(
-            "📊 **Monitor Big Days**: Very high TSS days (>400) require 48+ hours recovery."
+            "📊 **Monitor Big Days**: Very high TSS days (>400) require 48+ hours "
+            "recovery."
         )
 
     if not recommendations:
         recommendations.append(
-            "✅ **Balanced Training**: Your recovery metrics look good. Keep up the current approach!"
+            "✅ **Balanced Training**: Your recovery metrics look good. Keep up the "
+            "current approach!"
         )
 
     for rec in recommendations:
@@ -1926,7 +2398,7 @@ def main():
     with st.expander("ℹ️ How to use this page", expanded=False):
         st.markdown("""
         This **unified analysis page** replaces the old separate Year/Month/Week pages with a flexible "zoomable" interface.
-        
+
         **How it works:**
         1. **Select a Time Range** (Last 4 Weeks, This Year, Custom, etc.)
         2. **Choose a View Mode**:
@@ -1934,7 +2406,7 @@ def main():
            - **Physiology**: Efficiency Factor, Decoupling, Daily intensity patterns
            - **Power Profile**: Power curve, Peak power benchmarks, Best performances
            - **Recovery**: Monotony/Strain metrics, PMC (CTL/ATL/TSB), Training recommendations
-        
+
         **New in v2.0:**
         - 🆕 Recovery view with Monotony Index, Strain Index, and PMC tracking
         - 📊 Weekly TID Evolution (for periods >4 weeks) with polarization analysis
@@ -1942,16 +2414,32 @@ def main():
         - 🏆 Best Performances table in Power Profile view
         - 🎯 Training Type Distribution and Periodization Check in Overview
         - 📚 Educational expanders throughout with scientific references
-        
+
         **Tip**: Use custom date ranges to analyze specific training blocks or compare periods!
         """)
 
-    # Check services
+    # Initialize settings and service if not already done
+    if "settings" not in st.session_state:
+        config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
+        if config_json:
+            try:
+                config_data = json.loads(config_json)
+                st.session_state.settings = Settings(**config_data)
+            except Exception as e:
+                st.error(f"Failed to load configuration: {e}")
+                return
+        else:
+            st.error(
+                "Service not initialized. Please run the app from the main entry point."
+            )
+            return
+
     if "activity_service" not in st.session_state:
-        st.error(
-            "Service not initialized. Please run the app from the main entry point."
-        )
-        return
+        try:
+            st.session_state.activity_service = init_services(st.session_state.settings)
+        except Exception as e:
+            st.error(f"Failed to initialize services: {e}")
+            return
 
     service: ActivityService = st.session_state.activity_service
 

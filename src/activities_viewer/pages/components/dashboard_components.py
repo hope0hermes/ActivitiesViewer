@@ -16,7 +16,7 @@ from plotly.subplots import make_subplots
 
 from activities_viewer.services.goal_service import GoalService, GoalStatus
 from activities_viewer.domain.models import Goal
-from activities_viewer.utils.formatting import format_watts, format_wkg, format_duration
+from activities_viewer.utils.formatting import format_watts, format_wkg, format_duration, render_metric
 
 
 def render_goal_progress_card(
@@ -49,46 +49,53 @@ def render_goal_progress_card(
     # ═══════════════════════════════════════════════════════════════════════════
     col1, col2, col3, col4 = st.columns(4)
 
-    with col1:
-        st.metric(
-            "Current",
-            format_wkg(summary["current_wkg"]),
-            delta=f"{summary['ahead_behind_wkg']:+.3f} W/kg",
-            delta_color="normal" if summary["on_pace"] else "inverse",
-            help=f"Current: {current_ftp:.0f} W / {weight_kg:.1f} kg",
-        )
+    value_size = 28
+    render_metric(
+        col1,
+        label="Current W/Kg",
+        value=f'{summary["current_wkg"]:.1f}',
+        help_text=(
+            f"Current: {current_ftp:.0f} W / {weight_kg:.1f} kg\nDelta: "
+            f"{summary['ahead_behind_wkg']:+.3f} W/kg"
+        ),
+        value_size=value_size,
+    )
 
-    with col2:
-        st.metric(
-            "Target",
-            format_wkg(summary["target_wkg"]),
-            help=f"Goal by {goal.target_date.strftime('%b %d, %Y')}",
-        )
+    render_metric(
+        col2,
+        label="Target W/Kg",
+        value=f'{summary["target_wkg"]:.1f}',
+        help_text=f"Goal by {goal.target_date.strftime('%b %d, %Y')}",
+        value_size=value_size,
+    )
 
-    with col3:
-        # Status with color coding
-        status_emoji = {
-            GoalStatus.AHEAD: "🚀",
-            GoalStatus.ON_TRACK: "✅",
-            GoalStatus.BEHIND: "⚠️",
-            GoalStatus.CRITICAL: "🔴",
-        }
-        emoji = status_emoji.get(summary["status"], "")
+    # Status with color coding
+    status_emoji = {
+        GoalStatus.AHEAD: "🚀",
+        GoalStatus.ON_TRACK: "✅",
+        GoalStatus.BEHIND: "⚠️",
+        GoalStatus.CRITICAL: "🔴",
+    }
+    emoji = status_emoji.get(summary["status"], "")
 
-        st.metric(
-            "Status",
-            f"{emoji} {summary['status_label']}",
-            help=f"Expected now: {summary['expected_wkg_now']:.2f} W/kg",
-        )
+    render_metric(
+        col3,
+        label="Status",
+        value=f"{emoji} {summary['status_label']}",
+        help_text=f"Expected now: {summary['expected_wkg_now']:.2f} W/kg",
+        value_size=value_size - 4,
+    )
 
-    with col4:
-        weeks_left = summary["weeks_remaining"]
-        st.metric(
-            "Time Remaining",
-            f"{weeks_left:.1f} weeks",
-            delta=f"{summary['days_remaining']} days",
-            help=f"Target date: {goal.target_date.strftime('%B %d, %Y')}",
-        )
+    render_metric(
+        col4,
+        label="Weeks Remaining",
+        value=f"{int(summary['weeks_remaining']):d}",
+        help_text=(
+            f"Target date: {goal.target_date.strftime('%B %d, %Y')}\nDays: "
+            f"{summary['days_remaining']}"
+        ),
+        value_size=value_size,
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # PROGRESS BAR
@@ -184,77 +191,72 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
 
     col1, col2, col3 = st.columns(3)
 
+    # CTL (Fitness) - higher is better, but very slow to change
+    render_metric(
+        col1,
+        label="Fitness (CTL)",
+        value=f"{ctl:.0f}",
+        help_text="Chronic Training Load - Your long-term fitness (42-day average)",
+    )
+
+    # Fitness interpretation
+    if ctl > 100:
+        fitness_status = "🏆 Excellent"
+    elif ctl > 70:
+        fitness_status = "💪 Strong"
+    elif ctl > 50:
+        fitness_status = "✅ Good"
+    else:
+        fitness_status = "📈 Building"
+
     with col1:
-        # CTL (Fitness) - higher is better, but very slow to change
-        st.metric(
-            "Fitness (CTL)",
-            f"{ctl:.0f}",
-            help="Chronic Training Load - Your long-term fitness (42-day average)",
-        )
-
-        # Fitness interpretation
-        if ctl > 100:
-            fitness_status = "🏆 Excellent"
-        elif ctl > 70:
-            fitness_status = "💪 Strong"
-        elif ctl > 50:
-            fitness_status = "✅ Good"
-        else:
-            fitness_status = "📈 Building"
-
         st.caption(fitness_status)
 
+    # ATL (Fatigue) - shows recent training load
+    render_metric(
+        col2,
+        label="Fatigue (ATL)",
+        value=f"{atl:.0f}",
+        help_text="Acute Training Load - Your recent training stress (7-day average)",
+    )
+
+    # Fatigue interpretation
+    if atl > ctl * 1.5:
+        fatigue_status = "🔥 Very High"
+    elif atl > ctl * 1.2:
+        fatigue_status = "😰 High"
+    elif atl > ctl * 0.8:
+        fatigue_status = "💪 Moderate"
+    else:
+        fatigue_status = "😌 Low"
+
     with col2:
-        # ATL (Fatigue) - shows recent training load
-        st.metric(
-            "Fatigue (ATL)",
-            f"{atl:.0f}",
-            help="Acute Training Load - Your recent training stress (7-day average)",
-        )
-
-        # Fatigue interpretation
-        if atl > ctl * 1.5:
-            fatigue_status = "🔥 Very High"
-        elif atl > ctl * 1.2:
-            fatigue_status = "😰 High"
-        elif atl > ctl * 0.8:
-            fatigue_status = "💪 Moderate"
-        else:
-            fatigue_status = "😌 Low"
-
         st.caption(fatigue_status)
 
-    with col3:
-        # TSB (Form) - the key indicator for readiness
-        # Color based on TSB value
-        if tsb > 10:
-            tsb_color = "normal"  # Green - Fresh
-            form_status = "🔋 Fresh"
-            form_help = "Well-rested and ready for hard efforts"
-        elif tsb > 5:
-            tsb_color = "off"  # Neutral - Ready
-            form_status = "💪 Ready"
-            form_help = "Good balance, ready to train"
-        elif tsb > -10:
-            tsb_color = "off"  # Neutral - Optimal
-            form_status = "⚡ Optimal"
-            form_help = "Ideal training state"
-        elif tsb > -30:
-            tsb_color = "inverse"  # Red - Tired
-            form_status = "😴 Tired"
-            form_help = "Accumulated fatigue, consider recovery"
-        else:
-            tsb_color = "inverse"  # Red - Overreached
-            form_status = "🚨 Overreached"
-            form_help = "High fatigue! Recovery needed"
+    # TSB (Form) - the key indicator for readiness
+    # Color based on TSB value
+    if tsb > 10:
+        form_status = "🔋 Fresh"
+        form_help = "Well-rested and ready for hard efforts"
+    elif tsb > 5:
+        form_status = "💪 Ready"
+        form_help = "Good balance, ready to train"
+    elif tsb > -10:
+        form_status = "⚡ Optimal"
+        form_help = "Ideal training state"
+    elif tsb > -30:
+        form_status = "😴 Tired"
+        form_help = "Accumulated fatigue, consider recovery"
+    else:
+        form_status = "🚨 Overreached"
+        form_help = "High fatigue! Recovery needed"
 
-        st.metric(
-            "Form (TSB)",
-            f"{tsb:+.0f}",
-            delta=form_status,
-            delta_color=tsb_color,
-            help=f"Training Stress Balance (CTL - ATL). {form_help}",
-        )
+    render_metric(
+        col3,
+        label="Form (TSB)",
+        value=f"{tsb:+.0f}",
+        help_text=f"Training Stress Balance (CTL - ATL)\n{form_status}: {form_help}",
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # TREND VISUALIZATION (Mini Chart)
@@ -380,7 +382,7 @@ def render_recent_activity_sparklines(
     fig = make_subplots(
         rows=2,
         cols=1,
-        subplot_titles=("Volume (Hours)", "Training Stress (TSS)"),
+        subplot_titles=("", ""),
         vertical_spacing=0.15,
         row_heights=[0.5, 0.5],
     )
@@ -436,18 +438,40 @@ def render_recent_activity_sparklines(
 
     col1, col2, col3, col4 = st.columns(4)
 
+    col1, col2, col3, col4 = st.columns(4)
+
     with col1:
         total_hours = daily_stats["hours"].sum()
-        st.metric("Total Volume", f"{total_hours:.1f}h")
+        render_metric(
+            col1,
+            label="Total Volume",
+            value=f"{total_hours:.1f}h",
+            help_text="Total training volume in the last 7 days",
+        )
 
     with col2:
         total_tss = daily_stats["training_stress_score"].sum()
-        st.metric("Total TSS", f"{total_tss:.0f}")
+        render_metric(
+            col2,
+            label="Total TSS",
+            value=f"{total_tss:.0f}",
+            help_text="Total Training Stress Score in the last 7 days",
+        )
 
     with col3:
         total_distance = daily_stats["distance_km"].sum()
-        st.metric("Total Distance", f"{total_distance:.0f} km")
+        render_metric(
+            col3,
+            label="Total Distance",
+            value=f"{total_distance:.1f} km",
+            help_text="Total distance covered in the last 7 days",
+        )
 
     with col4:
         activity_count = len(recent_df)
-        st.metric("Activities", f"{activity_count}")
+        render_metric(
+            col4,
+            label="Activities",
+            value=f"{activity_count}",
+            help_text="Number of activities in the last 7 days",
+        )

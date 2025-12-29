@@ -25,10 +25,10 @@ streams_dir: "Streams"
 
 # --- Athlete Configuration ---
 # Your Functional Threshold Power in watts
-ftp: 285.0
+ftp: 296.0
 
 # Your body weight in kilograms
-weight_kg: 77.0
+weight_kg: 78.0
 
 # Your maximum heart rate in bpm
 max_hr: 185
@@ -38,8 +38,8 @@ max_hr: 185
 # Uncomment and configure these fields to enable goal tracking on home page
 target_wkg: 4.5
 target_date: "2026-08-01"
-baseline_ftp: 285
-baseline_date: "2024-12-01"
+baseline_ftp: 296
+baseline_date: "2025-04-01"
 
 # --- Application Settings ---
 # Enable verbose logging

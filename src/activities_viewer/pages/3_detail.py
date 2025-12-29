@@ -5,24 +5,59 @@ Displays detailed metrics, maps, and charts for a single activity.
 Enhanced with contextual header and metrics sections that adapt to activity type.
 """
 
+import json
+import os
 import pandas as pd
 import streamlit as st
 
 from activities_viewer.services.activity_service import ActivityService
-from activities_viewer.utils import format_duration, get_metric_from_object
+from activities_viewer.config import Settings
+from activities_viewer.repository.csv_repo import CSVActivityRepository
+from activities_viewer.utils import get_metric_from_object
 from activities_viewer.data import HELP_TEXTS
 from activities_viewer.pages.components.activity_detail_components import (
     render_activity_selector,
     render_activity_navigation,
     render_contextual_header,
     render_contextual_metrics,
+    render_durability_tab,
     render_overview_tab,
     render_power_hr_tab,
-    render_durability_tab,
     render_training_load_tab,
 )
 
 st.set_page_config(page_title="Activity Detail", page_icon="🚴", layout="wide")
+
+
+def init_services(settings: Settings) -> ActivityService:
+    """Initialize application services."""
+    if settings.data_source_type == "csv":
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
+        repo = CSVActivityRepository(raw_file, moving_file)
+    else:
+        raw_file = (
+            settings.activities_raw_file
+            if hasattr(settings, "activities_raw_file")
+            else settings.activities_enriched_file
+        )
+        moving_file = (
+            settings.activities_moving_file
+            if hasattr(settings, "activities_moving_file")
+            else None
+        )
+        repo = CSVActivityRepository(raw_file, moving_file)
+
+    return ActivityService(repo)
+
 
 # Helper functions (kept from original, needed by components)
 
@@ -43,13 +78,28 @@ __all__ = ["apply_smoothing", "get_metric"]
 
 def main():
     """Main page orchestrator with context-aware layout."""
-    # Remove title - now using contextual header
+    # Initialize settings and service if not already done
+    if "settings" not in st.session_state:
+        config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
+        if config_json:
+            try:
+                config_data = json.loads(config_json)
+                st.session_state.settings = Settings(**config_data)
+            except Exception as e:
+                st.error(f"Failed to load configuration: {e}")
+                return
+        else:
+            st.error(
+                "Service not initialized. Please run the app from the main entry point."
+            )
+            return
 
     if "activity_service" not in st.session_state:
-        st.error(
-            "Service not initialized. Please run the app from the main entry point."
-        )
-        return
+        try:
+            st.session_state.activity_service = init_services(st.session_state.settings)
+        except Exception as e:
+            st.error(f"Failed to initialize services: {e}")
+            return
 
     service: ActivityService = st.session_state.activity_service
 

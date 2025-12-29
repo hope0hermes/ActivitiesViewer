@@ -23,7 +23,7 @@ try:
     from activities_viewer.services.goal_service import GoalService
     from activities_viewer.services.analysis_service import AnalysisService
     from activities_viewer.domain.models import Goal
-    from activities_viewer.components.dashboard_components import (
+    from activities_viewer.pages.components.dashboard_components import (
         render_goal_progress_card,
         render_status_card,
         render_recent_activity_sparklines,
@@ -40,7 +40,7 @@ except ImportError:
     from activities_viewer.services.goal_service import GoalService
     from activities_viewer.services.analysis_service import AnalysisService
     from activities_viewer.domain.models import Goal
-    from activities_viewer.components.dashboard_components import (
+    from activities_viewer.pages.components.dashboard_components import (
         render_goal_progress_card,
         render_status_card,
         render_recent_activity_sparklines,

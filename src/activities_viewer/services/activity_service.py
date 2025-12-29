@@ -46,7 +46,8 @@ class ActivityService:
     def get_available_years(self) -> List[int]:
         """
         Get a list of years available in the dataset.
-        This might require extending the repository interface or just fetching all and extracting years.
+        This might require extending the repository interface or just fetching
+        all and extracting years.
         For MVP, fetching all is fine.
         """
         # Optimization: Add get_years() to Repository later.
@@ -95,7 +96,8 @@ class ActivityService:
         """
         Get the stream data for an activity.
         """
-        # This requires the repository to support streams, which the base protocol currently doesn't show.
+        # This requires the repository to support streams, which the base protocol
+        # currently doesn't show.
         # Assuming the underlying repository might have it or we need to add it.
         # For now, let's check the repository implementation.
         if hasattr(self.repository, "get_activity_stream"):

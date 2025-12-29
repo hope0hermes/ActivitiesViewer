@@ -393,17 +393,22 @@ class AnalysisService:
         # Apply the same smart filtering as aggregate_physiology
         if filter_steady_state:
             df = df[
-                (df["intensity_factor"].notna())
+                (df["efficiency_factor"].notna())
+                & (df["efficiency_factor"] > 0)
+                & (df["intensity_factor"].notna())
                 & (df["intensity_factor"] < 0.75)
                 & ((df["workout_type"].isna()) | (df["workout_type"] != 10))
             ]
+        else:
+            # Always exclude NaN or zero efficiency_factor (no power meter or no data)
+            df = df[(df["efficiency_factor"].notna()) & (df["efficiency_factor"] > 0)]
 
         if df.empty:
-            return pd.DataFrame(columns=["date", "efficiency_factor", "decoupling"])
+            return pd.DataFrame(columns=["date", "efficiency_factor", "decoupling", "cardiac_drift"])
 
         # Select relevant columns
         result = df[
-            ["start_date_local", "efficiency_factor", "power_hr_decoupling"]
+            ["start_date_local", "efficiency_factor", "power_hr_decoupling", "cardiac_drift"]
         ].copy()
         result = result.rename(
             columns={"start_date_local": "date", "power_hr_decoupling": "decoupling"}
