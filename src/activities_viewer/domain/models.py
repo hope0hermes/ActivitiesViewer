@@ -174,9 +174,25 @@ class Activity(BaseModel):
         default=None,
         description="Minimum W' balance reached (J). Shows proximity to anaerobic exhaustion.",
     )
+    w_prime_depletion: Optional[float] = Field(
+        default=None,
+        description="W' depletion percentage. Shows how much anaerobic capacity was used.",
+    )
     match_burn_count: Optional[int] = Field(
         default=None,
         description="Number of significant W' expenditures (>50% depletion). Quantifies hard efforts.",
+    )
+    cp_config: Optional[float] = Field(
+        default=None,
+        description="Configured Critical Power (W) used for W' balance calculations.",
+    )
+    w_prime_config: Optional[float] = Field(
+        default=None,
+        description="Configured W' (J) used for W' balance calculations.",
+    )
+    cp_window_days: Optional[int] = Field(
+        default=None,
+        description="Rolling window in days used for CP model calculations.",
     )
     negative_split_index: Optional[float] = Field(
         default=None,
@@ -184,7 +200,15 @@ class Activity(BaseModel):
     )
     cardiac_drift: Optional[float] = Field(
         default=None,
-        description="(EF 1st - EF 2nd)/EF 1st × 100%. <3%=excellent fitness, >8%=poor/fatigue.",
+        description="(HR 2nd - HR 1st)/HR 1st × 100%. HR-only metric. <3%=excellent, >8%=poor/dehydrated.",
+    )
+    first_half_hr: Optional[float] = Field(
+        default=None,
+        description="Average heart rate (BPM) during first half of ride.",
+    )
+    second_half_hr: Optional[float] = Field(
+        default=None,
+        description="Average heart rate (BPM) during second half of ride.",
     )
     estimated_ftp: Optional[float] = Field(
         default=None,
@@ -283,8 +307,9 @@ class Activity(BaseModel):
     second_half_power: Optional[float] = Field(
         default=None, description="Second half avg power"
     )
-    power_drop_percentage: Optional[float] = Field(
-        default=None, description="% drop from first to second half"
+    power_drift: Optional[float] = Field(
+        default=None,
+        description="(Power 2nd - Power 1st)/Power 1st × 100%. Negative = fading. >-5%=excellent, <-15%=poor.",
     )
     half_power_ratio: Optional[float] = Field(
         default=None, description="Ratio of second half to first half power"
@@ -329,6 +354,29 @@ class Activity(BaseModel):
         default=None, description="% time in Z7 (>150% FTP)"
     )
 
+    # Power zone time (seconds)
+    power_z1_time: Optional[float] = Field(
+        default=None, description="Seconds in Z1 (0-55% FTP)"
+    )
+    power_z2_time: Optional[float] = Field(
+        default=None, description="Seconds in Z2 (56-75% FTP)"
+    )
+    power_z3_time: Optional[float] = Field(
+        default=None, description="Seconds in Z3 (76-90% FTP)"
+    )
+    power_z4_time: Optional[float] = Field(
+        default=None, description="Seconds in Z4 (91-105% FTP)"
+    )
+    power_z5_time: Optional[float] = Field(
+        default=None, description="Seconds in Z5 (106-120% FTP)"
+    )
+    power_z6_time: Optional[float] = Field(
+        default=None, description="Seconds in Z6 (121-150% FTP)"
+    )
+    power_z7_time: Optional[float] = Field(
+        default=None, description="Seconds in Z7 (>150% FTP)"
+    )
+
     # Power zone boundaries (watts)
     power_zone_1: Optional[float] = Field(default=None, description="Z1 upper boundary")
     power_zone_2: Optional[float] = Field(default=None, description="Z2 upper boundary")
@@ -355,6 +403,13 @@ class Activity(BaseModel):
     hr_z5_percentage: Optional[float] = Field(
         default=None, description="% time in HR Z5"
     )
+
+    # HR zone time (seconds)
+    hr_z1_time: Optional[float] = Field(default=None, description="Seconds in HR Z1")
+    hr_z2_time: Optional[float] = Field(default=None, description="Seconds in HR Z2")
+    hr_z3_time: Optional[float] = Field(default=None, description="Seconds in HR Z3")
+    hr_z4_time: Optional[float] = Field(default=None, description="Seconds in HR Z4")
+    hr_z5_time: Optional[float] = Field(default=None, description="Seconds in HR Z5")
 
     # HR zone boundaries (bpm)
     hr_zone_1: Optional[float] = Field(default=None, description="HR Z1 upper boundary")

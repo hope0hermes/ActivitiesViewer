@@ -6,6 +6,28 @@ from datetime import datetime
 from typing import Union
 
 
+def get_help_text(metric_key: str, help_texts: dict) -> str:
+    """
+    Get help text for a metric by its key.
+
+    Args:
+        metric_key: The metric key (e.g., "avg_power", "fatigue_index")
+        help_texts: Dictionary mapping metric keys to help text
+
+    Returns:
+        Help text string, or empty string if not found
+    """
+    return help_texts.get(metric_key, "")
+
+
+def get_metric(activity, field: str, default=None):
+    """Safely get a metric value, handling NaN."""
+    val = getattr(activity, field, default)
+    if val is not None and pd.notna(val):
+        return val
+    return default
+
+
 def render_metric(
     column,
     label: str,
@@ -14,6 +36,7 @@ def render_metric(
     label_size: int = 12,
     value_size: int = 28,
     custom_style: bool = False,
+    delta: str | None = None,
 ) -> None:
     """
     Render a metric with responsive sizing that doesn't get truncated.
@@ -26,106 +49,69 @@ def render_metric(
         help_text: Optional help/documentation text shown on hover
         label_size: Font size for the label in pixels (default: 12)
         value_size: Font size for the value in pixels (default: 28)
+        custom_style: Whether to use custom HTML styling (default: False)
+        delta: Optional delta/change value (e.g., "+5 W" or "-2.3%"). Shows in green if positive, red if negative
     """
     if custom_style is False:
         with column:
-            st.metric(label, value, help_text)
+            st.metric(
+                label=label, value=value, help=help_text, delta=delta
+            )
+
             return
     with column:
         # Create a responsive metric card with proper text sizing and help text support
         if help_text:
             # Convert newlines to HTML entity and escape quotes for HTML attribute
             help_escaped = help_text.replace("\n", "&#10;").replace('"', "&quot;")
-            # HTML with tooltip on hover
+            # Determine delta color
+            delta_color = "#09ab3b" if delta and (delta.startswith("+") or not delta.startswith("-")) else "#ff2b2b"
+            delta_html = f'<div style="font-size: 12px; color: {delta_color}; margin-top: 4px; font-weight: 500;">{delta}</div>' if delta else ""
+            # HTML with tooltip on hover - minimal style to match st.metric()
             metric_html = f"""
             <div style="
-                position: relative;
-                padding: 12px 6px;
-                background-color: rgba(240, 242, 246, 0.7);
-                border-radius: 6px;
+                padding: 16px 0;
                 text-align: center;
-                min-height: 70px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                cursor: help;
-                border: 1px solid rgba(200, 200, 200, 0.3);
             " title="{help_escaped}">
                 <div style="
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    gap: 3px;
-                    width: 100%;
-                    min-height: 16px;
-                    flex-wrap: wrap;
-                ">
-                    <div style="
-                        font-size: {label_size}px;
-                        color: #888;
-                        font-weight: 500;
-                        text-align: center;
-                    ">{label}</div>
-                    <div style="
-                        font-size: 10px;
-                        color: #0066cc;
-                        font-weight: bold;
-                        width: 12px;
-                        height: 12px;
-                        border-radius: 50%;
-                        border: 1px solid #0066cc;
-                        display: flex;
-                        align-items: center;
-                        justify-content: center;
-                        flex-shrink: 0;
-                        line-height: 1;
-                    ">ℹ</div>
-                </div>
+                    font-size: {label_size}px;
+                    color: rgba(49, 51, 63, 0.7);
+                    font-weight: 400;
+                    margin-bottom: 8px;
+                    letter-spacing: 0.01em;
+                ">{label}</div>
                 <div style="
                     font-size: {value_size}px;
-                    font-weight: bold;
-                    color: #262730;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    line-height: 1.4;
-                    width: 100%;
-                    text-align: center;
-                    margin-top: 4px;
+                    font-weight: 600;
+                    color: rgb(14, 17, 48);
+                    line-height: 1.2;
                 ">{value}</div>
+                {delta_html}
             </div>
             """
         else:
             # HTML without tooltip
+            delta_color = "#09ab3b" if delta and (delta.startswith("+") or not delta.startswith("-")) else "#ff2b2b"
+            delta_html = f'<div style="font-size: 12px; color: {delta_color}; margin-top: 4px; font-weight: 500;">{delta}</div>' if delta else ""
             metric_html = f"""
             <div style="
-                padding: 12px 6px;
-                background-color: rgba(240, 242, 246, 0.7);
-                border-radius: 6px;
+                padding: 16px 0;
                 text-align: center;
-                min-height: 70px;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
             ">
                 <div style="
                     font-size: {label_size}px;
-                    color: #888;
-                    margin-bottom: 6px;
-                    font-weight: 500;
-                    text-align: center;
+                    color: rgba(49, 51, 63, 0.7);
+                    font-weight: 400;
+                    margin-bottom: 8px;
+                    letter-spacing: 0.01em;
                 ">{label}</div>
                 <div style="
                     font-size: {value_size}px;
-                    font-weight: bold;
-                    color: #262730;
-                    word-wrap: break-word;
-                    overflow-wrap: break-word;
-                    line-height: 1.4;
-                    width: 100%;
-                    text-align: center;
+                    font-weight: 600;
+                    color: rgb(14, 17, 48);
+                    line-height: 1.2;
                 ">{value}</div>
+                {delta_html}
             </div>
             """
         st.markdown(metric_html, unsafe_allow_html=True)

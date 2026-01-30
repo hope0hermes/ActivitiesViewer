@@ -21,7 +21,8 @@ def _load_activities_df(file_path: Path) -> pd.DataFrame:
         raise FileNotFoundError(f"Activities file not found: {file_path}")
 
     # Read CSV with semicolon separator
-    df = pd.read_csv(file_path, sep=";")
+    # low_memory=False prevents mixed type warnings for large files
+    df = pd.read_csv(file_path, sep=";", low_memory=False)
 
     # Convert date columns
     df["start_date"] = pd.to_datetime(df["start_date"])
@@ -56,10 +57,11 @@ class CSVActivityRepository(ActivityRepository):
     Supports both new dual-file format (raw/moving) and legacy single-file format.
     """
 
-    def __init__(self, raw_file_path: Path, moving_file_path: Path | None = None):
+    def __init__(self, raw_file_path: Path, moving_file_path: Path | None = None, streams_dir: Path | None = None):
         """Initialize with dual-file paths (new format) or fallback to single file (legacy)."""
         self.raw_file_path = raw_file_path
         self.moving_file_path = moving_file_path
+        self.streams_dir = streams_dir
 
         # Store file paths but reload data on each access (no instance-level caching)
         # This ensures fresh data is loaded even when session_state persists the repository
@@ -205,14 +207,20 @@ class CSVActivityRepository(ActivityRepository):
     def get_activity_stream(self, activity_id: int) -> pd.DataFrame:
         """
         Load stream data for a specific activity.
-        Assumes streams are stored in a 'Streams' directory relative to the data file.
+        Uses configured streams_dir or falls back to default location.
         """
-        # Assuming raw_file_path is .../data_enriched/activities_raw.csv
-        # And streams are in .../data/Streams/stream_{id}.csv
-        streams_dir = self.raw_file_path.parent.parent / "data" / "Streams"
+        # Use configured streams_dir if available, otherwise fall back to legacy path
+        if self.streams_dir is not None:
+            streams_dir = self.streams_dir
+        else:
+            # Legacy fallback: Assuming raw_file_path is .../data_enriched/activities_raw.csv
+            # And streams are in .../data/Streams/stream_{id}.csv
+            streams_dir = self.raw_file_path.parent.parent / "data" / "Streams"
+
         stream_file = streams_dir / f"stream_{activity_id}.csv"
 
         if not stream_file.exists():
+            print(f"Stream file not found: {stream_file}")
             return pd.DataFrame()
 
         try:

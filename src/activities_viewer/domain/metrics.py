@@ -1123,11 +1123,11 @@ class MetricRegistry:
         category=MetricCategory.POWER,
     )
 
-    POWER_DROP_PERCENTAGE = MetricDefinition(
-        id="power_drop_percentage",
-        label="Power Drop",
+    POWER_DRIFT = MetricDefinition(
+        id="power_drift",
+        label="Power Drift",
         unit="%",
-        help_text="Power drop from first to second half",
+        help_text="Power change from first to second half (negative = fading)",
         format_func=_fmt_percentage,
         category=MetricCategory.POWER,
     )
@@ -1188,7 +1188,7 @@ class MetricRegistry:
 
     # Power Zone Time (seconds, not percentage)
     POWER_ZONE_1 = MetricDefinition(
-        id="power_zone_1",
+        id="power_z1_time",
         label="Z1 Time",
         unit="s",
         help_text="Time in Power Zone 1",
@@ -1197,7 +1197,7 @@ class MetricRegistry:
     )
 
     POWER_ZONE_2 = MetricDefinition(
-        id="power_zone_2",
+        id="power_z2_time",
         label="Z2 Time",
         unit="s",
         help_text="Time in Power Zone 2",
@@ -1206,7 +1206,7 @@ class MetricRegistry:
     )
 
     POWER_ZONE_3 = MetricDefinition(
-        id="power_zone_3",
+        id="power_z3_time",
         label="Z3 Time",
         unit="s",
         help_text="Time in Power Zone 3",
@@ -1215,7 +1215,7 @@ class MetricRegistry:
     )
 
     POWER_ZONE_4 = MetricDefinition(
-        id="power_zone_4",
+        id="power_z4_time",
         label="Z4 Time",
         unit="s",
         help_text="Time in Power Zone 4",
@@ -1224,7 +1224,7 @@ class MetricRegistry:
     )
 
     POWER_ZONE_5 = MetricDefinition(
-        id="power_zone_5",
+        id="power_z5_time",
         label="Z5 Time",
         unit="s",
         help_text="Time in Power Zone 5",
@@ -1233,7 +1233,7 @@ class MetricRegistry:
     )
 
     POWER_ZONE_6 = MetricDefinition(
-        id="power_zone_6",
+        id="power_z6_time",
         label="Z6 Time",
         unit="s",
         help_text="Time in Power Zone 6",
@@ -1241,9 +1241,64 @@ class MetricRegistry:
         category=MetricCategory.INTENSITY,
     )
 
+    # Power Zone Boundaries (watts) - these are FTP-based zone thresholds
+    POWER_ZONE_BOUNDARY_1 = MetricDefinition(
+        id="power_zone_1",
+        label="Z1 Upper Limit",
+        unit="W",
+        help_text="Power Zone 1 upper boundary (55% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
+    POWER_ZONE_BOUNDARY_2 = MetricDefinition(
+        id="power_zone_2",
+        label="Z2 Upper Limit",
+        unit="W",
+        help_text="Power Zone 2 upper boundary (75% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
+    POWER_ZONE_BOUNDARY_3 = MetricDefinition(
+        id="power_zone_3",
+        label="Z3 Upper Limit",
+        unit="W",
+        help_text="Power Zone 3 upper boundary (90% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
+    POWER_ZONE_BOUNDARY_4 = MetricDefinition(
+        id="power_zone_4",
+        label="Z4 Upper Limit",
+        unit="W",
+        help_text="Power Zone 4 upper boundary (105% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
+    POWER_ZONE_BOUNDARY_5 = MetricDefinition(
+        id="power_zone_5",
+        label="Z5 Upper Limit",
+        unit="W",
+        help_text="Power Zone 5 upper boundary (120% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
+    POWER_ZONE_BOUNDARY_6 = MetricDefinition(
+        id="power_zone_6",
+        label="Z6 Upper Limit",
+        unit="W",
+        help_text="Power Zone 6 upper boundary (150% FTP)",
+        format_func=_fmt_watts,
+        category=MetricCategory.POWER,
+    )
+
     # Heart Rate Zone Time
     HR_ZONE_1 = MetricDefinition(
-        id="hr_zone_1",
+        id="hr_z1_time",
         label="HR Z1 Time",
         unit="s",
         help_text="Time in HR Zone 1",
@@ -1252,7 +1307,7 @@ class MetricRegistry:
     )
 
     HR_ZONE_2 = MetricDefinition(
-        id="hr_zone_2",
+        id="hr_z2_time",
         label="HR Z2 Time",
         unit="s",
         help_text="Time in HR Zone 2",
@@ -1261,7 +1316,7 @@ class MetricRegistry:
     )
 
     HR_ZONE_3 = MetricDefinition(
-        id="hr_zone_3",
+        id="hr_z3_time",
         label="HR Z3 Time",
         unit="s",
         help_text="Time in HR Zone 3",
@@ -1270,12 +1325,58 @@ class MetricRegistry:
     )
 
     HR_ZONE_4 = MetricDefinition(
-        id="hr_zone_4",
+        id="hr_z4_time",
         label="HR Z4 Time",
         unit="s",
         help_text="Time in HR Zone 4",
         format_func=_fmt_duration_hm,
         category=MetricCategory.INTENSITY,
+    )
+
+    HR_ZONE_5 = MetricDefinition(
+        id="hr_z5_time",
+        label="HR Z5 Time",
+        unit="s",
+        help_text="Time in HR Zone 5",
+        format_func=_fmt_duration_hm,
+        category=MetricCategory.INTENSITY,
+    )
+
+    # HR Zone Boundaries (bpm) - these are FTHR-based zone thresholds
+    HR_ZONE_BOUNDARY_1 = MetricDefinition(
+        id="hr_zone_1",
+        label="HR Z1 Upper Limit",
+        unit="bpm",
+        help_text="Heart Rate Zone 1 upper boundary",
+        format_func=_fmt_bpm,
+        category=MetricCategory.PHYSIOLOGY,
+    )
+
+    HR_ZONE_BOUNDARY_2 = MetricDefinition(
+        id="hr_zone_2",
+        label="HR Z2 Upper Limit",
+        unit="bpm",
+        help_text="Heart Rate Zone 2 upper boundary",
+        format_func=_fmt_bpm,
+        category=MetricCategory.PHYSIOLOGY,
+    )
+
+    HR_ZONE_BOUNDARY_3 = MetricDefinition(
+        id="hr_zone_3",
+        label="HR Z3 Upper Limit",
+        unit="bpm",
+        help_text="Heart Rate Zone 3 upper boundary",
+        format_func=_fmt_bpm,
+        category=MetricCategory.PHYSIOLOGY,
+    )
+
+    HR_ZONE_BOUNDARY_4 = MetricDefinition(
+        id="hr_zone_4",
+        label="HR Z4 Upper Limit",
+        unit="bpm",
+        help_text="Heart Rate Zone 4 upper boundary",
+        format_func=_fmt_bpm,
+        category=MetricCategory.PHYSIOLOGY,
     )
 
     # Training Classification
@@ -1394,7 +1495,7 @@ class MetricRegistry:
     def get_all_metrics(cls) -> dict[str, MetricDefinition]:
         """Get all registered metrics as a dictionary keyed by metric ID."""
         return {
-            name: getattr(cls, name)
+            getattr(cls, name).id: getattr(cls, name)
             for name in dir(cls)
             if isinstance(getattr(cls, name), MetricDefinition)
         }
@@ -1403,7 +1504,7 @@ class MetricRegistry:
     def get_by_id(cls, metric_id: str) -> Optional[MetricDefinition]:
         """Get a metric definition by its ID."""
         all_metrics = cls.get_all_metrics()
-        return all_metrics.get(metric_id.upper().replace(".", "_"))
+        return all_metrics.get(metric_id)
 
     @classmethod
     def get_by_category(cls, category: MetricCategory) -> list[MetricDefinition]:

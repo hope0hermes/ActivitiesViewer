@@ -41,7 +41,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
     else:
         raw_file = (
             settings.activities_raw_file
@@ -53,7 +53,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
 
     return ActivityService(repo)
 
@@ -119,17 +119,274 @@ def get_date_range(
         return (datetime(now.year, 1, 1), now)
 
 
+def compute_period_deltas(
+    load_stats: dict,
+    start_date: datetime,
+    end_date: datetime,
+    activity_service: "ActivityService",
+    analysis_service: "AnalysisService",
+) -> dict:
+    """
+    Compute metric deltas by comparing current period to previous period.
+
+    Args:
+        load_stats: Current period's aggregated load metrics
+        start_date: Start of the current period
+        end_date: End of the current period
+        activity_service: Service for fetching activities
+        analysis_service: Service for aggregating metrics
+
+    Returns:
+        Dictionary with formatted delta values for: volume, tss, distance, activities
+    """
+    deltas = {}
+
+    if not (start_date and end_date and activity_service and analysis_service):
+        return deltas
+
+    # Calculate period duration
+    period_duration = end_date - start_date
+    previous_start = start_date - period_duration
+    previous_end = start_date
+
+    # Load activities for the previous period
+    prev_df = activity_service.get_activities_in_range(
+        previous_start, previous_end, metric_view="Moving Time"
+    )
+
+    if prev_df.empty:
+        return deltas
+
+    # Get previous period stats
+    prev_stats = analysis_service.aggregate_load(prev_df)
+
+    # Calculate deltas
+    volume_delta = load_stats["total_hours"] - prev_stats["total_hours"]
+    tss_delta = load_stats["total_tss"] - prev_stats["total_tss"]
+    distance_delta = load_stats["total_distance_km"] - prev_stats["total_distance_km"]
+    activity_delta = load_stats["activity_count"] - prev_stats["activity_count"]
+
+    # Format deltas as strings with + or - prefix
+    deltas["volume"] = (
+        f"+{volume_delta:.1f}h" if volume_delta >= 0 else f"{volume_delta:.1f}h"
+    )
+    deltas["tss"] = f"+{tss_delta:.0f}" if tss_delta >= 0 else f"{tss_delta:.0f}"
+    deltas["distance"] = (
+        f"+{distance_delta:.0f}" if distance_delta >= 0 else f"{distance_delta:.0f}"
+    )
+    deltas["activities"] = (
+        f"+{activity_delta}" if activity_delta >= 0 else f"{activity_delta}"
+    )
+
+    return deltas
+
+
+def compute_physiology_deltas(
+    physio_stats: dict,
+    df: pd.DataFrame,
+    activity_service: "ActivityService",
+    analysis_service: "AnalysisService",
+) -> dict:
+    """
+    Compute physiology metric deltas by comparing to previous period.
+
+    Args:
+        physio_stats: Current period's aggregated physiology metrics
+        df: Current period's DataFrame (to determine date range)
+        activity_service: Service for fetching activities
+        analysis_service: Service for aggregating metrics
+
+    Returns:
+        Dictionary with formatted delta values for: ef, decoupling
+    """
+    deltas = {}
+
+    if df.empty or not activity_service or not analysis_service:
+        return deltas
+
+    # Get current period date range
+    start_date = df["start_date_local"].min()
+    end_date = df["start_date_local"].max()
+
+    # Calculate period duration
+    period_duration = end_date - start_date
+    previous_start = start_date - period_duration
+    previous_end = start_date
+
+    # Load activities for the previous period
+    prev_df = activity_service.get_activities_in_range(
+        previous_start, previous_end, metric_view="Moving Time"
+    )
+
+    if prev_df.empty:
+        return deltas
+
+    # Get previous period physiology stats
+    prev_stats = analysis_service.aggregate_physiology(prev_df, filter_steady_state=True)
+
+    # Calculate EF delta
+    if (
+        physio_stats.get("avg_efficiency_factor", 0) > 0
+        and prev_stats.get("avg_efficiency_factor", 0) > 0
+    ):
+        ef_delta = (
+            physio_stats["avg_efficiency_factor"] - prev_stats["avg_efficiency_factor"]
+        )
+        deltas["ef"] = f"+{ef_delta:.2f}" if ef_delta >= 0 else f"{ef_delta:.2f}"
+
+    # Calculate decoupling delta (lower is better, so invert the sign for display)
+    if (
+        physio_stats.get("avg_decoupling", 0) > 0
+        and prev_stats.get("avg_decoupling", 0) > 0
+    ):
+        decoupling_delta = (
+            physio_stats["avg_decoupling"] - prev_stats["avg_decoupling"]
+        )
+        # Note: For decoupling, negative is good (improved), so we keep the sign as-is
+        deltas["decoupling"] = (
+            f"+{decoupling_delta:.1f}%" if decoupling_delta >= 0 else f"{decoupling_delta:.1f}%"
+        )
+
+    return deltas
+
+
+def compute_tid_deltas(
+    tid_stats: dict,
+    df: pd.DataFrame,
+    activity_service: "ActivityService",
+    analysis_service: "AnalysisService",
+) -> dict:
+    """
+    Compute TID (Training Intensity Distribution) deltas.
+
+    Args:
+        tid_stats: Current period's TID stats
+        df: Current period's DataFrame
+        activity_service: Service for fetching activities
+        analysis_service: Service for aggregating metrics
+
+    Returns:
+        Dictionary with formatted delta values for: z1, z2, z3
+    """
+    deltas = {}
+
+    if df.empty or not activity_service or not analysis_service:
+        return deltas
+
+    # Get current period date range
+    start_date = df["start_date_local"].min()
+    end_date = df["start_date_local"].max()
+
+    # Calculate period duration
+    period_duration = end_date - start_date
+    previous_start = start_date - period_duration
+    previous_end = start_date
+
+    # Load activities for the previous period
+    prev_df = activity_service.get_activities_in_range(
+        previous_start, previous_end, metric_view="Moving Time"
+    )
+
+    if prev_df.empty:
+        return deltas
+
+    # Get previous period TID stats
+    prev_stats = analysis_service.aggregate_tid(prev_df)
+
+    # Calculate zone deltas
+    for zone in ["z1", "z2", "z3"]:
+        curr_key = f"tid_{zone}_percentage"
+        if curr_key in tid_stats and curr_key in prev_stats:
+            delta = tid_stats[curr_key] - prev_stats[curr_key]
+            deltas[zone] = f"+{delta:.1f}%" if delta >= 0 else f"{delta:.1f}%"
+
+    return deltas
+
+
+def compute_recovery_deltas(
+    recovery: dict,
+    df: pd.DataFrame,
+    activity_service: "ActivityService",
+    analysis_service: "AnalysisService",
+) -> dict:
+    """
+    Compute recovery metric deltas.
+
+    Args:
+        recovery: Current period's recovery metrics
+        df: Current period's DataFrame
+        activity_service: Service for fetching activities
+        analysis_service: Service for aggregating metrics
+
+    Returns:
+        Dictionary with formatted delta values for: monotony, strain, rest_days
+    """
+    deltas = {}
+
+    if df.empty or not activity_service or not analysis_service:
+        return deltas
+
+    # Get current period date range
+    start_date = df["start_date_local"].min()
+    end_date = df["start_date_local"].max()
+
+    # Calculate period duration
+    period_duration = end_date - start_date
+    previous_start = start_date - period_duration
+    previous_end = start_date
+
+    # Load activities for the previous period
+    prev_df = activity_service.get_activities_in_range(
+        previous_start, previous_end, metric_view="Moving Time"
+    )
+
+    if prev_df.empty:
+        return deltas
+
+    # Get previous period recovery stats
+    prev_recovery = analysis_service.get_recovery_metrics(prev_df)
+
+    # Calculate monotony delta (lower is generally better)
+    if recovery.get("monotony_index", 0) > 0 and prev_recovery.get("monotony_index", 0) > 0:
+        mono_delta = recovery["monotony_index"] - prev_recovery["monotony_index"]
+        deltas["monotony"] = f"+{mono_delta:.2f}" if mono_delta >= 0 else f"{mono_delta:.2f}"
+
+    # Calculate strain delta
+    if recovery.get("strain_index", 0) > 0 and prev_recovery.get("strain_index", 0) > 0:
+        strain_delta = recovery["strain_index"] - prev_recovery["strain_index"]
+        deltas["strain"] = f"+{strain_delta:.0f}" if strain_delta >= 0 else f"{strain_delta:.0f}"
+
+    # Calculate rest days delta
+    rest_delta = recovery.get("rest_days", 0) - prev_recovery.get("rest_days", 0)
+    deltas["rest_days"] = f"+{rest_delta}" if rest_delta >= 0 else f"{rest_delta}"
+
+    return deltas
+
+
 # ═══════════════════════════════════════════════════════════════════════════
 # VIEW MODE RENDERERS
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
+def render_overview_view(
+    df: pd.DataFrame,
+    analysis_service: AnalysisService,
+    start_date: datetime = None,
+    end_date: datetime = None,
+    activity_service: "ActivityService" = None,
+):
     """
     Render the Overview view mode.
 
     Includes: Volume trends, TSS distribution, Intensity distribution (TID).
     Ports logic from render_trends_tab and render_distributions_tab.
+
+    Args:
+        df: Filtered activities dataframe for the selected period
+        analysis_service: Service for calculating metrics
+        start_date: Start of the current period (for delta calculation)
+        end_date: End of the current period (for delta calculation)
+        activity_service: Service for fetching activities (used for delta calculation)
     """
     st.subheader("📊 Overview")
 
@@ -140,27 +397,31 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     # Aggregate load metrics
     load_stats = analysis_service.aggregate_load(df)
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # TOP ROW: Summary Metrics
+    # Compute deltas by comparing to previous period
+    deltas = compute_period_deltas(
+        load_stats, start_date, end_date, activity_service, analysis_service
+    )
     # ═══════════════════════════════════════════════════════════════════════════
 
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
 
-    value_size = 28
+    # value_size = 28
     render_metric(
         col1,
         label="Total Volume",
         value=f"{load_stats['total_hours']:.1f}h",
         help_text="Total moving time",
-        value_size=value_size,
+        delta=deltas.get('volume'),
     )
 
     render_metric(
         col2,
         label="Total TSS",
         value=f"{load_stats['total_tss']:.0f}",
-        help_text=HELP_TEXTS.get("tss", "Total Training Stress Score"),
-        value_size=value_size,
+        help_text="Total Training Stress Score",
+        delta=deltas.get('tss'),
+        # custom_style=True,
     )
 
     render_metric(
@@ -168,7 +429,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         label="Total Distance",
         value=f"{load_stats['total_distance_km']:.0f} km",
         help_text="Total distance covered",
-        value_size=value_size,
+        delta=deltas.get('distance'),
     )
 
     render_metric(
@@ -176,7 +437,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         label="Activities",
         value=f"{load_stats['activity_count']}",
         help_text="Number of activities",
-        value_size=value_size,
+        delta=deltas.get('activities'),
     )
 
     st.divider()
@@ -284,7 +545,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     fig.update_layout(height=700, showlegend=False, hovermode="x unified")
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # INTENSITY DISTRIBUTION (TID)
@@ -296,15 +557,17 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     # Get TID stats
     tid_stats = analysis_service.aggregate_tid(df)
 
+    # Compute TID deltas vs previous period
+    tid_deltas = compute_tid_deltas(tid_stats, df, activity_service, analysis_service)
+
     col1, col2, col3 = st.columns(3)
 
-    value_size = 32
     render_metric(
         col1,
         label="Zone 1 (Easy)",
         value=f"{tid_stats['tid_z1_percentage']:.1f}%",
         help_text="<55% FTP - Recovery and base building",
-        value_size=value_size,
+        delta=tid_deltas.get("z1"),
     )
 
     render_metric(
@@ -312,7 +575,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         label="Zone 2 (Moderate)",
         value=f"{tid_stats['tid_z2_percentage']:.1f}%",
         help_text="55-90% FTP - Tempo and threshold work",
-        value_size=value_size,
+        delta=tid_deltas.get("z2"),
     )
 
     render_metric(
@@ -320,7 +583,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         label="Zone 3 (Hard)",
         value=f"{tid_stats['tid_z3_percentage']:.1f}%",
         help_text=">90% FTP - High intensity intervals",
-        value_size=value_size,
+        delta=tid_deltas.get("z3"),
     )
 
     # TID Pie Chart
@@ -346,14 +609,15 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
         legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5),
     )
 
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
 
     # TID Educational Content (Phase 5.9)
     with st.expander("ℹ️ Understanding Training Intensity Distribution (TID)"):
         st.markdown("""
         **What is TID?**
 
-        Training Intensity Distribution shows how you split your training time across intensity zones:
+        Training Intensity Distribution shows how you split your training time
+        across intensity zones:
         - **Zone 1** (0-55% FTP): Easy recovery rides, base building
         - **Zone 2** (55-90% FTP): Tempo and threshold work, "sweet spot"
         - **Zone 3** (>90% FTP): VO2max intervals, sprints, races
@@ -424,29 +688,26 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     phase = phase_info["phase"]
 
-    col1, col2, col3 = st.columns([2, 1, 1])
+    col1, _ = st.columns([2, 1])
+    col2, col3 = st.columns(2)
 
-    value_size = 28
     render_metric(
         col1,
         label="Current Phase",
         value=phase,
         help_text="\n".join(key for key, _ in phase_colors.items()),
-        value_size=value_size,
     )
     render_metric(
         col2,
         label="Volume Trend",
-        value=f"{phase_info.get('current_volume_hours', 0):.1f}h",
+        value=f"{phase_info.get('current_volume_hours', 0):.1f}hr",
         help_text="Total volume in current period",
-        value_size=value_size,
     )
     render_metric(
         col3,
         label="Intensity (IF)",
         value=f"{phase_info.get('current_avg_if', 0):.2f}",
         help_text="Average Intensity Factor in current period",
-        value_size=value_size,
     )
 
     # Phase recommendations
@@ -500,7 +761,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     render_metric(
         col2,
         label="Total Time",
-        value=f"{df_cum['cumulative_time_hours'].iloc[-1]:.0f} hours",
+        value=f"{df_cum['cumulative_time_hours'].iloc[-1]:.0f} hr",
         help_text="Total moving time",
         value_size=value_size,
     )
@@ -569,7 +830,7 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
     )
 
     fig_cum.update_yaxes(title_text="Distance (km)", row=1, col=1)
-    fig_cum.update_yaxes(title_text="Time (hours)", row=2, col=1)
+    fig_cum.update_yaxes(title_text="Time (hr)", row=2, col=1)
     fig_cum.update_yaxes(title_text="Elevation (m)", row=3, col=1)
     fig_cum.update_xaxes(title_text="", row=1, col=1)
     fig_cum.update_xaxes(title_text="", row=2, col=1)
@@ -577,10 +838,14 @@ def render_overview_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     fig_cum.update_layout(height=700, showlegend=False, hovermode="x unified")
 
-    st.plotly_chart(fig_cum, use_container_width=True)
+    st.plotly_chart(fig_cum, width="stretch")
 
 
-def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
+def render_physiology_view(
+    df: pd.DataFrame,
+    analysis_service: AnalysisService,
+    activity_service: "ActivityService" = None,
+):
     """
     Render the Physiology view mode.
 
@@ -601,6 +866,11 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
 
     physio_stats = analysis_service.aggregate_physiology(df, filter_steady_state=True)
 
+    # Compute trend deltas vs previous period
+    physio_deltas = compute_physiology_deltas(
+        physio_stats, df, activity_service, analysis_service
+    )
+
     col1, col2, col3 = st.columns(3)
 
     value_size=32
@@ -608,8 +878,9 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
         col1,
         label="Avg Efficiency Factor",
         value=f"{physio_stats['avg_efficiency_factor']:.2f}",
-        help_text="Average EF from steady-state rides (Z2 only)",
+        help_text="Average EF from steady-state rides (Z2 only). Higher is better.",
         value_size=value_size,
+        delta=physio_deltas.get("ef"),
     )
     render_metric(
         col2,
@@ -617,6 +888,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
         value=f"{physio_stats['avg_decoupling']:.2f}%",
         help_text="Average Pw:HR decoupling from steady rides (<5% is good)",
         value_size=value_size,
+        delta=physio_deltas.get("decoupling"),
     )
     render_metric(
         col3,
@@ -771,7 +1043,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
             hovermode="closest",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # EF interpretation (using dynamic thresholds)
         avg_ef = ef_trends["efficiency_factor"].mean()
@@ -921,7 +1193,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
             hovermode="closest",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Decoupling interpretation
         avg_decoupling = ef_trends["decoupling"].mean()
@@ -1080,7 +1352,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 hovermode="closest",
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Drift interpretation
             avg_drift = drift_data["cardiac_drift"].mean()
@@ -1251,7 +1523,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 hovermode="x",
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
 
             # Intensity pattern guidance
             recovery_days = len(daily_if[daily_if["avg_if"] < 0.55])
@@ -1508,7 +1780,7 @@ def render_physiology_view(df: pd.DataFrame, analysis_service: AnalysisService):
                         ),
                     )
 
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
 
                     # TID trend interpretation
                     avg_polarization = tid_df["polarization"].mean()
@@ -1709,7 +1981,7 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
                 hovermode="x unified",
             )
 
-            st.plotly_chart(fig, use_container_width=True)
+            st.plotly_chart(fig, width="stretch")
         else:
             st.info("No power curve data available for this period.")
 
@@ -1762,7 +2034,7 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
                     "Activity URL": st.column_config.LinkColumn("Activity", display_text="link"),
                 },
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
             )
         else:
             st.info("No data")
@@ -1980,13 +2252,17 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
                 st.dataframe(
                     perf_df[["Metric", "Value", "Activity", "Date"]],
                     hide_index=True,
-                    use_container_width=True,
+                    width="stretch",
                 )
     else:
         st.info("No activities available for performance tracking.")
 
 
-def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
+def render_recovery_view(
+    df: pd.DataFrame,
+    analysis_service: AnalysisService,
+    activity_service: "ActivityService" = None,
+):
     """
     Render the Recovery view mode (NEW - Phase 5.5).
 
@@ -2008,6 +2284,11 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
     # Calculate recovery metrics
     recovery = analysis_service.get_recovery_metrics(df)
 
+    # Compute recovery deltas vs previous period
+    recovery_deltas = compute_recovery_deltas(
+        recovery, df, activity_service, analysis_service
+    )
+
     col1, col2, col3 = st.columns(3)
 
     value_size = 24
@@ -2016,6 +2297,7 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
             col1,
             label="Rest Days",
             value=recovery["rest_days"],
+            delta=recovery_deltas.get("rest_days"),
             help_text="Days with TSS < 20",
             value_size=value_size,
         )
@@ -2036,6 +2318,7 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 "monotony_index", "Daily TSS variability. Lower = more varied training"
             ),
             value_size=value_size,
+            delta=recovery_deltas.get("monotony"),
         )
         if monotony < 1.5:
             st.success("✅ Low risk")
@@ -2054,6 +2337,7 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
                 "strain_index", "Weekly TSS × Monotony. Combines load and variation"
             ),
             value_size=value_size,
+            delta=recovery_deltas.get("strain"),
         )
         if strain < 3000:
             st.success("✅ Manageable")
@@ -2146,7 +2430,7 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
             hovermode="x",
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Daily stats
         col1, col2, col3 = st.columns(3)
@@ -2251,7 +2535,7 @@ def render_recovery_view(df: pd.DataFrame, analysis_service: AnalysisService):
             ),
         )
 
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, width="stretch")
 
         # Current PMC values
         latest = pmc_data.iloc[-1]
@@ -2602,13 +2886,13 @@ def main():
     analysis_service = AnalysisService()
 
     if view_mode == "Overview":
-        render_overview_view(df, analysis_service)
+        render_overview_view(df, analysis_service, start_date, end_date, service)
     elif view_mode == "Physiology":
-        render_physiology_view(df, analysis_service)
+        render_physiology_view(df, analysis_service, service)
     elif view_mode == "Power Profile":
         render_power_profile_view(df, analysis_service)
     elif view_mode == "Recovery":
-        render_recovery_view(df, analysis_service)
+        render_recovery_view(df, analysis_service, service)
 
 
 if __name__ == "__main__":

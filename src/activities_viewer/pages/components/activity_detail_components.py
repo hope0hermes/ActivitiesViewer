@@ -17,7 +17,7 @@ from streamlit_folium import st_folium
 
 from activities_viewer.domain.models import Activity
 from activities_viewer.services.activity_service import ActivityService
-from activities_viewer.utils.formatting import render_metric
+from activities_viewer.utils.formatting import format_duration, render_metric
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS & COLORS
@@ -97,13 +97,6 @@ def get_help_text(metric_key: str, help_texts: dict) -> str:
         Help text string, or empty string if not found
     """
     return help_texts.get(metric_key, "")
-
-
-def format_duration(seconds: float) -> str:
-    """Format seconds into hours and minutes."""
-    hours = int(seconds // 3600)
-    minutes = int((seconds % 3600) // 60)
-    return f"{hours}h {minutes}m"
 
 
 def apply_smoothing(data: pd.Series, window_size: int) -> pd.Series:
@@ -378,7 +371,7 @@ def render_contextual_metrics(
             )
 
             if not lap_stats.empty:
-                st.dataframe(lap_stats, use_container_width=True)
+                st.dataframe(lap_stats, width="stretch")
         else:
             st.info("No lap data available for this workout.")
 
@@ -593,7 +586,7 @@ def render_contextual_metrics(
         col1, col2 = st.columns(2)
         col3, col4 = st.columns(2)
 
-        render_metric()
+        # render_metric()
 
         with col1:
             if_metric = get_metric(activity, "intensity_factor")
@@ -779,7 +772,7 @@ def render_activity_navigation(
         if st.button(
             "◀ Prev",
             disabled=not has_prev,
-            use_container_width=True,
+            width="stretch",
             help="Go to previous activity (older)",
         ):
             prev_activity_id = activity_ids[current_idx + 1]
@@ -800,7 +793,7 @@ def render_activity_navigation(
         if st.button(
             "Next ▶",
             disabled=not has_next,
-            use_container_width=True,
+            width="stretch",
             help="Go to next activity (newer)",
         ):
             next_activity_id = activity_ids[current_idx - 1]
@@ -1128,13 +1121,11 @@ def render_overview_tab(
 
     st.divider()
 
-    # ═══════════════════════════════════════════════════════════════════════════
-    # TIER 2: CONTEXT METRICS (secondary details in smaller columns)
-    # ═══════════════════════════════════════════════════════════════════════════
-    st.caption("📊 Activity Details")
-
-    # Row 1: Time, Elevation, Speed, Power, HR
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2 = st.columns(2)
+    col3, col4 = st.columns(2)
+    col5, col6 = st.columns(2)
+    col7, col8 = st.columns(2)
+    col9, col10 = st.columns(2)
 
     time_label = "⏱️ Moving Time" if metric_view == "Moving Time" else "⏱️ Total Time"
     render_metric(
@@ -1177,14 +1168,19 @@ def render_overview_tab(
         get_help_text("average_hr", help_texts),
     )
 
-    # Row 2: Intensity, efficiency, and other metrics
-    st.caption("⚡ Intensity & Efficiency")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    # Average Cadence
+    avg_cadence = get_metric(activity, "average_cadence")
+    render_metric(
+        col6,
+        "🔄 Cadence",
+        f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-",
+        get_help_text("average_cadence", help_texts),
+    )
 
     # Intensity Factor
     if_val = get_metric(activity, "intensity_factor")
     render_metric(
-        col1,
+        col7,
         "🎯 IF",
         f"{if_val:.2f}" if if_val else "-",
         get_help_text("intensity_factor", help_texts),
@@ -1193,7 +1189,7 @@ def render_overview_tab(
     # Efficiency Factor
     ef = get_metric(activity, "efficiency_factor")
     render_metric(
-        col2,
+        col8,
         "⚙️ EF",
         f"{ef:.2f}" if ef else "-",
         get_help_text("efficiency_factor", help_texts),
@@ -1202,25 +1198,16 @@ def render_overview_tab(
     # Max HR
     max_hr = get_metric(activity, "max_hr")
     render_metric(
-        col3,
+        col9,
         "💓 Max HR",
         f"{max_hr:.0f} bpm" if max_hr else "-",
         get_help_text("max_hr", help_texts),
     )
 
-    # Average Cadence
-    avg_cadence = get_metric(activity, "average_cadence")
-    render_metric(
-        col4,
-        "🔄 Cadence",
-        f"{avg_cadence:.0f} rpm" if avg_cadence and avg_cadence > 0 else "-",
-        get_help_text("average_cadence", help_texts),
-    )
-
     # Energy
     calories = get_metric(activity, "kilojoules")
     render_metric(
-        col5,
+        col10,
         "🔥 Energy",
         f"{calories:.0f} kJ" if calories else "-",
         get_help_text("kilojoules", help_texts),
@@ -1512,7 +1499,7 @@ def render_overview_tab(
                 margin={"l": 60, "r": 20, "t": 20, "b": 40},
                 showlegend=False,
             )
-            st.plotly_chart(fig_sync, use_container_width=True)
+            st.plotly_chart(fig_sync, width="stretch")
         else:
             st.info("No time-series data available.")
     else:
@@ -1566,7 +1553,7 @@ def render_overview_tab(
         for category, metrics in sorted(categorized_metrics.items()):
             st.markdown(f"**{category}**")
             df_cat = pd.DataFrame(metrics)
-            st.dataframe(df_cat, use_container_width=True, hide_index=True)
+            st.dataframe(df_cat, width="stretch", hide_index=True)
 
         # Display uncategorized fields (metadata, IDs, etc.)
         if uncategorized_metrics:
@@ -1578,7 +1565,7 @@ def render_overview_tab(
                 meta_data.append({"Field": label, "Value": str(value)})
 
             df_meta = pd.DataFrame(meta_data)
-            st.dataframe(df_meta, use_container_width=True, hide_index=True)
+            st.dataframe(df_meta, width="stretch", hide_index=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1883,7 +1870,7 @@ def render_power_curve(
             legend=dict(orientation="h", y=1.15, x=0),
             hovermode="x unified",
         )
-        st.plotly_chart(fig_pc, use_container_width=True)
+        st.plotly_chart(fig_pc, width="stretch")
     else:
         st.info("No power curve data available.")
 
@@ -1964,7 +1951,7 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                 margin={"l": 60, "r": 60, "t": 20, "b": 20},
                 showlegend=False,
             )
-            st.plotly_chart(fig_pz, use_container_width=True)
+            st.plotly_chart(fig_pz, width="stretch")
         else:
             st.info("No power zone data available.")
 
@@ -2023,7 +2010,7 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                 margin={"l": 60, "r": 60, "t": 20, "b": 20},
                 showlegend=False,
             )
-            st.plotly_chart(fig_hz, use_container_width=True)
+            st.plotly_chart(fig_hz, width="stretch")
         else:
             st.info("No HR zone data available.")
 
@@ -2072,7 +2059,7 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                 margin={"l": 40, "r": 40, "t": 20, "b": 40},
                 showlegend=False,
             )
-            st.plotly_chart(fig_tid, use_container_width=True)
+            st.plotly_chart(fig_tid, width="stretch")
 
     with col_hr_tid:
         st.markdown("##### HR Training Intensity Distribution")
@@ -2114,7 +2101,7 @@ def render_zone_distributions(activity: Activity, help_texts: dict) -> None:
                 margin={"l": 40, "r": 40, "t": 20, "b": 40},
                 showlegend=False,
             )
-            st.plotly_chart(fig_hr_tid, use_container_width=True)
+            st.plotly_chart(fig_hr_tid, width="stretch")
 
 
 def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
@@ -2201,7 +2188,7 @@ def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
             margin={"l": 60, "r": 60, "t": 20, "b": 20},
             showlegend=False,
         )
-        st.plotly_chart(fig_pz, use_container_width=True)
+        st.plotly_chart(fig_pz, width="stretch")
 
         st.divider()
 
@@ -2244,7 +2231,7 @@ def render_power_metrics_section(activity: Activity, help_texts: dict) -> None:
             margin={"l": 40, "r": 40, "t": 20, "b": 40},
             showlegend=False,
         )
-        st.plotly_chart(fig_tid, use_container_width=True)
+        st.plotly_chart(fig_tid, width="stretch")
     else:
         st.info("No power zone data available.")
 
@@ -2539,7 +2526,11 @@ def render_training_load_tab(
     # SECTION 2: CRITICAL POWER MODEL
     # ─────────────────────────────────────────────────────────────────────────
     st.markdown("### Critical Power Model")
-    st.markdown("Power-duration curve fit from 90-day rolling window:")
+
+    # Get the CP window used for calculations
+    cp_window_days = get_metric(activity, "cp_window_days")
+    window_text = f"{cp_window_days:.0f}-day rolling window" if cp_window_days else "rolling window"
+    st.markdown(f"Power-duration curve fit from {window_text}:")
 
     col1, col2, col3, col4 = st.columns(4)
 

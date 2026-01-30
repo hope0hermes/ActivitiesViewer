@@ -20,11 +20,15 @@ from activities_viewer.pages.components.activity_detail_components import (
     render_activity_navigation,
     render_contextual_header,
     render_contextual_metrics,
-    render_durability_tab,
-    render_overview_tab,
-    render_power_hr_tab,
+    # render_durability_tab,
+    # render_overview_tab,
+    # render_power_hr_tab,
     render_training_load_tab,
 )
+from activities_viewer.pages.components.detail_tabs.overview import render_overview_tab
+from activities_viewer.pages.components.detail_tabs.power import render_power_hr_tab
+from activities_viewer.pages.components.detail_tabs.fatigue import render_durability_tab
+
 
 st.set_page_config(page_title="Activity Detail", page_icon="🚴", layout="wide")
 
@@ -42,7 +46,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
     else:
         raw_file = (
             settings.activities_raw_file
@@ -54,7 +58,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
 
     return ActivityService(repo)
 
@@ -167,11 +171,11 @@ def main():
     # ═══════════════════════════════════════════════════════════════════════════
 
     # Render tabs with components
-    tab_overview, tab_power_hr, tab_durability, tab_training = st.tabs(
+    tab_overview, tab_power_hr, tab_training = st.tabs(
         [
             "🗺️ Overview & All Metrics",
             "⚡ Power & Heart Rate",
-            "🔋 Durability & Fatigue",
+            # "🔋 Durability & Fatigue",
             "📊 Training Load & Power Profile",
         ]
     )
@@ -182,8 +186,8 @@ def main():
     with tab_power_hr:
         render_power_hr_tab(activity, service, metric_view, HELP_TEXTS)
 
-    with tab_durability:
-        render_durability_tab(activity, metric_view, HELP_TEXTS)
+    # with tab_durability:
+    #     render_durability_tab(activity, metric_view, HELP_TEXTS)
 
     with tab_training:
         render_training_load_tab(activity, metric_view, HELP_TEXTS)

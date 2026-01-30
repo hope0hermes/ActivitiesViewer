@@ -66,6 +66,16 @@ class Settings(BaseSettings):
         gt=0,
         description="Functional Threshold Power in watts",
     )
+    cp: float = Field(
+        default=0.0,
+        ge=0,
+        description="Critical Power in watts (0 = disabled). Typically 85-90% of FTP",
+    )
+    w_prime: float = Field(
+        default=0.0,
+        ge=0,
+        description="W-prime (anaerobic capacity) in joules (0 = disabled). Typical: 15,000-30,000 J",
+    )
     weight_kg: float = Field(
         default=77.0,
         gt=0,

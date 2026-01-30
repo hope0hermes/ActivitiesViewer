@@ -33,6 +33,16 @@ weight_kg: 77.0
 # Your maximum heart rate in bpm
 max_hr: 185
 
+# --- Critical Power Model (Computed Automatically) ---
+# CP and W' are computed from your power curve data using a 90-day rolling window
+# These values are stored in the activities CSV and updated as you add new data
+# You don't need to configure them here - they come from data analysis
+#
+# For reference:
+# - CP (Critical Power): Sustainable power for extended efforts (~85-90% FTP)
+# - W' (W-prime): Anaerobic work capacity above CP (~15-30 kJ typical range)
+# - Both metrics evolve with your fitness and are tracked over time
+
 # --- Goal Tracking (Optional) ---
 # Set a W/kg improvement goal to track your progress
 # Uncomment and configure these fields to enable goal tracking on home page

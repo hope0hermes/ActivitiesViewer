@@ -27,6 +27,7 @@ try:
         render_goal_progress_card,
         render_status_card,
         render_recent_activity_sparklines,
+        render_training_calendar,
     )
 except ImportError:
     # Fallback for when running directly from source without package installation
@@ -44,6 +45,7 @@ except ImportError:
         render_goal_progress_card,
         render_status_card,
         render_recent_activity_sparklines,
+        render_training_calendar,
     )
 
 logger = logging.getLogger(__name__)
@@ -74,7 +76,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
     else:
         # Fallback or future SQL implementation
         raw_file = (
@@ -87,7 +89,7 @@ def init_services(settings: Settings) -> ActivityService:
             if hasattr(settings, "activities_moving_file")
             else None
         )
-        repo = CSVActivityRepository(raw_file, moving_file)
+        repo = CSVActivityRepository(raw_file, moving_file, settings.streams_dir)
 
     return ActivityService(repo)
 
@@ -227,6 +229,18 @@ def main():
 
     except Exception as e:
         st.error(f"Error rendering activity sparklines: {e}")
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # TRAINING CALENDAR HEAT MAP
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    try:
+        render_training_calendar(df_all, months=3)
+
+        st.divider()
+
+    except Exception as e:
+        st.error(f"Error rendering training calendar: {e}")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # NAVIGATION INFO

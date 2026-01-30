@@ -186,15 +186,16 @@ How well the mathematical model fits your power data.
 • <0.90: Fair (use estimates cautiously)
 • 0.90-0.95: Good (reliable)
 • >0.95: Excellent (very reliable)""",
-    "aei": """**Aerobic Endurance Index (AEI)**
-W-prime normalized to body weight (J/kg). Indicates athlete profile type.
-Higher = greater anaerobic capacity per kg.
-• <0.55: Anaerobic profile
-• 0.55-0.70: Balanced
-• 0.70-0.85: Aerobic profile
-• >0.85: Very aerobic profile (endurance specialist)
+    "aei": """**Anaerobic Energy Index (AEI)**
+W' (anaerobic capacity) normalized to body weight (kJ/kg).
+Higher = greater anaerobic capacity per kg of body weight.
+• <0.15: Very low anaerobic capacity
+• 0.15-0.25: Low to moderate
+• 0.25-0.35: Moderate to high
+• >0.35: High anaerobic capacity
 
-Compare over time to track phenotype shifts and anaerobic capacity changes.""",
+Track over time to monitor changes in anaerobic work capacity.
+Higher values indicate greater ability to perform high-intensity efforts.""",
     # ═══════════════════════════════════════════════════════════════════════════
     # EFFICIENCY METRICS
     # ═══════════════════════════════════════════════════════════════════════════
@@ -211,49 +212,72 @@ Track over time to monitor aerobic development.""",
 Average Efficiency Factor across all rides.
 Higher values indicate better overall aerobic efficiency.
 Rising trend = improving aerobic fitness.""",
-    "decoupling": """**Decoupling (Cardiac Drift)**
-% change in EF from 1st to 2nd half of activity.
-Negative = fatigue/dehydration.
->5% drift indicates aerobic system as limiter.
+    "decoupling": """**Decoupling (Power:HR Decoupling)**
+Percent change in Efficiency Factor (power/HR ratio) from 1st to 2nd half.
+Formula: (EF 2nd half - EF 1st half) / EF 1st half × 100%
 
+Negative values = EF decreasing (power dropping relative to HR - normal fatigue).
+Positive values = EF improving (rare, indicates warm-up effect).
+
+This is different from cardiac drift which only tracks HR changes.
 Requires 1hr+ steady effort for meaningful analysis.
-• <3%: Excellent aerobic fitness ✅
-• 3-5%: Good fitness ✅
-• 5-8%: Moderate drift ⚠️
-• >8%: Poor fitness or fatigue 🔴""",
-    "avg_decoupling": """**Average Cardiac Drift**
-Average cardiac drift across all activities.
-Lower values indicate better aerobic fitness.
-• <5%: Excellent aerobic fitness ✅
-• 5-10%: Good aerobic fitness ➡️
-• >10%: May need more Z2 base work ⚠️""",
+• > -3%: Excellent aerobic fitness ✅
+• -3% to -5%: Good fitness ✅
+• -5% to -8%: Moderate drift ⚠️
+• < -8%: Poor fitness or fatigue 🔴""",
+    "avg_decoupling": """**Average Power:HR Decoupling**
+Average decoupling across all activities.
+Values closer to 0% (less negative) indicate better aerobic fitness.
+Most values will be negative due to natural fatigue accumulation during efforts.
+• > -5%: Excellent aerobic fitness ✅
+• -5% to -10%: Good aerobic fitness ➡️
+• < -10%: May need more Z2 base work ⚠️""",
     "cardiac_drift": """**Cardiac Drift**
-(EF 1st half - EF 2nd half) / EF 1st half × 100%.
-Aerobic fitness indicator:
-• <3%: Excellent aerobic fitness ✅
+Percent increase in heart rate from 1st to 2nd half (HR-only metric).
+Formula: (HR 2nd half - HR 1st half) / HR 1st half × 100%
+
+Positive values = HR increasing (cardiovascular strain/dehydration - normal).
+Negative values = HR decreasing (rare, warm-up effect).
+
+This is different from decoupling which tracks power/HR ratio changes.
+• < 3%: Excellent aerobic fitness ✅
 • 3-5%: Good fitness ✅
 • 5-8%: Moderate drift ⚠️
-• >8%: Poor fitness or fatigue 🔴""",
+• > 8%: Poor fitness or dehydration/heat stress 🔴""",
+    "first_half_hr": """**First Half Heart Rate**
+Average heart rate (BPM) during the first half of the ride.
+Used to calculate cardiac drift by comparing with second half HR.""",
+    "second_half_hr": """**Second Half Heart Rate**
+Average heart rate (BPM) during the second half of the ride.
+Used to calculate cardiac drift by comparing with first half HR.""",
     # ═══════════════════════════════════════════════════════════════════════════
     # FATIGUE & DURABILITY METRICS
     # ═══════════════════════════════════════════════════════════════════════════
     "fatigue_index": """**Fatigue Index**
-% power decline from initial to final 5 minutes:
-• 0-5%: Excellent pacing
-• 5-15%: Good pacing/endurance
-• 15-25%: Moderate fatigue
-• >25%: Poor pacing or high fatigue
+Power decline from first half to second half (magnitude of power loss).
+Formula: (Power 1st half - Power 2nd half) / Power 1st half × 100%
+
+This is the absolute value of power drift, showing magnitude of power fade:
+• 0-5%: Excellent pacing ✅
+• 5-15%: Good pacing/endurance ✅
+• 15-25%: Moderate fatigue ⚠️
+• >25%: Poor pacing or high fatigue 🔴
 
 Lower is better - shows ability to maintain power.""",
     "fatigue_trend": """**Fatigue Trend**
 Average fatigue index across activities. Lower is better.
 High values (>15%) suggest inadequate recovery or pacing issues.""",
-    "power_decay": """**Power Decay**
-% power decrease from first to second half:
-• <5%: Excellent sustainability
-• 5-10%: Good
-• 10-20%: Moderate fade
-• >20%: Significant decay""",
+    "power_drift": """**Power Drift**
+Percent change in power from 1st to 2nd half (power-only metric).
+Formula: (Power 2nd half - Power 1st half) / Power 1st half × 100%
+
+Negative values = power decreasing (normal fatigue).
+Positive values = negative split (building power throughout ride).
+
+• >-5%: Excellent sustainability ✅
+• -5% to -10%: Good pacing ✅
+• -10% to -15%: Moderate fade ⚠️
+• <-15%: Significant fade 🔴""",
     "hr_fatigue_index": """**HR Fatigue Index**
 % HR increase from initial to final 5 minutes:
 • 0-5%: Excellent control
@@ -578,6 +602,641 @@ Trend direction:
 }
 
 
+# ═══════════════════════════════════════════════════════════════════════════
+# METRICS METADATA - Comprehensive structured data for all metrics
+# ═══════════════════════════════════════════════════════════════════════════
+
+METRICS_METADATA = {
+    # ═══════════════════════════════════════════════════════════════════════
+    # TRAINING LOAD METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "tss": {
+        "name": "Training Stress Score",
+        "short_name": "TSS",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("tss", ""),
+        "thresholds": {
+            "single_activity": [
+                (150, "🟢", "Low"),
+                (300, "🟡", "Medium"),
+                (450, "🟠", "High"),
+                (float('inf'), "🔴", "Very High"),
+            ],
+            "weekly": [
+                (400, "🟡", "Maintenance"),
+                (600, "🟢", "Building"),
+                (800, "🟠", "High Load"),
+                (float('inf'), "🔴", "Overreaching"),
+            ],
+            "annual": [
+                (3000, "🟡", "Light"),
+                (6000, "🟢", "Moderate"),
+                (10000, "🟠", "Serious"),
+                (float('inf'), "🔴", "Elite/Pro"),
+            ],
+        },
+        "format": "{:.0f}",
+        "higher_is_better": None,  # Context-dependent
+    },
+
+    "ctl": {
+        "name": "Chronic Training Load",
+        "short_name": "CTL",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("ctl", ""),
+        "thresholds": [
+            (50, "🟡", "Building/Recovery"),
+            (80, "🟢", "Moderate"),
+            (120, "🟠", "High Performance"),
+            (float('inf'), "🔴", "Elite/Peak"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": True,
+    },
+
+    "atl": {
+        "name": "Acute Training Load",
+        "short_name": "ATL",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("atl", ""),
+        "thresholds": [
+            (50, "🟢", "Fresh"),
+            (100, "🟡", "Normal"),
+            (float('inf'), "🔴", "High Fatigue"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,
+    },
+
+    "tsb": {
+        "name": "Training Stress Balance",
+        "short_name": "TSB",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("tsb", ""),
+        "thresholds": [
+            (-50, "🔴", "Critical"),
+            (-10, "🟠", "Overreached"),
+            (0, "🟡", "Productive"),
+            (20, "🟢", "Optimal"),
+            (float('inf'), "🔵", "Very Fresh"),
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": None,  # Sweet spot is 0-20
+    },
+
+    "acwr": {
+        "name": "Acute:Chronic Workload Ratio",
+        "short_name": "ACWR",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("acwr", ""),
+        "thresholds": [
+            (0.5, "🔴", "Too Low"),
+            (0.8, "🟠", "Undertraining"),
+            (1.3, "🟢", "Sweet Spot"),
+            (1.5, "🟡", "Caution"),
+            (float('inf'), "🔴", "High Risk"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": None,  # Sweet spot is 0.8-1.3
+    },
+
+    "monotony_index": {
+        "name": "Monotony Index",
+        "short_name": "Monotony",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("monotony_index", ""),
+        "thresholds": [
+            (1.5, "🟢", "Safe"),
+            (2.0, "🟡", "Monitor"),
+            (float('inf'), "🔴", "High Risk"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": False,
+    },
+
+    "strain_index": {
+        "name": "Strain Index",
+        "short_name": "Strain",
+        "unit": None,
+        "category": "training_load",
+        "description": HELP_TEXTS.get("strain_index", ""),
+        "thresholds": [
+            (3000, "🟢", "Manageable"),
+            (6000, "🟡", "Moderate"),
+            (float('inf'), "🔴", "High Strain"),
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": False,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # POWER METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "normalized_power": {
+        "name": "Normalized Power",
+        "short_name": "NP",
+        "unit": "W",
+        "category": "power",
+        "description": HELP_TEXTS.get("normalized_power", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": True,
+    },
+
+    "intensity_factor": {
+        "name": "Intensity Factor",
+        "short_name": "IF",
+        "unit": None,
+        "category": "power",
+        "description": HELP_TEXTS.get("intensity_factor", ""),
+        "thresholds": [
+            (0.75, "🟢", "Recovery"),
+            (0.85, "🟡", "Endurance"),
+            (0.95, "🟠", "Tempo"),
+            (1.05, "🔴", "Threshold"),
+            (float('inf'), "🔴", "VO2max"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": None,  # Context-dependent
+    },
+
+    "variability_index": {
+        "name": "Variability Index",
+        "short_name": "VI",
+        "unit": None,
+        "category": "power",
+        "description": HELP_TEXTS.get("variability_index", ""),
+        "thresholds": [
+            (1.02, "🟢", "Very Steady"),
+            (1.05, "🟢", "Steady"),
+            (1.15, "🟡", "Variable"),
+            (float('inf'), "🟠", "Highly Variable"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": False,
+    },
+
+    "cp": {
+        "name": "Critical Power",
+        "short_name": "CP",
+        "unit": "W",
+        "category": "power",
+        "description": HELP_TEXTS.get("cp", ""),
+        "thresholds": [
+            (200, "🟡", "Beginner"),
+            (300, "🟢", "Fit"),
+            (400, "🟠", "Very Fit"),
+            (float('inf'), "🔴", "Elite"),
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": True,
+    },
+
+    "w_prime": {
+        "name": "W-prime",
+        "short_name": "W'",
+        "unit": "J",
+        "category": "power",
+        "description": HELP_TEXTS.get("w_prime", ""),
+        "thresholds": [
+            (15000, "🟡", "Low"),
+            (25000, "🟢", "Average"),
+            (float('inf'), "🟠", "Strong"),
+        ],
+        "format": "{:,.0f}",
+        "higher_is_better": True,
+    },
+
+    "w_prime_depletion": {
+        "name": "W' Depletion",
+        "short_name": "W' Depletion",
+        "unit": "%",
+        "category": "power",
+        "description": "Percentage of anaerobic capacity (W') depleted during activity",
+        "thresholds": [
+            (30, "🟢", "Low depletion"),        # value < 30: Low depletion
+            (60, "🟡", "Moderate depletion"),   # 30 <= value < 60: Moderate
+            (float('inf'), "🔴", "High depletion"),  # value >= 60: High
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": False,  # Lower depletion is better
+    },
+
+    "cp_r_squared": {
+        "name": "R-squared",
+        "short_name": "R²",
+        "unit": None,
+        "category": "power",
+        "description": HELP_TEXTS.get("cp_r_squared", ""),
+        "thresholds": [
+            (0.85, "🟡", "Fair"),
+            (0.95, "🟢", "Good"),
+            (float('inf'), "🟠", "Excellent"),
+        ],
+        "format": "{:.3f}",
+        "higher_is_better": True,
+    },
+
+    "aei": {
+        "name": "Anaerobic Endurance Index",
+        "short_name": "AEI",
+        "unit": "J/kg",
+        "category": "power",
+        "description": HELP_TEXTS.get("aei", ""),
+        "thresholds": [
+            (0.55, "🟡", "Anaerobic"),
+            (0.70, "🟢", "Balanced"),
+            (0.85, "🟠", "Aerobic"),
+            (float('inf'), "🔴", "Endurance Specialist"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": None,  # Depends on athlete type
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # CARDIAC METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "ef": {
+        "name": "Efficiency Factor",
+        "short_name": "EF",
+        "unit": "W/bpm",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("ef", ""),
+        "thresholds": None,  # Relative to individual baseline
+        "format": "{:.2f}",
+        "higher_is_better": True,
+    },
+
+    "decoupling": {
+        "name": "Power:HR Decoupling",
+        "short_name": "Decoupling",
+        "unit": "%",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("decoupling", ""),
+        "thresholds": [
+            (-3, "🟢", "Excellent"),        # value >= -3: Excellent
+            (-5, "🟡", "Good"),              # -5 <= value < -3: Good
+            (-8, "🟠", "Moderate"),          # -8 <= value < -5: Moderate
+            (-float('inf'), "🔴", "Poor/Fatigued"),  # value < -8: Poor
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": True,  # Less negative is better
+    },
+
+    "cardiac_drift": {
+        "name": "Cardiac Drift",
+        "short_name": "Drift",
+        "unit": "%",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("cardiac_drift", ""),
+        "thresholds": [
+            (3, "🟢", "Excellent"),        # value < 3: Excellent
+            (5, "🟡", "Good"),              # 3 <= value < 5: Good
+            (8, "🟠", "Moderate"),          # 5 <= value < 8: Moderate
+            (float('inf'), "🔴", "Poor/Dehydrated"),  # value >= 8: Poor
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,  # Lower drift is better (less HR increase)
+    },
+
+    "first_half_hr": {
+        "name": "First Half HR",
+        "short_name": "1st HR",
+        "unit": "BPM",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("first_half_hr", ""),
+        "format": "{:.0f}",
+    },
+
+    "second_half_hr": {
+        "name": "Second Half HR",
+        "short_name": "2nd HR",
+        "unit": "BPM",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("second_half_hr", ""),
+        "format": "{:.0f}",
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # FATIGUE & DURABILITY METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "fatigue_index": {
+        "name": "Fatigue Index",
+        "short_name": "Fatigue",
+        "unit": "%",
+        "category": "fatigue",
+        "description": HELP_TEXTS.get("fatigue_index", ""),
+        "thresholds": [
+            (5, "🟢", "Excellent"),
+            (15, "🟡", "Good"),
+            (25, "🟠", "Moderate"),
+            (float('inf'), "🔴", "Poor"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,
+    },
+
+    "power_decay": {
+        "name": "Power Decay",
+        "short_name": "Decay",
+        "unit": "%",
+        "category": "fatigue",
+        "description": HELP_TEXTS.get("power_decay", ""),
+        "thresholds": [
+            (5, "🟢", "Excellent"),
+            (10, "🟡", "Good"),
+            (20, "🟠", "Moderate"),
+            (float('inf'), "🔴", "Significant"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,
+    },
+
+    "power_drift": {
+        "name": "Power Drift",
+        "short_name": "Power Drift",
+        "unit": "%",
+        "category": "fatigue",
+        "description": HELP_TEXTS.get("power_drift", ""),
+        "thresholds": [
+            (-5, "🟢", "Excellent"),        # value >= -5: Excellent
+            (-10, "🟡", "Good"),             # -10 <= value < -5: Good
+            (-15, "🟠", "Moderate"),        # -15 <= value < -10: Moderate
+            (-float('inf'), "🔴", "Poor/Fading"),  # value < -15: Poor
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": True,  # Less negative is better
+    },
+
+    "hr_fatigue_index": {
+        "name": "HR Fatigue Index",
+        "short_name": "HR Fatigue",
+        "unit": "%",
+        "category": "fatigue",
+        "description": HELP_TEXTS.get("hr_fatigue_index", ""),
+        "thresholds": [
+            (5, "🟢", "Excellent"),
+            (10, "🟡", "Good"),
+            (20, "🟠", "Moderate"),
+            (float('inf'), "🔴", "Significant"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,
+    },
+
+    "hr_decay": {
+        "name": "HR Decay",
+        "short_name": "HR Decay",
+        "unit": "%",
+        "category": "fatigue",
+        "description": HELP_TEXTS.get("hr_decay", ""),
+        "thresholds": [
+            (5, "🟢", "Excellent"),
+            (10, "🟡", "Good"),
+            (20, "🟠", "Moderate"),
+            (float('inf'), "🔴", "Significant"),
+        ],
+        "format": "{:.1f}",
+        "higher_is_better": False,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # TRAINING INTENSITY DISTRIBUTION
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "polarization_index": {
+        "name": "Polarization Index",
+        "short_name": "PI",
+        "unit": None,
+        "category": "tid",
+        "description": HELP_TEXTS.get("polarization_index", ""),
+        "thresholds": [
+            (1.5, "🟡", "Threshold-focused"),
+            (2.0, "🟠", "Pyramidal"),
+            (4.0, "🟢", "Moderately Polarized"),
+            (float('inf'), "🟢", "Highly Polarized"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": True,
+    },
+
+    "tdr": {
+        "name": "Training Distribution Ratio",
+        "short_name": "TDR",
+        "unit": None,
+        "category": "tid",
+        "description": HELP_TEXTS.get("tdr", ""),
+        "thresholds": [
+            (1, "🟡", "High-intensity"),
+            (2, "🟢", "Balanced"),
+            (float('inf'), "🟠", "Polarized"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": None,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PACING METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "negative_split_index": {
+        "name": "Negative Split Index",
+        "short_name": "NSI",
+        "unit": None,
+        "category": "pacing",
+        "description": HELP_TEXTS.get("negative_split_index", ""),
+        "thresholds": [
+            (0.85, "🔴", "Significant Fade"),
+            (0.95, "🟠", "Slight Fade"),
+            (1.05, "🟢", "Even Pacing"),
+            (float('inf'), "🟢", "Negative Split"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": True,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # CLIMBING METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "vam": {
+        "name": "VAM",
+        "short_name": "VAM",
+        "unit": "m/h",
+        "category": "climbing",
+        "description": HELP_TEXTS.get("vam", ""),
+        "thresholds": [
+            (800, "🟡", "Recreational"),
+            (1000, "🟢", "Strong Amateur"),
+            (1200, "🟠", "Cat 2-3"),
+            (1400, "🔴", "Cat 1/Pro"),
+            (1600, "🔴", "World Tour"),
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": True,
+    },
+
+    "climbing_power_per_kg": {
+        "name": "Climbing W/kg",
+        "short_name": "Climb W/kg",
+        "unit": "W/kg",
+        "category": "climbing",
+        "description": HELP_TEXTS.get("climbing_power_per_kg", ""),
+        "thresholds": [
+            (3.0, "🟡", "Recreational"),
+            (3.5, "🟢", "Strong Amateur"),
+            (4.0, "🟠", "Cat 2-3"),
+            (4.5, "🔴", "Cat 1/Pro"),
+            (5.5, "🔴", "World Tour"),
+        ],
+        "format": "{:.2f}",
+        "higher_is_better": True,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # RECOVERY METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "rest_days": {
+        "name": "Rest Days",
+        "short_name": "Rest",
+        "unit": "days",
+        "category": "recovery",
+        "description": HELP_TEXTS.get("rest_days", ""),
+        "thresholds": [
+            (0, "🔴", "No Rest"),
+            (1, "🟡", "May Need More"),
+            (float('inf'), "🟢", "Good Recovery"),
+        ],
+        "format": "{:.0f}",
+        "higher_is_better": True,
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # PROGRESSION METRICS
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "progression": {
+        "name": "Weekly Progression",
+        "short_name": "Progression",
+        "unit": "%",
+        "category": "progression",
+        "description": HELP_TEXTS.get("progression", ""),
+        "thresholds": [
+            (-10, "🔵", "Recovery Week"),
+            (3, "🟡", "Low"),
+            (10, "🟢", "Optimal"),
+            (20, "🟡", "Monitor"),
+            (float('inf'), "🔴", "High Risk"),
+        ],
+        "format": "{:+.0f}",
+        "higher_is_better": None,  # Sweet spot 3-10%
+    },
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # BASIC METRICS (no thresholds)
+    # ═══════════════════════════════════════════════════════════════════════
+
+    "average_power": {
+        "name": "Average Power",
+        "short_name": "Avg Power",
+        "unit": "W",
+        "category": "power",
+        "description": HELP_TEXTS.get("avg_power", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": True,
+    },
+
+    "average_hr": {
+        "name": "Average Heart Rate",
+        "short_name": "Avg HR",
+        "unit": "bpm",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("average_hr", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": None,
+    },
+
+    "max_hr": {
+        "name": "Maximum Heart Rate",
+        "short_name": "Max HR",
+        "unit": "bpm",
+        "category": "cardiac",
+        "description": HELP_TEXTS.get("max_hr", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": None,
+    },
+
+    "average_cadence": {
+        "name": "Average Cadence",
+        "short_name": "Avg Cadence",
+        "unit": "rpm",
+        "category": "basic",
+        "description": HELP_TEXTS.get("average_cadence", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": None,
+    },
+
+    "kilojoules": {
+        "name": "Energy Expended",
+        "short_name": "kJ",
+        "unit": "kJ",
+        "category": "basic",
+        "description": HELP_TEXTS.get("kilojoules", ""),
+        "thresholds": None,
+        "format": "{:,.0f}",
+        "higher_is_better": None,
+    },
+
+    "moving_time": {
+        "name": "Moving Time",
+        "short_name": "Moving",
+        "unit": "seconds",
+        "category": "basic",
+        "description": HELP_TEXTS.get("moving_time", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": None,
+    },
+
+    "elapsed_time": {
+        "name": "Elapsed Time",
+        "short_name": "Elapsed",
+        "unit": "seconds",
+        "category": "basic",
+        "description": HELP_TEXTS.get("elapsed_time", ""),
+        "thresholds": None,
+        "format": "{:.0f}",
+        "higher_is_better": None,
+    },
+}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# LEGACY THRESHOLD STRUCTURE - For backwards compatibility
+# ═══════════════════════════════════════════════════════════════════════════
+
+METRIC_THRESHOLDS = {
+    key: meta["thresholds"]
+    for key, meta in METRICS_METADATA.items()
+    if meta.get("thresholds") is not None and not isinstance(meta["thresholds"], dict)
+}
+
+
 def get_help_text(key: str, fallback: str = "") -> str:
     """Get help text by key with optional fallback.
 
@@ -589,3 +1248,133 @@ def get_help_text(key: str, fallback: str = "") -> str:
         Help text string for the metric, or fallback if not found
     """
     return HELP_TEXTS.get(key, fallback)
+
+
+def get_metric_status(metric_key: str, value: float) -> dict[str, str]:
+    """Get status interpretation for a metric value based on thresholds.
+
+    Args:
+        metric_key: The metric identifier (e.g., 'cardiac_drift', 'tsb')
+        value: The metric value to interpret
+
+    Returns:
+        Dictionary with 'emoji' and 'label' keys, or empty dict if no thresholds defined
+
+    Examples:
+        >>> get_metric_status('cardiac_drift', 4.2)
+        {'emoji': '🟡', 'label': 'Good'}
+        >>> get_metric_status('tsb', -15)
+        {'emoji': '🟠', 'label': 'Overreached'}
+    """
+    # Try to get from METRICS_METADATA first
+    metadata = METRICS_METADATA.get(metric_key)
+    if metadata:
+        thresholds = metadata.get("thresholds")
+        if isinstance(thresholds, dict):
+            # Handle multi-context thresholds (e.g., TSS has single_activity, weekly, annual)
+            # Default to first context if no specific context provided
+            thresholds = next(iter(thresholds.values()))
+
+        if thresholds:
+            # Use higher_is_better to determine comparison logic
+            # If higher_is_better=False: thresholds are ascending, use < operator
+            # If higher_is_better=True: thresholds are descending, use >= operator
+            higher_is_better = metadata.get("higher_is_better", True)
+
+            for threshold, emoji, label in thresholds:
+                if higher_is_better:
+                    # For metrics where higher is better (descending thresholds)
+                    if value >= threshold:
+                        return {"emoji": emoji, "label": label}
+                else:
+                    # For metrics where lower is better (ascending thresholds)
+                    if value < threshold:
+                        return {"emoji": emoji, "label": label}
+            # Fallback to last threshold if no match
+            return {"emoji": thresholds[-1][1], "label": thresholds[-1][2]}
+
+    # Fallback to legacy METRIC_THRESHOLDS for backwards compatibility
+    thresholds = METRIC_THRESHOLDS.get(metric_key)
+    if thresholds:
+        # For legacy thresholds, detect direction from threshold values
+        is_ascending = thresholds[0][0] < thresholds[-1][0]
+        for threshold, emoji, label in thresholds:
+            if is_ascending:
+                if value < threshold:
+                    return {"emoji": emoji, "label": label}
+            else:
+                if value >= threshold:
+                    return {"emoji": emoji, "label": label}
+        return {"emoji": thresholds[-1][1], "label": thresholds[-1][2]}
+
+    return {}
+
+
+def get_metric_metadata(metric_key: str) -> dict:
+    """Get complete metadata for a metric.
+
+    Args:
+        metric_key: The metric identifier
+
+    Returns:
+        Dictionary with metadata (name, unit, category, thresholds, etc.)
+        Returns empty dict if metric not found
+
+    Examples:
+        >>> meta = get_metric_metadata('cp')
+        >>> meta['name']
+        'Critical Power'
+        >>> meta['unit']
+        'W'
+    """
+    return METRICS_METADATA.get(metric_key, {})
+
+
+def format_metric_value(metric_key: str, value: float) -> str:
+    """Format a metric value according to its metadata.
+
+    Args:
+        metric_key: The metric identifier
+        value: The value to format
+
+    Returns:
+        Formatted string representation of the value
+
+    Examples:
+        >>> format_metric_value('cp', 294.5)
+        '294'
+        >>> format_metric_value('w_prime', 13334)
+        '13,334'
+    """
+    metadata = METRICS_METADATA.get(metric_key)
+    if metadata and metadata.get("format"):
+        try:
+            formatted = metadata["format"].format(value)
+            # Add unit if specified
+            if metadata.get("unit"):
+                return f"{formatted} {metadata['unit']}"
+            return formatted
+        except (ValueError, KeyError):
+            pass
+
+    # Fallback to simple formatting
+    return f"{value:.1f}"
+
+
+def get_metrics_by_category(category: str) -> list[str]:
+    """Get all metric keys belonging to a specific category.
+
+    Args:
+        category: Category name (e.g., 'power', 'cardiac', 'training_load')
+
+    Returns:
+        List of metric keys in that category
+
+    Examples:
+        >>> get_metrics_by_category('power')
+        ['normalized_power', 'intensity_factor', 'cp', 'w_prime', ...]
+    """
+    return [
+        key for key, meta in METRICS_METADATA.items()
+        if meta.get("category") == category
+    ]

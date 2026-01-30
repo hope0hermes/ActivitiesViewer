@@ -25,13 +25,30 @@ streams_dir: "Streams"
 
 # --- Athlete Configuration ---
 # Your Functional Threshold Power in watts
-ftp: 296.0
+ftp: 285.0
 
 # Your body weight in kilograms
 weight_kg: 78.0
 
 # Your maximum heart rate in bpm
 max_hr: 185
+
+# --- Critical Power & Anaerobic Capacity (Optional) ---
+# Required to enable W' Balance and match burn analysis
+#
+# Critical Power (watts): Maximum sustainable power indefinitely
+# - Automatically computed from 90-day rolling power curve analysis
+# - Typical: 85-90% of FTP for well-trained athletes
+# - Note: This is computed in StravaAnalyzer and stored in the CSV
+# - For reference only - actual value comes from data analysis
+# cp: 250
+
+# W-prime (joules): Anaerobic work capacity above CP
+# - Automatically computed from 90-day rolling power curve analysis
+# - Typical range: 15,000-30,000 joules (15-30 kJ)
+# - Note: This is computed in StravaAnalyzer and stored in the CSV
+# - For reference only - actual value comes from data analysis
+# w_prime: 13000
 
 # --- Goal Tracking (Optional) ---
 # Set a W/kg improvement goal to track your progress
