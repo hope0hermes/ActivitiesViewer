@@ -283,6 +283,87 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
+    # RACE READINESS WIDGET
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    st.markdown("---")
+    st.markdown("#### 🏁 Race Readiness")
+
+    # Calculate race readiness based on TSB and CTL
+    # Optimal race form: TSB between -10 and +25, with high CTL
+    race_col1, race_col2 = st.columns([2, 1])
+
+    with race_col1:
+        # Race readiness interpretation based on scientific research
+        # Peak performance occurs when TSB is between -10 and +25 with maintained CTL
+        if tsb > 25:
+            race_status = "⚠️ Over-rested"
+            race_color = "#ffc107"  # Yellow
+            race_message = "You may have lost some fitness from extended rest. Consider 2-3 days of moderate training before racing."
+            readiness_pct = 75
+        elif tsb > 15:
+            race_status = "✅ Fresh & Ready"
+            race_color = "#28a745"  # Green
+            race_message = "Excellent form! Ideal for A-priority races. Maintain with light openers."
+            readiness_pct = 100
+        elif tsb > 5:
+            race_status = "🟢 Race Ready"
+            race_color = "#28a745"  # Green
+            race_message = "Very good form. Ready for racing or hard training blocks."
+            readiness_pct = 95
+        elif tsb > -10:
+            race_status = "⚡ Optimal Training"
+            race_color = "#17a2b8"  # Blue
+            race_message = "Absorbing training well. 3-5 days of taper will bring peak form."
+            readiness_pct = 80
+        elif tsb > -20:
+            race_status = "💪 Productive Fatigue"
+            race_color = "#6c757d"  # Gray
+            race_message = "Good training load. Need 5-7 days taper for race form."
+            readiness_pct = 60
+        elif tsb > -30:
+            race_status = "😴 Fatigued"
+            race_color = "#fd7e14"  # Orange
+            race_message = "Accumulated fatigue. Need 7-10 days recovery before racing."
+            readiness_pct = 40
+        else:
+            race_status = "🚨 Overreached"
+            race_color = "#dc3545"  # Red
+            race_message = "Risk of overtraining. Prioritize recovery for 10+ days."
+            readiness_pct = 20
+
+        # Factor in CTL for overall readiness
+        ctl_factor = min(ctl / 80, 1.0)  # Scale CTL contribution (80+ is considered strong)
+        overall_readiness = int(readiness_pct * (0.7 + 0.3 * ctl_factor))
+
+        # Display race readiness bar
+        st.markdown(
+            f"""
+            <div style="margin-bottom: 10px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                    <span style="font-weight: bold; color: {race_color};">{race_status}</span>
+                    <span style="font-weight: bold;">{overall_readiness}%</span>
+                </div>
+                <div style="background-color: #e9ecef; border-radius: 5px; height: 20px;">
+                    <div style="background-color: {race_color}; width: {overall_readiness}%; height: 100%; border-radius: 5px;"></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.caption(race_message)
+
+    with race_col2:
+        # Taper recommendation
+        if tsb < -10:
+            days_to_peak = int(abs(tsb) / 3)  # Rough estimate: TSB rises ~3 points/day during taper
+            st.info(f"📅 **Est. Taper**\n{days_to_peak} days to peak form")
+        elif tsb > 15:
+            st.success("🏆 **Peak Form**\nRace within 1-3 days!")
+        else:
+            st.info("🎯 **Ready**\nGood for racing")
+
+    # ═══════════════════════════════════════════════════════════════════════════
     # TREND VISUALIZATION (Mini Chart)
     # ═══════════════════════════════════════════════════════════════════════════
 
@@ -698,4 +779,266 @@ def render_training_calendar(
             label="Avg Daily TSS",
             value=f"{avg_daily_tss:.0f}",
             help_text="Average TSS on active days",
+        )
+
+
+def render_wkg_trend_chart(
+    activities_df: pd.DataFrame,
+    goal: Optional["Goal"] = None,
+    weight_kg: float = 75.0,
+    months: int = 12,
+) -> None:
+    """
+    Render W/kg trend chart showing FTP progression over time.
+
+    Uses estimated_ftp or power_curve_20min * 0.95 to track FTP over time,
+    and displays W/kg trajectory with goal line if configured.
+
+    Args:
+        activities_df: DataFrame with activity data including estimated_ftp or power_curve_20min
+        goal: Optional Goal object with target W/kg and dates
+        weight_kg: Current athlete weight in kg
+        months: Number of months of history to show
+    """
+    st.subheader("📈 W/kg Progression")
+
+    if activities_df.empty:
+        st.info("No activity data available for W/kg trend analysis.")
+        return
+
+    # Filter to activities with FTP data
+    df = activities_df.copy()
+
+    # Parse dates if needed
+    if "start_date_local" in df.columns and not pd.api.types.is_datetime64_any_dtype(
+        df["start_date_local"]
+    ):
+        df["start_date_local"] = pd.to_datetime(df["start_date_local"])
+
+    # Filter by date range - use timezone-naive datetimes for consistency
+    end_date = pd.Timestamp.now()
+    start_date = end_date - timedelta(days=months * 30)
+
+    # Make timezone-naive for comparison if the data is timezone-aware
+    if df["start_date_local"].dt.tz is not None:
+        # Convert to timezone-naive by removing timezone info
+        df["start_date_local"] = df["start_date_local"].dt.tz_localize(None)
+
+    df = df[df["start_date_local"] >= start_date]
+
+    if df.empty:
+        st.info(f"No activities in the last {months} months.")
+        return
+
+    # Get FTP estimate from data
+    # Priority: estimated_ftp > power_curve_20min * 0.95
+    ftp_column = None
+    if "estimated_ftp" in df.columns:
+        df["ftp_estimate"] = pd.to_numeric(df["estimated_ftp"], errors="coerce")
+        ftp_column = "ftp_estimate"
+    elif "power_curve_20min" in df.columns:
+        df["ftp_estimate"] = pd.to_numeric(df["power_curve_20min"], errors="coerce") * 0.95
+        ftp_column = "ftp_estimate"
+    else:
+        st.warning("No FTP data available. Need estimated_ftp or power_curve_20min columns.")
+        return
+
+    # Filter to activities with valid FTP values
+    df = df[df["ftp_estimate"].notna() & (df["ftp_estimate"] > 0)]
+
+    if df.empty:
+        st.info("No activities with valid FTP estimates in the selected period.")
+        return
+
+    # Calculate W/kg for each activity
+    df["wkg"] = df["ftp_estimate"] / weight_kg
+
+    # Sort by date
+    df = df.sort_values("start_date_local")
+
+    # Calculate rolling maximum (best FTP achieved over trailing 28 days)
+    df["date"] = df["start_date_local"].dt.date
+    df_grouped = df.groupby("date").agg({"ftp_estimate": "max", "wkg": "max"}).reset_index()
+    df_grouped["date"] = pd.to_datetime(df_grouped["date"])
+
+    # Calculate 28-day rolling max (representing peak fitness)
+    df_grouped["rolling_max_ftp"] = df_grouped["ftp_estimate"].rolling(window=28, min_periods=1).max()
+    df_grouped["rolling_max_wkg"] = df_grouped["rolling_max_ftp"] / weight_kg
+
+    # Create the chart
+    fig = go.Figure()
+
+    # Individual activity W/kg points
+    fig.add_trace(
+        go.Scatter(
+            x=df_grouped["date"],
+            y=df_grouped["wkg"],
+            mode="markers",
+            name="Activity Est. W/kg",
+            marker=dict(color="#6c757d", size=6, opacity=0.5),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>W/kg: %{y:.2f}<extra></extra>",
+        )
+    )
+
+    # Rolling max line (peak fitness trend)
+    fig.add_trace(
+        go.Scatter(
+            x=df_grouped["date"],
+            y=df_grouped["rolling_max_wkg"],
+            mode="lines",
+            name="Peak Fitness (28d)",
+            line=dict(color="#17a2b8", width=3),
+            hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Peak W/kg: %{y:.2f}<extra></extra>",
+        )
+    )
+
+    # Add goal trajectory line if goal is configured
+    if goal is not None:
+        goal_start = goal.start_date
+        goal_end = goal.target_date
+        goal_start_wkg = goal.start_wkg
+        goal_target_wkg = goal.target_wkg
+
+        # Ensure goal dates are timezone-naive for consistent comparison
+        if hasattr(goal_start, 'tzinfo') and goal_start.tzinfo is not None:
+            goal_start = goal_start.replace(tzinfo=None)
+        if hasattr(goal_end, 'tzinfo') and goal_end.tzinfo is not None:
+            goal_end = goal_end.replace(tzinfo=None)
+
+        # Create trajectory line from goal start to target
+        trajectory_dates = pd.date_range(start=goal_start, end=goal_end, periods=50)
+        total_days = (goal_end - goal_start).days
+        if total_days > 0:
+            trajectory_wkg = [
+                goal_start_wkg + (goal_target_wkg - goal_start_wkg) * (i / (len(trajectory_dates) - 1))
+                for i in range(len(trajectory_dates))
+            ]
+
+            fig.add_trace(
+                go.Scatter(
+                    x=trajectory_dates,
+                    y=trajectory_wkg,
+                    mode="lines",
+                    name="Required Trajectory",
+                    line=dict(color="#28a745", width=2, dash="dash"),
+                    hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Target W/kg: %{y:.2f}<extra></extra>",
+                )
+            )
+
+        # Add horizontal target line
+        fig.add_hline(
+            y=goal_target_wkg,
+            line_dash="dot",
+            line_color="#dc3545",
+            annotation_text=f"Target: {goal_target_wkg:.1f} W/kg",
+            annotation_position="bottom right",
+        )
+
+        # Add vertical line for target date if within chart range
+        if goal_end <= end_date + timedelta(days=90):
+            fig.add_vline(
+                x=goal_end,
+                line_dash="dot",
+                line_color="#dc3545",
+                annotation_text=goal_end.strftime("%b %d"),
+                annotation_position="top",
+            )
+
+    # Calculate current W/kg (latest peak)
+    current_peak_wkg = df_grouped["rolling_max_wkg"].iloc[-1] if len(df_grouped) > 0 else 0
+
+    fig.update_layout(
+        height=300,
+        margin=dict(l=0, r=0, t=30, b=0),
+        xaxis_title="",
+        yaxis_title="W/kg",
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="center",
+            x=0.5,
+        ),
+        hovermode="x unified",
+        yaxis=dict(
+            range=[
+                max(0, current_peak_wkg - 1.0),
+                current_peak_wkg + 0.5 if goal is None else max(current_peak_wkg + 0.5, goal.target_wkg + 0.2),
+            ]
+        ),
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    # Summary metrics below chart
+    col1, col2, col3, col4 = st.columns(4)
+
+    # Current peak W/kg
+    current_ftp = df_grouped["rolling_max_ftp"].iloc[-1] if len(df_grouped) > 0 else 0
+
+    render_metric(
+        col1,
+        label="Current Peak",
+        value=f"{current_peak_wkg:.2f} W/kg",
+        help_text=f"Best 28-day FTP: {current_ftp:.0f}W at {weight_kg:.1f}kg",
+    )
+
+    # Calculate improvement from start of period
+    if len(df_grouped) >= 2:
+        start_wkg = df_grouped["rolling_max_wkg"].iloc[0]
+        improvement = current_peak_wkg - start_wkg
+        improvement_delta = f"{improvement:+.2f}" if improvement != 0 else None
+    else:
+        improvement_delta = None
+
+    render_metric(
+        col2,
+        label=f"{months}mo Change",
+        value=f"{improvement_delta}" if improvement_delta else "-",
+        help_text="W/kg improvement over the period",
+        delta=improvement_delta,
+    )
+
+    # Goal status if configured
+    if goal is not None:
+        gap_to_goal = goal.target_wkg - current_peak_wkg
+        render_metric(
+            col3,
+            label="Gap to Goal",
+            value=f"{gap_to_goal:.2f} W/kg",
+            help_text=f"Need {gap_to_goal * weight_kg:.0f}W more to reach target",
+        )
+
+        # Weekly rate needed
+        weeks_left = goal.weeks_remaining
+        if weeks_left > 0:
+            weekly_rate = gap_to_goal / weeks_left
+            render_metric(
+                col4,
+                label="Weekly Rate Needed",
+                value=f"{weekly_rate:.3f} W/kg",
+                help_text=f"Required weekly improvement over {weeks_left:.0f} weeks",
+            )
+        else:
+            render_metric(
+                col4,
+                label="Goal Date",
+                value="Passed",
+                help_text="Target date has passed",
+            )
+    else:
+        # Show all-time best instead
+        all_time_best_wkg = df_grouped["wkg"].max()
+        render_metric(
+            col3,
+            label="All-Time Best",
+            value=f"{all_time_best_wkg:.2f} W/kg",
+            help_text=f"Best single activity estimate: {all_time_best_wkg * weight_kg:.0f}W",
+        )
+
+        render_metric(
+            col4,
+            label="Activities",
+            value=f"{len(df)}",
+            help_text="Activities with FTP data in period",
         )
