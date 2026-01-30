@@ -83,6 +83,10 @@ def init_session_state():
         # Default to Moving Time
         st.session_state.analysis_metric_view = "Moving Time"
 
+    if "analysis_compare_last_year" not in st.session_state:
+        # Default: comparison disabled
+        st.session_state.analysis_compare_last_year = False
+
 
 def get_date_range(
     range_type: str, custom_start: datetime, custom_end: datetime
@@ -117,6 +121,35 @@ def get_date_range(
     else:
         # Default to current year
         return (datetime(now.year, 1, 1), now)
+
+
+def get_comparison_date_range(
+    start_date: datetime, end_date: datetime
+) -> tuple[datetime, datetime]:
+    """
+    Get the same period from last year for comparison.
+
+    Args:
+        start_date: Start of current period
+        end_date: End of current period
+
+    Returns:
+        Tuple of (comparison_start, comparison_end) from one year ago
+    """
+    # Subtract one year from both dates
+    try:
+        comparison_start = start_date.replace(year=start_date.year - 1)
+    except ValueError:
+        # Handle Feb 29 -> Feb 28 for leap years
+        comparison_start = start_date.replace(year=start_date.year - 1, day=28)
+
+    try:
+        comparison_end = end_date.replace(year=end_date.year - 1)
+    except ValueError:
+        # Handle Feb 29 -> Feb 28 for leap years
+        comparison_end = end_date.replace(year=end_date.year - 1, day=28)
+
+    return (comparison_start, comparison_end)
 
 
 def compute_period_deltas(
@@ -374,6 +407,9 @@ def render_overview_view(
     start_date: datetime = None,
     end_date: datetime = None,
     activity_service: "ActivityService" = None,
+    df_comparison: pd.DataFrame = None,
+    comparison_start: datetime = None,
+    comparison_end: datetime = None,
 ):
     """
     Render the Overview view mode.
@@ -387,12 +423,18 @@ def render_overview_view(
         start_date: Start of the current period (for delta calculation)
         end_date: End of the current period (for delta calculation)
         activity_service: Service for fetching activities (used for delta calculation)
+        df_comparison: Optional comparison DataFrame from last year
+        comparison_start: Start of the comparison period
+        comparison_end: End of the comparison period
     """
     st.subheader("📊 Overview")
 
     if df.empty:
         st.info("No activities in the selected time range.")
         return
+
+    # Check if we have comparison data
+    has_comparison = df_comparison is not None and not df_comparison.empty
 
     # Aggregate load metrics
     load_stats = analysis_service.aggregate_load(df)
@@ -401,7 +443,107 @@ def render_overview_view(
     deltas = compute_period_deltas(
         load_stats, start_date, end_date, activity_service, analysis_service
     )
+
     # ═══════════════════════════════════════════════════════════════════════════
+    # YEAR-OVER-YEAR COMPARISON TABLE (if enabled)
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    if has_comparison:
+        st.markdown("### 📊 Year-over-Year Comparison")
+
+        # Aggregate comparison period stats
+        comparison_stats = analysis_service.aggregate_load(df_comparison)
+        comparison_intensity = analysis_service.aggregate_intensity(df_comparison)
+        comparison_tid = analysis_service.aggregate_tid(df_comparison)
+
+        # Current period intensity and TID
+        current_intensity = analysis_service.aggregate_intensity(df)
+        current_tid = analysis_service.aggregate_tid(df)
+
+        # Create comparison table data
+        current_year = start_date.year if start_date else datetime.now().year
+        comparison_year = comparison_start.year if comparison_start else current_year - 1
+
+        comparison_data = {
+            "Metric": [
+                "📅 Activities",
+                "⏱️ Volume (hours)",
+                "📏 Distance (km)",
+                "⛰️ Elevation (m)",
+                "💪 Total TSS",
+                "⚡ Avg IF",
+                "🔋 Avg NP (W)",
+                "🎯 TID Z1 (%)",
+                "🎯 TID Z2 (%)",
+                "🎯 TID Z3 (%)",
+            ],
+            f"{current_year}": [
+                f"{load_stats['activity_count']}",
+                f"{load_stats['total_hours']:.1f}",
+                f"{load_stats['total_distance_km']:.0f}",
+                f"{load_stats['total_elevation_m']:.0f}",
+                f"{load_stats['total_tss']:.0f}",
+                f"{current_intensity.get('avg_if', 0):.2f}",
+                f"{current_intensity.get('avg_np', 0):.0f}",
+                f"{current_tid.get('tid_z1_percentage', 0):.1f}",
+                f"{current_tid.get('tid_z2_percentage', 0):.1f}",
+                f"{current_tid.get('tid_z3_percentage', 0):.1f}",
+            ],
+            f"{comparison_year}": [
+                f"{comparison_stats['activity_count']}",
+                f"{comparison_stats['total_hours']:.1f}",
+                f"{comparison_stats['total_distance_km']:.0f}",
+                f"{comparison_stats['total_elevation_m']:.0f}",
+                f"{comparison_stats['total_tss']:.0f}",
+                f"{comparison_intensity.get('avg_if', 0):.2f}",
+                f"{comparison_intensity.get('avg_np', 0):.0f}",
+                f"{comparison_tid.get('tid_z1_percentage', 0):.1f}",
+                f"{comparison_tid.get('tid_z2_percentage', 0):.1f}",
+                f"{comparison_tid.get('tid_z3_percentage', 0):.1f}",
+            ],
+        }
+
+        # Calculate deltas
+        def calc_delta(current, previous, fmt=".0f", is_pct=False):
+            """Calculate and format delta between current and previous values."""
+            try:
+                curr = float(current)
+                prev = float(previous)
+                delta = curr - prev
+                if is_pct:
+                    return f"{delta:+.1f}%"
+                return f"{delta:+{fmt}}"
+            except (ValueError, TypeError):
+                return "-"
+
+        comparison_data["Δ Change"] = [
+            calc_delta(load_stats['activity_count'], comparison_stats['activity_count']),
+            calc_delta(load_stats['total_hours'], comparison_stats['total_hours'], ".1f"),
+            calc_delta(load_stats['total_distance_km'], comparison_stats['total_distance_km']),
+            calc_delta(load_stats['total_elevation_m'], comparison_stats['total_elevation_m']),
+            calc_delta(load_stats['total_tss'], comparison_stats['total_tss']),
+            calc_delta(current_intensity.get('avg_if', 0), comparison_intensity.get('avg_if', 0), ".2f"),
+            calc_delta(current_intensity.get('avg_np', 0), comparison_intensity.get('avg_np', 0)),
+            calc_delta(current_tid.get('tid_z1_percentage', 0), comparison_tid.get('tid_z1_percentage', 0), ".1f", True),
+            calc_delta(current_tid.get('tid_z2_percentage', 0), comparison_tid.get('tid_z2_percentage', 0), ".1f", True),
+            calc_delta(current_tid.get('tid_z3_percentage', 0), comparison_tid.get('tid_z3_percentage', 0), ".1f", True),
+        ]
+
+        comparison_df = pd.DataFrame(comparison_data)
+        st.dataframe(
+            comparison_df,
+            hide_index=True,
+            use_container_width=True,
+        )
+
+        st.divider()
+
+    # ═══════════════════════════════════════════════════════════════════════════
+    # CURRENT PERIOD METRICS
+    # ═══════════════════════════════════════════════════════════════════════════
+
+    if has_comparison:
+        st.markdown("### 📈 Current Period Details")
 
     col1, col2 = st.columns(2)
     col3, col4 = st.columns(2)
@@ -2799,6 +2941,18 @@ def main():
 
         st.session_state.analysis_date_range = time_range
 
+        # Compare to Last Year toggle (not available for "Last Year" or "All Time")
+        if time_range not in ["Last Year", "All Time"]:
+            compare_last_year = st.checkbox(
+                "📊 Compare to Last Year",
+                value=st.session_state.analysis_compare_last_year,
+                help="Show side-by-side comparison with the same period from last year",
+                key="compare_last_year_toggle",
+            )
+            st.session_state.analysis_compare_last_year = compare_last_year
+        else:
+            st.session_state.analysis_compare_last_year = False
+
     # Custom date range if selected
     if time_range == "Custom":
         col_start, col_end = st.columns(2)
@@ -2872,11 +3026,42 @@ def main():
         )
         return
 
+    # Load comparison data if enabled
+    df_comparison = None
+    comparison_start = None
+    comparison_end = None
+
+    if st.session_state.analysis_compare_last_year:
+        comparison_start, comparison_end = get_comparison_date_range(start_date, end_date)
+        with st.spinner("Loading comparison data..."):
+            df_comparison = service.get_activities_in_range(
+                comparison_start, comparison_end, metric_view=metric_view
+            )
+
+        # Apply same sport type filter to comparison data
+        if (
+            df_comparison is not None
+            and not df_comparison.empty
+            and "analysis_sport_filter" in st.session_state
+            and st.session_state.analysis_sport_filter
+        ):
+            df_comparison = df_comparison[
+                df_comparison["sport_type"].isin(st.session_state.analysis_sport_filter)
+            ].copy()
+
     # Display date range info
-    st.info(
-        f"📊 Analyzing **{len(df)} activities** from **{start_date.strftime('%b %d, %Y')}** to **{end_date.strftime('%b %d, %Y')}**",
-        icon="📅",
-    )
+    if st.session_state.analysis_compare_last_year and df_comparison is not None:
+        comparison_count = len(df_comparison) if not df_comparison.empty else 0
+        st.info(
+            f"📊 Analyzing **{len(df)} activities** from **{start_date.strftime('%b %d, %Y')}** to **{end_date.strftime('%b %d, %Y')}** "
+            f"| 📅 Comparing to **{comparison_count} activities** from **{comparison_start.strftime('%b %d, %Y')}** to **{comparison_end.strftime('%b %d, %Y')}**",
+            icon="📅",
+        )
+    else:
+        st.info(
+            f"📊 Analyzing **{len(df)} activities** from **{start_date.strftime('%b %d, %Y')}** to **{end_date.strftime('%b %d, %Y')}**",
+            icon="📅",
+        )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # RENDER SELECTED VIEW MODE
@@ -2886,7 +3071,12 @@ def main():
     analysis_service = AnalysisService()
 
     if view_mode == "Overview":
-        render_overview_view(df, analysis_service, start_date, end_date, service)
+        render_overview_view(
+            df, analysis_service, start_date, end_date, service,
+            df_comparison=df_comparison,
+            comparison_start=comparison_start,
+            comparison_end=comparison_end,
+        )
     elif view_mode == "Physiology":
         render_physiology_view(df, analysis_service, service)
     elif view_mode == "Power Profile":
