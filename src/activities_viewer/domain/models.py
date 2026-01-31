@@ -707,3 +707,131 @@ class Goal(BaseModel):
         if self.weeks_remaining <= 0:
             return 0.0
         return self.wkg_improvement_needed / self.weeks_remaining
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# TRAINING PLAN MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+class TrainingPhase(BaseModel):
+    """Represents a training phase (Base, Build, Specialty, Taper)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(description="Phase name: base, build, specialty, taper, recovery")
+    weeks: int = Field(ge=1, description="Duration in weeks")
+    description: str = Field(default="", description="Phase description and focus")
+    tid_z1: float = Field(default=75, ge=0, le=100, description="% time in Zone 1")
+    tid_z2: float = Field(default=15, ge=0, le=100, description="% time in Zone 2")
+    tid_z3: float = Field(default=10, ge=0, le=100, description="% time in Zone 3")
+    intensity_factor_target: float = Field(default=0.65, ge=0.4, le=1.0, description="Target avg IF")
+    tss_ramp_rate: float = Field(default=5.0, description="Weekly TSS increase %")
+
+
+class KeyEvent(BaseModel):
+    """Represents a key event or race in the training plan."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(description="Event name")
+    date: datetime = Field(description="Event date")
+    priority: str = Field(default="B", description="Priority: A (peak), B (important), C (training)")
+    event_type: str = Field(default="race", description="Type: race, gran_fondo, group_ride, test")
+    notes: str = Field(default="", description="Additional notes")
+
+    @field_validator("priority")
+    @classmethod
+    def validate_priority(cls, v: str) -> str:
+        """Ensure priority is A, B, or C."""
+        if v.upper() not in ["A", "B", "C"]:
+            raise ValueError("Priority must be A, B, or C")
+        return v.upper()
+
+
+class WeeklyPlan(BaseModel):
+    """Represents a single week's training prescription."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    week_number: int = Field(ge=1, description="Week number in plan")
+    start_date: datetime = Field(description="Week start date")
+    end_date: datetime = Field(description="Week end date")
+    phase: str = Field(description="Training phase: base, build, specialty, taper, recovery")
+    phase_week: int = Field(ge=1, description="Week number within the phase")
+
+    # Training Targets
+    target_hours: float = Field(ge=0, description="Target training hours")
+    target_tss: int = Field(ge=0, description="Target weekly TSS")
+    target_ctl: float = Field(default=0, description="Target CTL at week end")
+
+    # Intensity Distribution
+    tid_z1: float = Field(default=75, description="% time in Zone 1")
+    tid_z2: float = Field(default=15, description="% time in Zone 2")
+    tid_z3: float = Field(default=10, description="% time in Zone 3")
+
+    # Key Workouts
+    key_workouts: list[str] = Field(default_factory=list, description="Key workout descriptions")
+    recovery_notes: str = Field(default="", description="Recovery recommendations")
+
+    # Actual (filled after week completes)
+    actual_hours: float | None = Field(default=None, description="Actual training hours")
+    actual_tss: int | None = Field(default=None, description="Actual weekly TSS")
+    actual_ctl: float | None = Field(default=None, description="Actual CTL at week end")
+    adherence_pct: float | None = Field(default=None, description="Plan adherence %")
+
+    # Events
+    events: list[str] = Field(default_factory=list, description="Events this week")
+    is_recovery_week: bool = Field(default=False, description="Recovery week flag")
+    is_taper_week: bool = Field(default=False, description="Taper week flag")
+
+
+class TrainingPlan(BaseModel):
+    """Complete training plan with all weeks."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(description="Plan name")
+    goal: str = Field(description="Goal description (e.g., 'Reach 4.5 W/kg')")
+    created_at: datetime = Field(default_factory=datetime.now)
+
+    # Athlete Profile
+    start_ftp: float = Field(gt=0, description="FTP at plan start")
+    target_ftp: float = Field(gt=0, description="Target FTP at plan end")
+    weight_kg: float = Field(gt=0, description="Athlete weight")
+    hours_per_week: float = Field(gt=0, description="Available hours per week")
+
+    # Plan Duration
+    start_date: datetime = Field(description="Plan start date")
+    end_date: datetime = Field(description="Plan end date")
+    total_weeks: int = Field(ge=1, description="Total weeks in plan")
+
+    # Phases
+    phases: list[TrainingPhase] = Field(default_factory=list, description="Training phases")
+
+    # Weekly Plans
+    weeks: list[WeeklyPlan] = Field(default_factory=list, description="Weekly plans")
+
+    # Key Events
+    key_events: list[KeyEvent] = Field(default_factory=list, description="Key events/races")
+
+    @property
+    def current_week(self) -> int:
+        """Get current week number (1-based)."""
+        now = datetime.now()
+        if now < self.start_date:
+            return 0
+        if now > self.end_date:
+            return self.total_weeks
+        delta = now - self.start_date
+        return min(self.total_weeks, delta.days // 7 + 1)
+
+    @property
+    def progress_pct(self) -> float:
+        """Get plan progress as percentage."""
+        return (self.current_week / self.total_weeks) * 100 if self.total_weeks > 0 else 0
+
+    @property
+    def ftp_improvement_pct(self) -> float:
+        """Calculate expected FTP improvement."""
+        return ((self.target_ftp - self.start_ftp) / self.start_ftp) * 100

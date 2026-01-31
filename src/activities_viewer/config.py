@@ -107,6 +107,29 @@ class Settings(BaseSettings):
         description="Date when goal tracking began in YYYY-MM-DD format (e.g., '2024-12-01')",
     )
 
+    # --- Training Plan Settings (Optional) ---
+    weekly_hours_available: float = Field(
+        default=10.0,
+        gt=0,
+        description="Available training hours per week",
+    )
+    training_plan_start: str | None = Field(
+        default=None,
+        description="Training plan start date in YYYY-MM-DD format",
+    )
+    training_phase: str = Field(
+        default="base",
+        description="Current training phase: base, build, specialty, taper",
+    )
+    key_events: list[dict] = Field(
+        default_factory=list,
+        description="List of key events: [{name, date, priority (A/B/C)}]",
+    )
+    training_plan_file: str | None = Field(
+        default="training_plan.json",
+        description="Path to save/load training plan (relative to config or absolute)",
+    )
+
     # --- Application Settings ---
     data_source_type: str = Field(
         default="csv",
@@ -342,6 +365,16 @@ def load_settings(config_file: Path | None = None) -> Settings:
             if not data_dir_path.is_absolute():
                 data_dir_path = config_file.parent / data_dir_path
             yaml_data["data_dir"] = str(data_dir_path.resolve())
+
+        # Resolve training_plan_file relative to config file if not absolute
+        if "training_plan_file" in yaml_data:
+            plan_path = Path(yaml_data["training_plan_file"]).expanduser()
+            if not plan_path.is_absolute():
+                plan_path = config_file.parent / plan_path
+            yaml_data["training_plan_file"] = str(plan_path.resolve())
+        else:
+            # Default to training_plan.json in config file directory
+            yaml_data["training_plan_file"] = str((config_file.parent / "training_plan.json").resolve())
 
         logger.debug(f"Loaded YAML configuration: {yaml_data}")
         return Settings(**yaml_data)

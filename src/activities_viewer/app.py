@@ -28,7 +28,6 @@ try:
         render_status_card,
         render_recent_activity_sparklines,
         render_training_calendar,
-        render_wkg_trend_chart,
     )
 except ImportError:
     # Fallback for when running directly from source without package installation
@@ -47,7 +46,6 @@ except ImportError:
         render_status_card,
         render_recent_activity_sparklines,
         render_training_calendar,
-        render_wkg_trend_chart,
     )
 
 logger = logging.getLogger(__name__)
@@ -198,19 +196,6 @@ def main():
                 current_ftp=settings.ftp,
                 weight_kg=settings.weight_kg,
                 goal_service=goal_service,
-            )
-
-            st.divider()
-
-            # ═══════════════════════════════════════════════════════════════════════════
-            # W/KG TREND CHART
-            # ═══════════════════════════════════════════════════════════════════════════
-
-            render_wkg_trend_chart(
-                activities_df=df_all,
-                goal=goal,
-                weight_kg=settings.weight_kg,
-                months=12,
             )
 
             st.divider()
