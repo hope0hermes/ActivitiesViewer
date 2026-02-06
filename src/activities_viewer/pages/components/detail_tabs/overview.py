@@ -7,11 +7,11 @@ import streamlit as st
 from plotly.subplots import make_subplots
 from streamlit_folium import st_folium
 
+from activities_viewer.data.help_texts import get_help_text
 from activities_viewer.domain.models import Activity
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.utils.formatting import (
     get_metric,
-    get_help_text,
     render_metric,
 )
 

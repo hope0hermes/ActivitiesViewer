@@ -707,3 +707,232 @@ class TrainingPlanService:
             import logging
             logging.getLogger(__name__).error(f"Failed to load training plan: {e}")
             return None
+
+    # ═══════════════════════════════════════════════════════════════════════
+    # AI-ASSISTED PLAN REFINEMENT
+    # ═══════════════════════════════════════════════════════════════════════
+
+    def build_plan_refinement_prompt(
+        self,
+        plan: TrainingPlan,
+        athlete_context: str,
+    ) -> str:
+        """
+        Build a prompt that asks the LLM to refine a static training plan
+        using comprehensive athlete history.
+
+        Args:
+            plan: The template-generated plan to refine.
+            athlete_context: Output of ActivityContextBuilder.build_training_plan_context().
+
+        Returns:
+            Full prompt string for the LLM.
+        """
+        # Serialize the static plan into a readable format
+        plan_summary = self.serialize_plan_for_prompt(plan)
+
+        system_prompt = """You are an elite cycling coach creating a personalised training plan.
+
+You have been given:
+1. The athlete's COMPLETE training history (years of data, FTP evolution, load patterns, etc.)
+2. A TEMPLATE plan generated from standard periodisation rules.
+
+Your task: REFINE the template plan to fit THIS athlete based on their actual history.
+
+REFINEMENT GUIDELINES:
+- Adjust weekly TSS targets based on what the athlete actually sustains (don't prescribe 800 TSS/week if they average 400)
+- Tailor workout suggestions to their strengths/weaknesses visible in the data
+- If their FTP has been plateauing, emphasise variety and VO2max work in the Build phase
+- If their EF is declining, prioritise aerobic base even if the template says Build
+- If they rarely do long rides, ramp long ride duration gradually rather than jumping to 4h
+- Account for their actual weekly ride frequency and typical ride duration
+- If they're already in a detectable training phase, align the plan start accordingly
+- Set realistic FTP targets based on their quarterly progression trajectory
+
+RESPONSE FORMAT — you MUST respond with EXACTLY this structure:
+
+## AI Coach Analysis
+(2-3 paragraphs: what you observe about the athlete's history, current fitness trajectory,
+strengths, limiters, and how that shapes your plan adjustments)
+
+## Phase Adjustments
+For each phase, state what you'd change and why. If no change is needed, say "No changes".
+Format:
+- **Phase Name** (X weeks): adjustment description
+
+## Weekly Refinements
+For EACH week number, provide refined values in this EXACT format (one per line):
+WEEK <number>: TSS=<value>, HOURS=<value>, Z1=<pct>, Z2=<pct>, Z3=<pct>
+WORKOUTS: <comma-separated list of 2-3 key workout descriptions>
+NOTES: <one-line recovery/focus note>
+
+Important:
+- Include ALL weeks (don't skip any)
+- TSS values must be integers
+- HOURS can have one decimal
+- Z1+Z2+Z3 must equal 100
+- Be specific with workout descriptions (include power targets relative to FTP)
+
+## Key Recommendations
+(3-5 bullet points with the most important things for this athlete)
+"""
+
+        return f"{system_prompt}\n\n## Athlete Training History\n{athlete_context}\n\n## Template Plan to Refine\n{plan_summary}"
+
+    def serialize_plan_for_prompt(self, plan: TrainingPlan) -> str:
+        """Serialize a TrainingPlan into a readable prompt section."""
+        lines = []
+        lines.append(f"Plan: {plan.name}")
+        lines.append(f"Goal: {plan.goal}")
+        lines.append(f"Duration: {plan.total_weeks} weeks ({plan.start_date.strftime('%Y-%m-%d')} to {plan.end_date.strftime('%Y-%m-%d')})")
+        lines.append(f"Start FTP: {plan.start_ftp:.0f}W → Target FTP: {plan.target_ftp:.0f}W")
+        lines.append(f"Weight: {plan.weight_kg:.1f}kg")
+        lines.append(f"Available hours/week: {plan.hours_per_week}")
+        lines.append("")
+
+        # Phases
+        lines.append("### Phases")
+        for phase in plan.phases:
+            lines.append(
+                f"- {phase.name} ({phase.weeks} weeks): {phase.description} "
+                f"[TID: Z1={phase.tid_z1:.0f}% Z2={phase.tid_z2:.0f}% Z3={phase.tid_z3:.0f}%, "
+                f"IF target={phase.intensity_factor_target:.2f}]"
+            )
+        lines.append("")
+
+        # Events
+        if plan.key_events:
+            lines.append("### Key Events")
+            for event in plan.key_events:
+                lines.append(f"- {event.name} ({event.priority}) on {event.date.strftime('%Y-%m-%d')}")
+            lines.append("")
+
+        # Weekly breakdown
+        lines.append("### Weekly Breakdown")
+        for week in plan.weeks:
+            marker = " [RECOVERY]" if week.is_recovery_week else " [TAPER]" if week.is_taper_week else ""
+            lines.append(
+                f"Week {week.week_number} ({week.phase}, wk {week.phase_week}){marker}: "
+                f"TSS={week.target_tss}, Hours={week.target_hours}, CTL={week.target_ctl:.0f}, "
+                f"TID: Z1={week.tid_z1:.0f}/Z2={week.tid_z2:.0f}/Z3={week.tid_z3:.0f}"
+            )
+            if week.key_workouts:
+                lines.append(f"  Workouts: {', '.join(week.key_workouts)}")
+            if week.events:
+                lines.append(f"  Events: {', '.join(week.events)}")
+
+        return "\n".join(lines)
+
+    def apply_ai_plan_refinements(
+        self,
+        plan: TrainingPlan,
+        ai_response: str,
+    ) -> tuple[TrainingPlan, str]:
+        """
+        Parse structured LLM output and apply refinements to the plan.
+
+        Extracts WEEK lines from the response and updates the corresponding
+        WeeklyPlan objects. Returns both the refined plan and the full AI
+        analysis text (for display).
+
+        Args:
+            plan: The original template plan.
+            ai_response: Raw LLM response text.
+
+        Returns:
+            Tuple of (refined_plan, analysis_text).
+        """
+        import re
+        import logging
+        log = logging.getLogger(__name__)
+
+        refined_count = 0
+
+        for week in plan.weeks:
+            wn = week.week_number
+
+            # Match: WEEK <n>: TSS=<v>, HOURS=<v>, Z1=<v>, Z2=<v>, Z3=<v>
+            pattern = (
+                rf"WEEK\s+{wn}\s*:\s*"
+                rf"TSS\s*=\s*(\d+)\s*,\s*"
+                rf"HOURS\s*=\s*([\d.]+)\s*,\s*"
+                rf"Z1\s*=\s*(\d+)\s*,\s*"
+                rf"Z2\s*=\s*(\d+)\s*,\s*"
+                rf"Z3\s*=\s*(\d+)"
+            )
+            match = re.search(pattern, ai_response, re.IGNORECASE)
+
+            if match:
+                new_tss = int(match.group(1))
+                new_hours = float(match.group(2))
+                new_z1 = int(match.group(3))
+                new_z2 = int(match.group(4))
+                new_z3 = int(match.group(5))
+
+                # Sanity checks
+                if new_tss > 0 and new_hours > 0 and (new_z1 + new_z2 + new_z3) == 100:
+                    week.target_tss = new_tss
+                    week.target_hours = round(new_hours, 1)
+                    week.tid_z1 = new_z1
+                    week.tid_z2 = new_z2
+                    week.tid_z3 = new_z3
+                    refined_count += 1
+                else:
+                    log.warning(
+                        f"Week {wn}: AI values failed sanity check "
+                        f"(TSS={new_tss}, Hours={new_hours}, Z={new_z1}+{new_z2}+{new_z3})"
+                    )
+
+            # Match workouts for this week: WORKOUTS: <text> (on next line after WEEK N)
+            workout_pattern = (
+                rf"WEEK\s+{wn}\s*:.*?\n"
+                rf"WORKOUTS\s*:\s*(.+)"
+            )
+            workout_match = re.search(workout_pattern, ai_response, re.IGNORECASE)
+            if workout_match:
+                workouts_text = workout_match.group(1).strip()
+                new_workouts = [w.strip() for w in workouts_text.split(",") if w.strip()]
+                if new_workouts:
+                    week.key_workouts = new_workouts
+
+            # Match notes
+            notes_pattern = (
+                rf"WEEK\s+{wn}\s*:.*?\n"
+                rf"(?:WORKOUTS\s*:.*?\n)?"
+                rf"NOTES\s*:\s*(.+)"
+            )
+            notes_match = re.search(notes_pattern, ai_response, re.IGNORECASE)
+            if notes_match:
+                new_notes = notes_match.group(1).strip()
+                if new_notes:
+                    week.recovery_notes = new_notes
+
+        # Recalculate CTL progression after TSS changes
+        if refined_count > 0:
+            self._recalculate_ctl_progression(plan)
+            log.info(f"AI refinement applied to {refined_count}/{plan.total_weeks} weeks")
+
+        # Extract analysis text (everything before "## Weekly Refinements")
+        analysis = ai_response
+        split_marker = "## Weekly Refinements"
+        if split_marker in ai_response:
+            analysis = ai_response.split(split_marker)[0].strip()
+            # Also append Key Recommendations if present
+            key_rec_marker = "## Key Recommendations"
+            if key_rec_marker in ai_response:
+                analysis += "\n\n" + ai_response.split(key_rec_marker)[1]
+                analysis = analysis.strip()
+                analysis = f"{ai_response.split(split_marker)[0].strip()}\n\n## Key Recommendations{ai_response.split(key_rec_marker)[1]}"
+
+        return plan, analysis
+
+    def _recalculate_ctl_progression(self, plan: TrainingPlan) -> None:
+        """Recalculate target CTL after AI-adjusted TSS values."""
+        # Start from whatever the first week's CTL is
+        running_ctl = plan.weeks[0].target_ctl if plan.weeks else 50.0
+
+        for week in plan.weeks:
+            # CTL ≈ exponentially weighted avg of daily TSS with 42-day constant
+            daily_tss = week.target_tss / 7
+            running_ctl = running_ctl + (daily_tss - running_ctl) / 42 * 7
+            week.target_ctl = round(running_ctl, 1)

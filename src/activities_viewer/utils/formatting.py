@@ -6,20 +6,6 @@ from datetime import datetime
 from typing import Union
 
 
-def get_help_text(metric_key: str, help_texts: dict) -> str:
-    """
-    Get help text for a metric by its key.
-
-    Args:
-        metric_key: The metric key (e.g., "avg_power", "fatigue_index")
-        help_texts: Dictionary mapping metric keys to help text
-
-    Returns:
-        Help text string, or empty string if not found
-    """
-    return help_texts.get(metric_key, "")
-
-
 def get_metric(activity, field: str, default=None):
     """Safely get a metric value, handling NaN."""
     val = getattr(activity, field, default)

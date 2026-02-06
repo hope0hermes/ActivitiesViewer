@@ -5,7 +5,7 @@ Chat interface for analyzing training data with Gemini.
 
 import streamlit as st
 from activities_viewer.services.activity_service import ActivityService
-from activities_viewer.ai.client import GeminiClient
+from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
 
 st.set_page_config(page_title="AI Coach", page_icon="🤖", layout="wide")
@@ -22,31 +22,11 @@ def main():
 
     service = st.session_state.activity_service
 
-    # Sidebar for model selection
-    with st.sidebar:
-        st.header("⚙️ Settings")
-
-        # Get available models
-        with st.spinner("Loading available models..."):
-            available_models = GeminiClient.get_available_models()
-
-        if not available_models:
-            st.error("Could not fetch available models. Please check your API key.")
-            return
-
-        # Model selector
-        default_model = "gemini-2.0-flash"
-        if default_model not in available_models:
-            default_model = available_models[0]
-
-        selected_model = st.selectbox(
-            "Select Model",
-            available_models,
-            index=available_models.index(default_model)
-            if default_model in available_models
-            else 0,
-            help="Choose which Gemini model to use for analysis",
-        )
+    # Shared model selector in sidebar
+    selected_model = render_ai_model_selector()
+    if not selected_model:
+        st.error("No AI models available. Please check your GEMINI_API_KEY.")
+        return
 
     # Initialize AI components
     if (
@@ -153,6 +133,12 @@ def main():
                 - Yearly summaries show all years available
                 - Quarterly FTP evolution shows long-term trends
                 - Use this data to answer questions about multi-year trends
+
+                STREAM DATA: When analyzing specific activities, you have access to detailed stream data including:
+                - Power, heart rate, cadence, speed, altitude
+                - GPS coordinates (latitude/longitude) with waypoints and route analysis
+                - Segment analysis showing climbs with their GPS locations
+                Use this data for route-specific analysis and location-based insights.
                 """
 
                 final_prompt = (
@@ -164,7 +150,7 @@ def main():
 
             message_placeholder.markdown(response)
             st.session_state.messages.append({"role": "assistant", "content": response})
-        
+
         # Rerun to update the chat display
         st.rerun()
 

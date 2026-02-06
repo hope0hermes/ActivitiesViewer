@@ -16,7 +16,8 @@ from activities_viewer.services.training_plan_service import TrainingPlanService
 from activities_viewer.services.analysis_service import AnalysisService
 from activities_viewer.domain.models import TrainingPlan, WeeklyPlan
 from activities_viewer.config import Settings
-from activities_viewer.ai.client import GeminiClient
+from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
+from activities_viewer.ai.context import ActivityContextBuilder
 
 st.set_page_config(page_title="Training Plan", page_icon="📋", layout="wide")
 
@@ -125,6 +126,19 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                 help="Your current Chronic Training Load",
             )
 
+        st.markdown("#### AI-Enhanced Plan (Optional)")
+        ai_enhanced = st.checkbox(
+            "🤖 Refine plan with AI Coach",
+            value=False,
+            help=(
+                "After generating a base plan from templates, the AI Coach will "
+                "analyse your full training history (FTP evolution, load patterns, "
+                "efficiency trends) and tailor weekly targets, workouts, and "
+                "intensity to YOUR data. Requires GEMINI_API_KEY. "
+                "Select the AI model in the sidebar."
+            ),
+        )
+
         st.markdown("#### Key Events (Optional)")
         st.caption("Add A-races (peak events), B-races (important), or C-races (training)")
 
@@ -170,6 +184,37 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                 current_ctl=float(current_ctl),
                 plan_name=plan_name,
             )
+
+            # ── AI refinement (optional) ─────────────────────────────
+            ai_model = st.session_state.get("selected_ai_model")
+            if ai_enhanced and ai_model:
+                try:
+                    with st.spinner("🤖 AI Coach is analysing your training history and refining the plan..."):
+                        # Build athlete context from full history
+                        activity_service = st.session_state.get("activity_service")
+                        if activity_service:
+                            context_builder = ActivityContextBuilder(activity_service, settings)
+                            athlete_context = context_builder.build_training_plan_context(plan=plan)
+
+                            # Build refinement prompt
+                            prompt = service.build_plan_refinement_prompt(plan, athlete_context)
+
+                            # Call LLM
+                            client = GeminiClient(model=ai_model)
+                            ai_response = client.get_response(prompt)
+
+                            # Apply refinements
+                            plan, analysis = service.apply_ai_plan_refinements(plan, ai_response)
+
+                            # Store the AI analysis for display
+                            st.session_state.plan_ai_analysis = analysis
+                            st.session_state.plan_ai_raw = ai_response
+                            st.success("✅ AI refinement applied!")
+                        else:
+                            st.warning("Activity service not available — generating template plan without AI refinement.")
+                except Exception as e:
+                    st.warning(f"AI refinement failed (template plan kept): {e}")
+
             return plan
 
     return None
@@ -478,6 +523,68 @@ def render_adherence_summary(plan: TrainingPlan):
         )
 
 
+def render_ai_plan_refinement(
+    plan: TrainingPlan,
+    plan_service: TrainingPlanService,
+    settings,
+    plan_file_path: Path,
+):
+    """Render AI plan refinement section with re-run capability."""
+    st.subheader("🤖 AI Coach Plan Analysis")
+
+    col_run, col_clear = st.columns([1, 1])
+    with col_run:
+        run_refinement = st.button("🧠 Run AI Plan Refinement", type="primary")
+    with col_clear:
+        if "plan_ai_analysis" in st.session_state:
+            if st.button("🗑️ Clear Analysis"):
+                del st.session_state.plan_ai_analysis
+                if "plan_ai_raw" in st.session_state:
+                    del st.session_state.plan_ai_raw
+                st.rerun()
+
+    if run_refinement:
+        selected_model = st.session_state.get("selected_ai_model")
+        if not selected_model:
+            st.warning("No AI model selected. Please select a model in the sidebar.")
+            return
+        with st.spinner("🤖 AI Coach is analysing your training history and refining the plan..."):
+            try:
+                activity_service = st.session_state.get("activity_service")
+                if not activity_service:
+                    st.warning("Activity service not available — cannot build athlete context.")
+                    return
+
+                context_builder = ActivityContextBuilder(activity_service, settings)
+                athlete_context = context_builder.build_training_plan_context(plan=plan)
+
+                prompt = plan_service.build_plan_refinement_prompt(plan, athlete_context)
+
+                client = GeminiClient(model=selected_model)
+                ai_response = client.get_response(prompt)
+
+                plan, analysis = plan_service.apply_ai_plan_refinements(plan, ai_response)
+
+                st.session_state.training_plan = plan
+                st.session_state.plan_ai_analysis = analysis
+                st.session_state.plan_ai_raw = ai_response
+
+                # Auto-save refined plan
+                try:
+                    plan_service.save_plan(plan, plan_file_path)
+                except Exception:
+                    pass
+
+                st.success("✅ AI refinement applied!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"AI refinement failed: {e}")
+
+    # Show previous analysis if available
+    if "plan_ai_analysis" in st.session_state:
+        st.markdown(st.session_state.plan_ai_analysis)
+
+
 def render_ai_recommendations(
     plan: TrainingPlan,
     plan_service: TrainingPlanService,
@@ -485,28 +592,6 @@ def render_ai_recommendations(
 ):
     """Render AI-powered plan adjustment recommendations."""
     st.subheader("🤖 AI Plan Advisor")
-
-    # Model selection in expander (similar to AI Coach)
-    with st.expander("⚙️ AI Settings", expanded=False):
-        with st.spinner("Loading available models..."):
-            available_models = GeminiClient.get_available_models()
-
-        if not available_models:
-            st.error("Could not fetch available models. Please check your GEMINI_API_KEY environment variable.")
-            return
-
-        # Model selector
-        default_model = "gemini-2.0-flash"
-        if default_model not in available_models:
-            default_model = available_models[0]
-
-        selected_model = st.selectbox(
-            "Select Model",
-            available_models,
-            index=available_models.index(default_model) if default_model in available_models else 0,
-            help="Choose which Gemini model to use for plan analysis",
-            key="training_plan_ai_model",
-        )
 
     # Get current metrics for AI context
     current_tsb = 0.0
@@ -564,14 +649,44 @@ def render_ai_recommendations(
 
     # Generate recommendations button
     if st.button("🧠 Get AI Recommendations", type="primary"):
-        with st.spinner("Analyzing your training plan..."):
+        selected_model = st.session_state.get("selected_ai_model")
+        if not selected_model:
+            st.warning("No AI model selected. Please select a model in the sidebar.")
+            return
+        with st.spinner("Analyzing your training plan with full history context..."):
             try:
-                # Generate the prompt
-                prompt = plan_service.get_ai_adjustment_prompt(
-                    plan=plan,
-                    current_tsb=current_tsb,
-                    current_acwr=current_acwr,
-                    ef_trend=ef_trend,
+                # Try to build rich context from ActivityContextBuilder
+                activity_service = st.session_state.get("activity_service")
+                settings = st.session_state.get("settings")
+
+                if activity_service:
+                    context_builder = ActivityContextBuilder(activity_service, settings)
+                    athlete_context = context_builder.build_training_plan_context(plan=plan)
+                else:
+                    athlete_context = ""
+
+                # Build the prompt, enriched with plan + adherence info
+                prompt_parts = []
+                prompt_parts.append(
+                    "You are an expert cycling coach monitoring a training plan. "
+                    "Analyse the athlete's data and provide specific recommendations "
+                    "for the CURRENT week of their plan.\n"
+                )
+
+                if athlete_context:
+                    prompt_parts.append(f"## Athlete Training History\n{athlete_context}")
+
+                # Add plan context
+                plan_context = plan_service.serialize_plan_for_prompt(plan)
+                prompt_parts.append(f"## Current Training Plan\n{plan_context}")
+
+                # Current status
+                prompt_parts.append(
+                    f"\n## Current Status\n"
+                    f"- Plan Week: {plan.current_week} of {plan.total_weeks}\n"
+                    f"- TSB (Form): {current_tsb:.1f} {'(Fresh)' if current_tsb > 0 else '(Fatigued)'}\n"
+                    f"- ACWR: {current_acwr:.2f} {'(HIGH RISK)' if current_acwr > 1.5 else '(Optimal)' if current_acwr < 1.3 else '(Elevated)'}\n"
+                    f"- EF Trend: {ef_trend}\n"
                 )
 
                 # Add adherence context
@@ -580,14 +695,27 @@ def render_ai_recommendations(
                     total_target = sum(w.target_tss for w in completed_weeks)
                     total_actual = sum(w.actual_tss or 0 for w in completed_weeks)
                     adherence = (total_actual / total_target * 100) if total_target > 0 else 100
-                    prompt += f"\n\n## Adherence Summary\n- Overall Adherence: {adherence:.0f}%\n"
-                    prompt += f"- Weeks Completed: {len(completed_weeks)}\n"
+                    prompt_parts.append(f"\n## Adherence Summary\n- Overall Adherence: {adherence:.0f}%")
+                    prompt_parts.append(f"- Weeks Completed: {len(completed_weeks)}")
 
-                    # Recent week details
                     recent_weeks = completed_weeks[-3:]
-                    prompt += "\n## Recent Weeks:\n"
+                    prompt_parts.append("\n## Recent Weeks:")
                     for w in recent_weeks:
-                        prompt += f"- Week {w.week_number}: {w.actual_tss}/{w.target_tss} TSS ({w.adherence_pct:.0f}% adherence)\n"
+                        prompt_parts.append(
+                            f"- Week {w.week_number}: {w.actual_tss}/{w.target_tss} TSS "
+                            f"({w.adherence_pct:.0f}% adherence)"
+                        )
+
+                prompt_parts.append(
+                    "\nPlease provide:\n"
+                    "1. Assessment of current fatigue level and injury risk\n"
+                    "2. Recommended adjustments to this week's plan\n"
+                    "3. Specific workout modifications with power targets\n"
+                    "4. Recovery recommendations\n"
+                    "5. Whether the overall plan needs structural changes based on adherence trends"
+                )
+
+                prompt = "\n".join(prompt_parts)
 
                 # Get AI response
                 client = GeminiClient(model=selected_model)
@@ -656,9 +784,12 @@ def main():
             ["View Current Plan", "Create New Plan"],
             label_visibility="collapsed",
         )
-        
+
         # Show plan file location
         st.caption(f"📁 Plan file: `{plan_file_path.name}`")
+
+    # Shared AI model selector (sidebar)
+    render_ai_model_selector()
 
     if action == "Create New Plan":
         plan = render_plan_generator(settings)
@@ -724,6 +855,11 @@ def main():
 
             # Render plan views
             render_plan_overview(plan)
+
+            # AI Coach Plan Refinement section (with model picker + re-run)
+            st.markdown("---")
+            render_ai_plan_refinement(plan, plan_service, settings, plan_file_path)
+
             render_plan_chart(plan)
             render_adherence_summary(plan)
 
@@ -753,6 +889,10 @@ def main():
                     del st.session_state.training_plan
                     if "plan_events" in st.session_state:
                         del st.session_state.plan_events
+                    if "plan_ai_analysis" in st.session_state:
+                        del st.session_state.plan_ai_analysis
+                    if "plan_ai_raw" in st.session_state:
+                        del st.session_state.plan_ai_raw
                     # Optionally delete the file
                     if plan_file_path.exists():
                         plan_file_path.unlink()

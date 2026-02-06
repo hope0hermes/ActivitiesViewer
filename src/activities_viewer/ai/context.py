@@ -7,14 +7,87 @@ Provides multi-scale temporal context for long-term goal tracking:
 - FTP evolution over entire history
 - Recent detailed activities
 - Stream data for referenced activities (power, HR, cadence analysis)
+- GPS route analysis with street names via reverse geocoding
 """
 
+import logging
 import re
+import time
 from datetime import datetime, timedelta
+from functools import lru_cache
+
 from dateutil.relativedelta import relativedelta
 import numpy as np
 import pandas as pd
 from activities_viewer.services.activity_service import ActivityService
+
+# Optional geocoding support
+try:
+    from geopy.geocoders import Nominatim
+    from geopy.exc import GeocoderTimedOut, GeocoderServiceError
+    GEOCODING_AVAILABLE = True
+except ImportError:
+    GEOCODING_AVAILABLE = False
+
+logger = logging.getLogger(__name__)
+
+
+# Global geocoder instance (reused across calls)
+_geocoder = None
+
+
+def get_geocoder():
+    """Get or create a Nominatim geocoder instance."""
+    global _geocoder
+    if _geocoder is None and GEOCODING_AVAILABLE:
+        _geocoder = Nominatim(user_agent="activities_viewer_ai_coach/1.0")
+    return _geocoder
+
+
+@lru_cache(maxsize=100)
+def reverse_geocode_cached(lat: float, lng: float) -> str | None:
+    """
+    Reverse geocode coordinates to get street/location name.
+
+    Uses LRU cache to avoid repeated lookups for the same location.
+    Rate-limited to respect Nominatim's 1 request/second policy.
+    """
+    geocoder = get_geocoder()
+    if geocoder is None:
+        return None
+
+    try:
+        # Nominatim requires 1 second between requests
+        time.sleep(1.1)
+
+        location = geocoder.reverse((lat, lng), exactly_one=True, language="en")
+        if location:
+            address = location.raw.get("address", {})
+            # Build a useful location string
+            parts = []
+
+            # Street name
+            road = address.get("road") or address.get("street")
+            if road:
+                parts.append(road)
+
+            # Neighborhood/suburb
+            suburb = address.get("suburb") or address.get("neighbourhood") or address.get("quarter")
+            if suburb and suburb not in parts:
+                parts.append(suburb)
+
+            # City/town
+            city = address.get("city") or address.get("town") or address.get("village") or address.get("municipality")
+            if city and city not in parts:
+                parts.append(city)
+
+            return ", ".join(parts) if parts else None
+    except (GeocoderTimedOut, GeocoderServiceError) as e:
+        logger.warning(f"Geocoding error for ({lat}, {lng}): {e}")
+    except Exception as e:
+        logger.warning(f"Unexpected geocoding error: {e}")
+
+    return None
 
 
 class ActivityContextBuilder:
@@ -154,6 +227,180 @@ class ActivityContextBuilder:
             context += self._format_activity_detail(row)
 
         return context
+
+    def build_training_plan_context(self, plan=None) -> str:
+        """
+        Build focused context for AI-assisted training plan generation/refinement.
+
+        Provides the macro-level athlete profile that the LLM needs to tailor
+        a periodized plan:
+        - Athlete profile & goals
+        - Current training status (CTL/ATL/TSB/ACWR)
+        - Training phase auto-detection
+        - Full yearly summaries (volume, FTP peaks, peak CTL)
+        - Quarterly FTP/W/kg evolution (long-term trajectory)
+        - 6-month monthly trends (recent load & intensity)
+        - Efficiency Factor trends (aerobic fitness arc)
+        - Last 4 weeks summary (current training pattern)
+
+        Excludes stream data and GPS — not needed for plan-level decisions.
+
+        Args:
+            plan: Optional TrainingPlan. When provided, the plan's FTP/W/kg
+                  targets are used instead of config-level goals, so the LLM
+                  sees the correct targets for THIS plan.
+
+        Returns:
+            A string with the athlete's comprehensive training history context.
+        """
+        activities = self.service.get_all_activities()
+        context = ""
+
+        if activities.empty:
+            context += "No historical activities found.\n"
+            return context
+
+        activities = activities.sort_values("start_date_local", ascending=False)
+
+        # Handle timezone-aware datetimes
+        if activities["start_date_local"].dt.tz is not None:
+            activities = activities.copy()
+            activities["start_date_local"] = activities["start_date_local"].dt.tz_localize(None)
+
+        # ─── DATA RANGE & ATHLETE PROFILE ────────────────────────────────
+        oldest_date = activities["start_date_local"].min()
+        newest_date = activities["start_date_local"].max()
+        total_activities = len(activities)
+        years_of_data = (newest_date - oldest_date).days / 365.25
+
+        context += "=== ATHLETE PROFILE & HISTORY ===\n"
+        context += f"Data spans: {oldest_date.strftime('%Y-%m-%d')} to {newest_date.strftime('%Y-%m-%d')}\n"
+        context += f"Total history: {years_of_data:.1f} years ({total_activities} activities)\n"
+
+        if self.settings:
+            ftp = getattr(self.settings, 'ftp', None)
+            weight = getattr(self.settings, 'weight_kg', None)
+            if ftp and weight:
+                context += f"Current FTP: {ftp:.0f}W, Weight: {weight:.1f}kg, W/kg: {ftp/weight:.2f}\n"
+
+            # Use plan targets if provided, otherwise fall back to config goals
+            if plan is not None:
+                plan_target_wkg = plan.target_ftp / plan.weight_kg
+                plan_start_wkg = plan.start_ftp / plan.weight_kg
+                context += (
+                    f"THIS PLAN'S GOAL: {plan.start_ftp:.0f}W ({plan_start_wkg:.2f} W/kg) "
+                    f"→ {plan.target_ftp:.0f}W ({plan_target_wkg:.2f} W/kg) "
+                    f"by {plan.end_date.strftime('%Y-%m-%d')}\n"
+                )
+                if ftp and weight:
+                    gap = plan_target_wkg - (ftp / weight)
+                    context += f"Gap to Plan Goal: {gap:.2f} W/kg ({gap * weight:.0f}W)\n"
+            else:
+                target_wkg = getattr(self.settings, 'target_wkg', None)
+                target_date = getattr(self.settings, 'target_date', None)
+                if target_wkg and target_date:
+                    context += f"GOAL: {target_wkg:.1f} W/kg by {target_date}\n"
+                    if ftp and weight:
+                        gap = target_wkg - (ftp / weight)
+                        context += f"Gap to Goal: {gap:.2f} W/kg ({gap * weight:.0f}W)\n"
+        context += "\n"
+
+        # ─── CURRENT TRAINING STATUS ─────────────────────────────────────
+        latest = activities.iloc[0]
+        context += "=== CURRENT TRAINING STATUS ===\n"
+        context += self._format_training_status(latest)
+        context += "\n"
+
+        # ─── TRAINING PHASE DETECTION ────────────────────────────────────
+        context += "=== DETECTED TRAINING PHASE ===\n"
+        context += self._detect_training_phase(activities)
+        context += "\n"
+
+        # ─── YEARLY SUMMARIES ────────────────────────────────────────────
+        context += "=== YEARLY TRAINING SUMMARIES (Full History) ===\n"
+        context += self._build_yearly_summaries(activities)
+        context += "\n"
+
+        # ─── QUARTERLY FTP EVOLUTION ─────────────────────────────────────
+        context += "=== FTP/W/KG EVOLUTION BY QUARTER (Full History) ===\n"
+        context += self._build_quarterly_ftp_evolution(activities)
+        context += "\n"
+
+        # ─── MONTHLY TRENDS (6 months) ──────────────────────────────────
+        context += "=== RECENT MONTHLY TRENDS (Last 6 Months) ===\n"
+        context += self._build_monthly_progression(activities, months=6)
+        context += "\n"
+
+        # ─── EFFICIENCY FACTOR TRENDS ────────────────────────────────────
+        context += "=== EFFICIENCY FACTOR TRENDS (Aerobic Fitness) ===\n"
+        context += self._build_ef_trends(activities)
+        context += "\n"
+
+        # ─── LAST 4 WEEKS ───────────────────────────────────────────────
+        context += "=== LAST 4 WEEKS SUMMARY ===\n"
+        context += self._build_weekly_summaries(activities, weeks=4)
+        context += "\n"
+
+        # ─── TRAINING LOAD PATTERNS ─────────────────────────────────────
+        context += "=== TRAINING LOAD PATTERNS ===\n"
+        context += self._build_load_patterns(activities)
+        context += "\n"
+
+        return context
+
+    def _build_load_patterns(self, activities: pd.DataFrame) -> str:
+        """Build patterns about athlete's typical training to inform plan design."""
+        output = ""
+        now = datetime.now()
+
+        # Average weekly hours over last 3 months
+        three_months_ago = now - timedelta(days=90)
+        recent = activities[activities["start_date_local"] >= three_months_ago]
+
+        if recent.empty:
+            return "Insufficient recent data for load patterns.\n"
+
+        total_hours = recent["moving_time"].sum() / 3600
+        weeks_span = max(1, (now - three_months_ago).days / 7)
+        avg_weekly_hours = total_hours / weeks_span
+        avg_weekly_rides = len(recent) / weeks_span
+
+        output += f"Recent 3-month average: {avg_weekly_hours:.1f}h/week, {avg_weekly_rides:.1f} rides/week\n"
+
+        # Typical ride duration
+        avg_ride_duration = recent["moving_time"].mean() / 3600
+        max_ride_duration = recent["moving_time"].max() / 3600
+        output += f"Typical ride: {avg_ride_duration:.1f}h, Longest recent: {max_ride_duration:.1f}h\n"
+
+        # Training intensity distribution over last 3 months
+        if "power_tid_z1_percentage" in recent.columns:
+            avg_z1 = recent["power_tid_z1_percentage"].mean()
+            avg_z2 = recent["power_tid_z2_percentage"].mean() if "power_tid_z2_percentage" in recent.columns else 0
+            avg_z3 = recent["power_tid_z3_percentage"].mean() if "power_tid_z3_percentage" in recent.columns else 0
+            if pd.notna(avg_z1):
+                output += f"3-month TID: Z1={avg_z1:.0f}% Z2={avg_z2:.0f}% Z3={avg_z3:.0f}%\n"
+
+        # Average TSS
+        tss_col = "moving_training_stress_score" if "moving_training_stress_score" in recent.columns else "training_stress_score"
+        if tss_col in recent.columns:
+            total_tss = recent[tss_col].sum()
+            avg_weekly_tss = total_tss / weeks_span
+            output += f"Avg weekly TSS: {avg_weekly_tss:.0f}\n"
+
+        # Long ride frequency (rides > 2.5h)
+        long_rides = recent[recent["moving_time"] > 9000]  # 2.5h in seconds
+        if not long_rides.empty:
+            long_ride_freq = len(long_rides) / weeks_span
+            output += f"Long rides (>2.5h): {long_ride_freq:.1f}/week\n"
+
+        # Intensity distribution: what kind of workouts they actually do
+        if "intensity_factor" in recent.columns:
+            easy_rides = recent[recent["intensity_factor"] < 0.70]
+            tempo_rides = recent[(recent["intensity_factor"] >= 0.70) & (recent["intensity_factor"] < 0.85)]
+            hard_rides = recent[recent["intensity_factor"] >= 0.85]
+            output += f"Ride types: {len(easy_rides)} easy, {len(tempo_rides)} tempo, {len(hard_rides)} hard (last 3 months)\n"
+
+        return output
 
     def _format_training_status(self, latest: pd.Series) -> str:
         """Format current training status from latest activity."""
@@ -729,6 +976,11 @@ class ActivityContextBuilder:
                 max_speed = velocity_kmh.max()
                 output += f"      Avg: {avg_speed:.1f} km/h, Max: {max_speed:.1f} km/h\n"
 
+        # === GPS/ROUTE ANALYSIS ===
+        has_gps = "latlng" in stream.columns
+        if has_gps:
+            output += self._analyze_gps_data(stream, activity_row)
+
         # ═══════════════════════════════════════════════════════════════════════
         # RAW STREAM DATA (sampled for visualizations/correlations)
         # ═══════════════════════════════════════════════════════════════════════
@@ -811,6 +1063,226 @@ class ActivityContextBuilder:
 
         output += "\n      Use this data for scatter plots, correlations, or trend analysis.\n"
         output += "      Columns: " + ", ".join(f"{h}={c}" for h, c in zip(col_headers, cols_available)) + "\n"
+
+        return output
+
+    def _analyze_gps_data(self, stream: pd.DataFrame, activity_row: pd.Series) -> str:
+        """
+        Analyze GPS/route data from the stream.
+
+        Provides:
+        - Route bounding box (geographic extent)
+        - Start/end coordinates with street names
+        - Key waypoints with street names (via reverse geocoding)
+        - Segment analysis with GPS coordinates
+        """
+        output = "\n   📍 GPS/ROUTE ANALYSIS:\n"
+
+        try:
+            # Parse latlng column - it may be stored as string "[lat, lng]" or list
+            latlng = stream["latlng"].dropna()
+            if len(latlng) == 0:
+                return "      ⚠️ No GPS data available.\n"
+
+            # Parse coordinates
+            coords = []
+            for val in latlng:
+                if isinstance(val, str):
+                    # Parse string like "[48.147227, 11.541671]"
+                    val = val.strip("[]")
+                    parts = val.split(",")
+                    if len(parts) == 2:
+                        try:
+                            lat = float(parts[0].strip())
+                            lng = float(parts[1].strip())
+                            coords.append((lat, lng))
+                        except ValueError:
+                            continue
+                elif isinstance(val, (list, tuple)) and len(val) == 2:
+                    coords.append((float(val[0]), float(val[1])))
+
+            if len(coords) < 2:
+                return "      ⚠️ Insufficient GPS data points.\n"
+
+            # Extract lat/lng arrays
+            lats = [c[0] for c in coords]
+            lngs = [c[1] for c in coords]
+
+            # Bounding box
+            min_lat, max_lat = min(lats), max(lats)
+            min_lng, max_lng = min(lngs), max(lngs)
+
+            output += f"      Bounding Box: [{min_lat:.5f}, {min_lng:.5f}] to [{max_lat:.5f}, {max_lng:.5f}]\n"
+
+            # Start and end points with reverse geocoding
+            start_lat, start_lng = coords[0]
+            end_lat, end_lng = coords[-1]
+
+            # Geocode start location
+            if GEOCODING_AVAILABLE:
+                start_name = reverse_geocode_cached(round(start_lat, 4), round(start_lng, 4))
+                end_name = reverse_geocode_cached(round(end_lat, 4), round(end_lng, 4))
+
+                if start_name:
+                    output += f"      Start: {start_name}\n"
+                    output += f"              [{start_lat:.5f}, {start_lng:.5f}]\n"
+                else:
+                    output += f"      Start: [{start_lat:.5f}, {start_lng:.5f}]\n"
+
+                if end_name:
+                    output += f"      End: {end_name}\n"
+                    output += f"           [{end_lat:.5f}, {end_lng:.5f}]\n"
+                else:
+                    output += f"      End: [{end_lat:.5f}, {end_lng:.5f}]\n"
+            else:
+                output += f"      Start: [{start_lat:.5f}, {start_lng:.5f}]\n"
+                output += f"      End: [{end_lat:.5f}, {end_lng:.5f}]\n"
+
+            # Check if it's a loop (start ~= end)
+            from math import sqrt
+            dist_start_end = sqrt((end_lat - start_lat)**2 + (end_lng - start_lng)**2)
+            is_loop = dist_start_end < 0.001  # ~100m threshold
+            output += f"      Route type: {'Loop (returns to start)' if is_loop else 'Point-to-point'}\n"
+
+            # Sample key waypoints with street names (limit geocoding to save time)
+            output += "\n      Key Waypoints with Street Names:\n"
+            # Sample 5 waypoints (to limit geocoding calls - each takes 1+ second)
+            sample_indices = [int(i * len(coords) / 5) for i in range(1, 5)]
+            sample_indices = sorted(set(sample_indices))
+
+            for idx in sample_indices[:4]:  # Max 4 waypoints (besides start/end)
+                lat, lng = coords[idx]
+                pct = idx / len(coords) * 100
+
+                if GEOCODING_AVAILABLE:
+                    location_name = reverse_geocode_cached(round(lat, 4), round(lng, 4))
+                    if location_name:
+                        output += f"        {pct:5.1f}%: {location_name}\n"
+                    else:
+                        output += f"        {pct:5.1f}%: [{lat:.5f}, {lng:.5f}]\n"
+                else:
+                    output += f"        {pct:5.1f}%: [{lat:.5f}, {lng:.5f}]\n"
+
+            # Add segment analysis if altitude is available
+            if "altitude" in stream.columns and "grade_smooth" in stream.columns:
+                output += "\n      Significant Climbs/Descents:\n"
+                output += self._analyze_segments_with_gps(stream, coords)
+
+        except Exception as e:
+            output += f"      ⚠️ Error analyzing GPS data: {e}\n"
+
+        return output
+
+    def _analyze_segments_with_gps(self, stream: pd.DataFrame, coords: list) -> str:
+        """Analyze climbing/descending segments with GPS coordinates and street names."""
+        output = ""
+
+        try:
+            altitude = pd.to_numeric(stream["altitude"], errors="coerce")
+            grade = pd.to_numeric(stream["grade_smooth"], errors="coerce")
+
+            # Find significant climbs (grade > 3% for > 60 seconds)
+            in_climb = False
+            climb_start = 0
+            climbs = []
+
+            for i in range(len(grade)):
+                if pd.notna(grade.iloc[i]) and grade.iloc[i] > 3:
+                    if not in_climb:
+                        in_climb = True
+                        climb_start = i
+                else:
+                    if in_climb and (i - climb_start) >= 60:
+                        start_alt = altitude.iloc[climb_start] if pd.notna(altitude.iloc[climb_start]) else 0
+                        end_alt = altitude.iloc[i-1] if pd.notna(altitude.iloc[i-1]) else 0
+                        elevation_gain = end_alt - start_alt
+                        if elevation_gain > 20:  # Only significant climbs
+                            avg_grade = grade.iloc[climb_start:i].mean()
+                            # Get GPS coords if available
+                            if climb_start < len(coords):
+                                start_coord = coords[climb_start]
+                            else:
+                                start_coord = coords[-1]
+                            climbs.append({
+                                "start_idx": climb_start,
+                                "end_idx": i,
+                                "duration_s": i - climb_start,
+                                "elevation_m": elevation_gain,
+                                "avg_grade": avg_grade,
+                                "start_coord": start_coord
+                            })
+                    in_climb = False
+
+            if climbs:
+                output += f"        Found {len(climbs)} significant climb(s):\n"
+                for j, climb in enumerate(climbs[:3], 1):  # Show max 3 (to limit geocoding)
+                    lat, lng = climb["start_coord"]
+
+                    # Try to get street name for the climb
+                    location_name = None
+                    if GEOCODING_AVAILABLE:
+                        location_name = reverse_geocode_cached(round(lat, 4), round(lng, 4))
+
+                    if location_name:
+                        output += (f"          #{j}: {location_name}\n"
+                                  f"              {climb['duration_s']}s, +{climb['elevation_m']:.0f}m @ {climb['avg_grade']:.1f}%\n")
+                    else:
+                        output += (f"          #{j}: {climb['duration_s']}s, "
+                                  f"+{climb['elevation_m']:.0f}m @ {climb['avg_grade']:.1f}% "
+                                  f"(starts at [{lat:.5f}, {lng:.5f}])\n")
+            else:
+                output += "        No significant climbs detected.\n"
+
+            # Also detect significant descents
+            in_descent = False
+            descent_start = 0
+            descents = []
+
+            for i in range(len(grade)):
+                if pd.notna(grade.iloc[i]) and grade.iloc[i] < -3:
+                    if not in_descent:
+                        in_descent = True
+                        descent_start = i
+                else:
+                    if in_descent and (i - descent_start) >= 60:
+                        start_alt = altitude.iloc[descent_start] if pd.notna(altitude.iloc[descent_start]) else 0
+                        end_alt = altitude.iloc[i-1] if pd.notna(altitude.iloc[i-1]) else 0
+                        elevation_loss = start_alt - end_alt
+                        if elevation_loss > 20:
+                            avg_grade = grade.iloc[descent_start:i].mean()
+                            if descent_start < len(coords):
+                                start_coord = coords[descent_start]
+                            else:
+                                start_coord = coords[-1]
+                            descents.append({
+                                "start_idx": descent_start,
+                                "end_idx": i,
+                                "duration_s": i - descent_start,
+                                "elevation_m": elevation_loss,
+                                "avg_grade": avg_grade,
+                                "start_coord": start_coord
+                            })
+                    in_descent = False
+
+            if descents:
+                output += f"\n        Found {len(descents)} significant descent(s):\n"
+                for j, descent in enumerate(descents[:3], 1):  # Show max 3
+                    lat, lng = descent["start_coord"]
+
+                    location_name = None
+                    if GEOCODING_AVAILABLE:
+                        location_name = reverse_geocode_cached(round(lat, 4), round(lng, 4))
+
+                    if location_name:
+                        output += (f"          #{j}: {location_name}\n"
+                                  f"              {descent['duration_s']}s, -{descent['elevation_m']:.0f}m @ {descent['avg_grade']:.1f}%\n")
+                    else:
+                        output += (f"          #{j}: {descent['duration_s']}s, "
+                                  f"-{descent['elevation_m']:.0f}m @ {descent['avg_grade']:.1f}% "
+                                  f"(starts at [{lat:.5f}, {lng:.5f}])\n")
+
+        except Exception as e:
+            output += f"        ⚠️ Error in segment analysis: {e}\n"
 
         return output
 

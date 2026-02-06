@@ -1236,8 +1236,6 @@ def render_physiology_view(
             - **> -3%**: Excellent aerobic endurance (minimal EF drop/HR drift)
             - **-3% to -5%**: Good endurance fitness
             - **-5% to -8%**: Moderate drift (room for improvement)
-            - **> -5%**: Excellent aerobic endurance (minimal EF drop/HR drift)
-            - **-5% to -8%**: Good endurance fitness
             - **< -8%**: Significant fatigue/drift (work on aerobic base)
 
             **What causes EF to drop (HR to drift up)**:

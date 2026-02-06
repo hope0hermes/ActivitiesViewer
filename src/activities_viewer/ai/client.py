@@ -79,3 +79,45 @@ class GeminiClient:
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             return f"Error: {str(e)}"
+
+
+def render_ai_model_selector() -> str | None:
+    """
+    Render a shared AI model selector in the sidebar.
+
+    Stores the selection in st.session_state.selected_ai_model so it
+    persists across pages (AI Coach, Training Plan, etc.).
+
+    Returns:
+        The selected model name, or None if no models available.
+    """
+    import streamlit as st
+
+    with st.sidebar:
+        st.divider()
+        st.markdown("#### 🤖 AI Model")
+        available_models = GeminiClient.get_available_models()
+
+        if not available_models:
+            st.error("No AI models available. Check GEMINI_API_KEY.")
+            return None
+
+        default_model = "gemini-2.0-flash"
+        if default_model not in available_models:
+            default_model = available_models[0]
+
+        # Use session state to remember across pages
+        current = st.session_state.get("selected_ai_model", default_model)
+        if current not in available_models:
+            current = default_model
+
+        selected = st.selectbox(
+            "Select Model",
+            available_models,
+            index=available_models.index(current),
+            key="ai_model_sidebar",
+            label_visibility="collapsed",
+        )
+
+        st.session_state.selected_ai_model = selected
+        return selected

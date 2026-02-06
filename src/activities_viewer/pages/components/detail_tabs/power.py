@@ -1,12 +1,11 @@
 import plotly.graph_objects as go
 import streamlit as st
 
-from activities_viewer.data.help_texts import get_metric_status
+from activities_viewer.data.help_texts import get_help_text, get_metric_status
 from activities_viewer.domain.models import Activity
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.utils.formatting import (
     get_metric,
-    get_help_text,
     render_metric,
 )
 
