@@ -1,0 +1,87 @@
+# ActivitiesViewer Configuration Example
+# Copy this file to your project directory and update paths and settings
+
+# --- Data Directory Configuration ---
+# Path to the directory containing activities data
+# Can be absolute or relative to this config file
+data_dir: "/home/hope0hermes/Workspace/ActivitiesViewer/dev/data_enriched"
+
+# New dual-file format (StravaAnalyzer v2.0+)
+# Filename of raw activities CSV - all data points (relative to data_dir)
+activities_raw_file: "activities_raw.csv"
+
+# Filename of moving activities CSV - motion-only data (relative to data_dir)
+activities_moving_file: "activities_moving.csv"
+
+# Legacy single-file format (for backward compatibility, optional)
+# Uncomment this if you only have the old activities_enriched.csv file
+# activities_enriched_file: "activities_enriched.csv"
+
+# Filename of activity summary JSON (relative to data_dir)
+activity_summary_file: "activity_summary.json"
+
+# Directory containing individual activity stream CSV files (relative to data_dir)
+streams_dir: "Streams"
+
+# --- Athlete Configuration ---
+# Your Functional Threshold Power in watts
+ftp: 285.0
+
+# Your body weight in kilograms
+weight_kg: 78.0
+
+# Your maximum heart rate in bpm
+max_hr: 185
+
+# --- Critical Power & Anaerobic Capacity (Optional) ---
+# Required to enable W' Balance and match burn analysis
+#
+# Critical Power (watts): Maximum sustainable power indefinitely
+# - Automatically computed from 90-day rolling power curve analysis
+# - Typical: 85-90% of FTP for well-trained athletes
+# - Note: This is computed in StravaAnalyzer and stored in the CSV
+# - For reference only - actual value comes from data analysis
+# cp: 250
+
+# W-prime (joules): Anaerobic work capacity above CP
+# - Automatically computed from 90-day rolling power curve analysis
+# - Typical range: 15,000-30,000 joules (15-30 kJ)
+# - Note: This is computed in StravaAnalyzer and stored in the CSV
+# - For reference only - actual value comes from data analysis
+# w_prime: 13000
+
+# --- Goal Tracking (Optional) ---
+# Set a W/kg improvement goal to track your progress
+# Uncomment and configure these fields to enable goal tracking on home page
+target_wkg: 4.5
+target_date: "2026-08-01"
+baseline_ftp: 296
+baseline_date: "2025-04-01"
+
+# --- Application Settings ---
+# Enable verbose logging
+verbose: false
+
+# Cache time-to-live in seconds (1 hour = 3600)
+cache_ttl: 3600
+
+# --- Streamlit Display Settings ---
+# Page title shown in browser and sidebar
+page_title: "Activities Viewer"
+
+# Page icon (emoji) shown in browser tab and sidebar
+page_icon: "🚴"
+
+# --- Optional: AI Features Configuration (Phase 2) ---
+# Uncomment and set your Google Gemini API key to enable AI features
+# google_api_key: "your-api-key-here"
+
+# URL to Qdrant vector database (for segment analysis)
+qdrant_url: "http://localhost:6333"
+
+# --- Optional: Database Configuration (Phase 3) ---
+# Uncomment to enable PostgreSQL backend for multi-user support
+# database_url: "postgresql://user:password@localhost:5432/activities_viewer"
+
+# Uncomment to enable Redis caching layer
+# redis_url: "redis://localhost:6379/0"

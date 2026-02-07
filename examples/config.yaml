@@ -1,0 +1,80 @@
+# ActivitiesViewer Configuration Example
+# Copy this file to your project directory and update paths and settings
+
+# --- Data Directory Configuration ---
+# Path to the directory containing activities data
+# Can be absolute or relative to this config file
+data_dir: "../dev/data_enriched"
+
+# New dual-file format (StravaAnalyzer v2.0+)
+# Filename of raw activities CSV - all data points (relative to data_dir)
+activities_raw_file: "activities_raw.csv"
+
+# Filename of moving activities CSV - motion-only data (relative to data_dir)
+activities_moving_file: "activities_moving.csv"
+
+# Legacy single-file format (for backward compatibility, optional)
+# Uncomment this if you only have the old activities_enriched.csv file
+# activities_enriched_file: "activities_enriched.csv"
+
+# Filename of activity summary JSON (relative to data_dir)
+activity_summary_file: "activity_summary.json"
+
+# Directory containing individual activity stream CSV files (relative to data_dir)
+streams_dir: "Streams"
+
+# --- Athlete Configuration ---
+# Your Functional Threshold Power in watts
+ftp: 285.0
+
+# Your body weight in kilograms
+weight_kg: 77.0
+
+# Your maximum heart rate in bpm
+max_hr: 185
+
+# --- Critical Power Model (Computed Automatically) ---
+# CP and W' are computed from your power curve data using a 90-day rolling window
+# These values are stored in the activities CSV and updated as you add new data
+# You don't need to configure them here - they come from data analysis
+#
+# For reference:
+# - CP (Critical Power): Sustainable power for extended efforts (~85-90% FTP)
+# - W' (W-prime): Anaerobic work capacity above CP (~15-30 kJ typical range)
+# - Both metrics evolve with your fitness and are tracked over time
+
+# --- Goal Tracking (Optional) ---
+# Set a W/kg improvement goal to track your progress
+# Uncomment and configure these fields to enable goal tracking on home page
+# target_wkg: 4.0  # Your target W/kg goal
+# target_date: "2025-08-01"  # Target date (YYYY-MM-DD format)
+# baseline_ftp: 285  # Your FTP when you set this goal (for progress tracking)
+# baseline_date: "2024-12-01"  # Date when you started tracking this goal (YYYY-MM-DD format)
+
+# --- Application Settings ---
+# Enable verbose logging
+verbose: false
+
+# Cache time-to-live in seconds (1 hour = 3600)
+cache_ttl: 3600
+
+# --- Streamlit Display Settings ---
+# Page title shown in browser and sidebar
+page_title: "Activities Viewer"
+
+# Page icon (emoji) shown in browser tab and sidebar
+page_icon: "🚴"
+
+# --- Optional: AI Features Configuration (Phase 2) ---
+# Uncomment and set your Google Gemini API key to enable AI features
+# google_api_key: "your-api-key-here"
+
+# URL to Qdrant vector database (for segment analysis)
+qdrant_url: "http://localhost:6333"
+
+# --- Optional: Database Configuration (Phase 3) ---
+# Uncomment to enable PostgreSQL backend for multi-user support
+# database_url: "postgresql://user:password@localhost:5432/activities_viewer"
+
+# Uncomment to enable Redis caching layer
+# redis_url: "redis://localhost:6379/0"

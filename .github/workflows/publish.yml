@@ -1,0 +1,29 @@
+# Publish to Devpi Workflow
+#
+# Publishes the package to private Devpi index.
+# Uses UV for building and publishing.
+#
+# Triggers: Manual dispatch only (workflow_dispatch)
+# Registry: Custom (Devpi private index)
+#
+# Secrets required:
+#   - DEVPI_PASSWORD: Password for Devpi user
+#   - DEVPI_URL: URL of Devpi index (e.g., http://144.24.233.179/hope0hermes/dev/)
+#   - DEVPI_USERNAME: Username for Devpi authentication
+
+name: Publish to Devpi
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    name: Publish to Private Index
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-publish.yml@main
+    with:
+      registry: custom
+      python-version: '3.12'
+    secrets:
+      PUBLISH_TOKEN: ${{ secrets.DEVPI_PASSWORD }}
+      CUSTOM_REGISTRY_URL: ${{ secrets.DEVPI_URL }}
+      CUSTOM_REGISTRY_USERNAME: ${{ secrets.DEVPI_USERNAME }}

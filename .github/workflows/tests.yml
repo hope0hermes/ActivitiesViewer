@@ -1,0 +1,37 @@
+# Tests Workflow
+#
+# This workflow runs linting and tests on every pull request to main and after merges to main.
+# Uses reusable workflow from hope0hermes/SharedWorkflows for consistent CI/CD across projects.
+#
+# Trigger Strategy:
+# - "push: branches: [main]" - Runs after PR merges to main (verification)
+# - "pull_request: branches: [main]" - Runs on PRs targeting main (pre-merge check)
+#
+# Why NOT "branches: ['**']" for push?
+# - Would cause duplicate runs: once for push to feature branch, once for PR
+# - Current config runs ONCE per PR (only on PR event, not push to feature branch)
+# - Saves CI resources and keeps checks cleaner
+#
+# When tests run:
+# 1. You push to feature branch with open PR → Runs ONCE (via pull_request trigger)
+# 2. You push to feature branch without PR → Does NOT run (no waste)
+# 3. PR gets merged to main → Runs ONCE (via push to main trigger)
+
+name: Tests
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-tests.yml@main
+    with:
+      python-version: "3.12"
+      package-name: "activities-viewer"
+      coverage-threshold: 0
+      run-lint: true
+      run-tests: true
+      working-directory: "."
