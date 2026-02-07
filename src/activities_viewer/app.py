@@ -7,28 +7,27 @@ file to be provided via the CLI:
     activities-viewer run --config config.yaml
 """
 
-import logging
 import json
+import logging
 import os
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 try:
     from activities_viewer import __version__
     from activities_viewer.config import Settings, load_settings
-    from activities_viewer.repository.csv_repo import CSVActivityRepository
-    from activities_viewer.services.activity_service import ActivityService
-    from activities_viewer.services.goal_service import GoalService
-    from activities_viewer.services.analysis_service import AnalysisService
     from activities_viewer.domain.models import Goal
     from activities_viewer.pages.components.dashboard_components import (
         render_goal_progress_card,
-        render_status_card,
         render_recent_activity_sparklines,
+        render_status_card,
         render_training_calendar,
     )
+    from activities_viewer.repository.csv_repo import CSVActivityRepository
+    from activities_viewer.services.activity_service import ActivityService
+    from activities_viewer.services.analysis_service import AnalysisService
+    from activities_viewer.services.goal_service import GoalService
 except ImportError:
     # Fallback for when running directly from source without package installation
     import sys
@@ -36,17 +35,17 @@ except ImportError:
     sys.path.append(str(Path(__file__).resolve().parent.parent))
     from activities_viewer import __version__
     from activities_viewer.config import Settings, load_settings
-    from activities_viewer.repository.csv_repo import CSVActivityRepository
-    from activities_viewer.services.activity_service import ActivityService
-    from activities_viewer.services.goal_service import GoalService
-    from activities_viewer.services.analysis_service import AnalysisService
     from activities_viewer.domain.models import Goal
     from activities_viewer.pages.components.dashboard_components import (
         render_goal_progress_card,
-        render_status_card,
         render_recent_activity_sparklines,
+        render_status_card,
         render_training_calendar,
     )
+    from activities_viewer.repository.csv_repo import CSVActivityRepository
+    from activities_viewer.services.activity_service import ActivityService
+    from activities_viewer.services.analysis_service import AnalysisService
+    from activities_viewer.services.goal_service import GoalService
 
 logger = logging.getLogger(__name__)
 

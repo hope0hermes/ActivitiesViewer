@@ -5,9 +5,9 @@ This service calculates progress toward training goals and provides
 status indicators to guide the user's training journey.
 """
 
-from enum import Enum
 from datetime import datetime
-from typing import Optional
+from enum import Enum
+
 from activities_viewer.domain.models import Goal
 
 

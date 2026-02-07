@@ -10,20 +10,21 @@ Time Range [Last 4 Weeks | This Year | All Time | Custom] and a View Mode
 [Overview | Physiology | Power Profile | Equipment].
 """
 
-from datetime import datetime, timedelta
 import json
 import os
+from datetime import datetime, timedelta
+
 import pandas as pd
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
+from activities_viewer.config import Settings
+from activities_viewer.data import HELP_TEXTS
+from activities_viewer.repository.csv_repo import CSVActivityRepository
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.services.analysis_service import AnalysisService
-from activities_viewer.config import Settings
-from activities_viewer.repository.csv_repo import CSVActivityRepository
 from activities_viewer.utils.formatting import format_watts, render_metric
-from activities_viewer.data import HELP_TEXTS
 
 st.set_page_config(page_title="Training Analysis", page_icon="📈", layout="wide")
 
@@ -454,15 +455,12 @@ def render_overview_view(
     if date_range_days > 180:
         # More than 6 months: aggregate by month
         freq = "M"  # Month End (use "M" for older pandas compatibility)
-        freq_label = "Monthly"
     elif date_range_days > 60:
         # 2-6 months: aggregate by week
         freq = "W-MON"  # Week starting Monday
-        freq_label = "Weekly"
     else:
         # Less than 2 months: aggregate by day
         freq = "D"
-        freq_label = "Daily"
 
     # Prepare data
     df_trends = df.copy()
@@ -596,7 +594,7 @@ def render_overview_view(
                     tid_stats["tid_z2_percentage"],
                     tid_stats["tid_z3_percentage"],
                 ],
-                marker=dict(colors=["#28a745", "#ffc107", "#dc3545"]),
+                marker={"colors": ["#28a745", "#ffc107", "#dc3545"]},
                 hole=0.3,
                 hovertemplate="<b>%{label}</b><br>%{value:.1f}%<extra></extra>",
             )
@@ -606,7 +604,7 @@ def render_overview_view(
     fig.update_layout(
         height=500,
         showlegend=True,
-        legend=dict(orientation="h", yanchor="bottom", y=-0.1, xanchor="center", x=0.5),
+        legend={"orientation": "h", "yanchor": "bottom", "y": -0.1, "xanchor": "center", "x": 0.5},
     )
 
     st.plotly_chart(fig, width="stretch")
@@ -788,7 +786,7 @@ def render_overview_view(
             y=df_cum["cumulative_distance_km"],
             mode="lines",
             name="Distance",
-            line=dict(color="#3498db", width=2),
+            line={"color": "#3498db", "width": 2},
             fill="tozeroy",
             fillcolor="rgba(52, 152, 219, 0.2)",
             hovertemplate="<b>%{x}</b><br>%{y:.0f} km<extra></extra>",
@@ -804,7 +802,7 @@ def render_overview_view(
             y=df_cum["cumulative_time_hours"],
             mode="lines",
             name="Time",
-            line=dict(color="#2ecc71", width=2),
+            line={"color": "#2ecc71", "width": 2},
             fill="tozeroy",
             fillcolor="rgba(46, 204, 113, 0.2)",
             hovertemplate="<b>%{x}</b><br>%{y:.1f} hours<extra></extra>",
@@ -820,7 +818,7 @@ def render_overview_view(
             y=df_cum["cumulative_elevation_m"],
             mode="lines",
             name="Elevation",
-            line=dict(color="#e74c3c", width=2),
+            line={"color": "#e74c3c", "width": 2},
             fill="tozeroy",
             fillcolor="rgba(231, 76, 60, 0.2)",
             hovertemplate="<b>%{x}</b><br>%{y:.0f} m<extra></extra>",
@@ -965,7 +963,7 @@ def render_physiology_view(
                 y=ef_trends["efficiency_factor"],
                 mode="markers",
                 name="Efficiency Factor",
-                marker=dict(size=8, color=ef_trends["color"]),
+                marker={"size": 8, "color": ef_trends["color"]},
                 hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
             )
         )
@@ -1021,7 +1019,7 @@ def render_physiology_view(
                         y=trendline_y,
                         mode="lines",
                         name="Trend",
-                        line=dict(color="rgba(0, 0, 0, 0.3)", dash="dash", width=2),
+                        line={"color": "rgba(0, 0, 0, 0.3)", "dash": "dash", "width": 2},
                         hovertemplate="Trend: %{y:.2f}<extra></extra>",
                     )
                 )
@@ -1150,10 +1148,10 @@ def render_physiology_view(
                 y=ef_trends["decoupling"],
                 mode="markers",
                 name="Decoupling",
-                marker=dict(
-                    size=8,
-                    color=ef_trends["color"],
-                ),
+                marker={
+                    "size": 8,
+                    "color": ef_trends["color"],
+                },
                 hovertemplate="<b>%{x}</b><br>Decoupling: %{y:.2f}%<extra></extra>",
             )
         )
@@ -1307,10 +1305,10 @@ def render_physiology_view(
                     y=drift_data["cardiac_drift"],
                     mode="markers",
                     name="Cardiac Drift",
-                    marker=dict(
-                        size=8,
-                        color=drift_data["color"],
-                    ),
+                    marker={
+                        "size": 8,
+                        "color": drift_data["color"],
+                    },
                     hovertemplate="<b>%{x}</b><br>Cardiac Drift: %{y:.2f}%<extra></extra>",
                 )
             )
@@ -1697,7 +1695,7 @@ def render_physiology_view(
                             y=tid_df["z1"],
                             name="Z1 (Low)",
                             mode="lines",
-                            line=dict(width=0),
+                            line={"width": 0},
                             stackgroup="one",
                             fillcolor="rgba(128, 128, 128, 0.6)",
                             hovertemplate="<b>%{x}</b><br>Z1: %{y:.1f}%<extra></extra>",
@@ -1712,7 +1710,7 @@ def render_physiology_view(
                             y=tid_df["z2"],
                             name="Z2 (Moderate)",
                             mode="lines",
-                            line=dict(width=0),
+                            line={"width": 0},
                             stackgroup="one",
                             fillcolor="rgba(52, 152, 219, 0.6)",
                             hovertemplate="<b>%{x}</b><br>Z2: %{y:.1f}%<extra></extra>",
@@ -1727,7 +1725,7 @@ def render_physiology_view(
                             y=tid_df["z3"],
                             name="Z3 (High)",
                             mode="lines",
-                            line=dict(width=0),
+                            line={"width": 0},
                             stackgroup="one",
                             fillcolor="rgba(231, 76, 60, 0.6)",
                             hovertemplate="<b>%{x}</b><br>Z3: %{y:.1f}%<extra></extra>",
@@ -1743,8 +1741,8 @@ def render_physiology_view(
                             y=tid_df["polarization"],
                             name="Polarization",
                             mode="lines+markers",
-                            line=dict(color="#9b59b6", width=2),
-                            marker=dict(size=6),
+                            line={"color": "#9b59b6", "width": 2},
+                            marker={"size": 6},
                             hovertemplate="<b>%{x}</b><br>Polarization: %{y:.2f}<extra></extra>",
                             showlegend=False,
                         ),
@@ -1769,13 +1767,13 @@ def render_physiology_view(
                     fig.update_layout(
                         height=600,
                         hovermode="x unified",
-                        legend=dict(
-                            orientation="h",
-                            yanchor="bottom",
-                            y=1.02,
-                            xanchor="right",
-                            x=1,
-                        ),
+                        legend={
+                            "orientation": "h",
+                            "yanchor": "bottom",
+                            "y": 1.02,
+                            "xanchor": "right",
+                            "x": 1,
+                        },
                     )
 
                     st.plotly_chart(fig, width="stretch")
@@ -1800,18 +1798,18 @@ def render_physiology_view(
                     )
                     if avg_polarization >= 3.0:
                         st.success(
-                            f"✅ **Highly polarized training**",
+                            "✅ **Highly polarized training**",
                             icon="💪",
                         )
                     elif avg_polarization >= 2.0:
                         st.info(
-                            f"ℹ️ **Moderately polarized**",
+                            "ℹ️ **Moderately polarized**",
                             icon="📈",
                         )
                     else:
                         st.warning(
                             (
-                                f"⚠️ **Low polarization** - Consider 80/20 approach: "
+                                "⚠️ **Low polarization** - Consider 80/20 approach: "
                                 "more Z1/Z2, less threshold"
                             ),
                             icon="📘",
@@ -1975,7 +1973,7 @@ def render_power_profile_view(df: pd.DataFrame, analysis_service: AnalysisServic
                 margin={"t": 30, "b": 40},
                 height=400,
                 barmode="overlay",
-                legend=dict(orientation="h", y=1.15, x=0),
+                legend={"orientation": "h", "y": 1.15, "x": 0},
                 hovermode="x unified",
             )
 
@@ -2473,7 +2471,7 @@ def render_recovery_view(
                 y=pmc_data["ctl"],
                 mode="lines",
                 name="CTL (Fitness)",
-                line=dict(color="#3498db", width=2),
+                line={"color": "#3498db", "width": 2},
                 hovertemplate="<b>%{x}</b><br>CTL: %{y:.1f}<extra></extra>",
             )
         )
@@ -2485,7 +2483,7 @@ def render_recovery_view(
                 y=pmc_data["atl"],
                 mode="lines",
                 name="ATL (Fatigue)",
-                line=dict(color="#e74c3c", width=2),
+                line={"color": "#e74c3c", "width": 2},
                 hovertemplate="<b>%{x}</b><br>ATL: %{y:.1f}<extra></extra>",
             )
         )
@@ -2497,7 +2495,7 @@ def render_recovery_view(
                 y=pmc_data["tsb"],
                 mode="lines",
                 name="TSB (Form)",
-                line=dict(color="#2ecc71", width=2),
+                line={"color": "#2ecc71", "width": 2},
                 fill="tozeroy",
                 hovertemplate="<b>%{x}</b><br>TSB: %{y:.1f}<extra></extra>",
             )
@@ -2528,9 +2526,9 @@ def render_recovery_view(
             yaxis_title="Training Load",
             height=400,
             hovermode="x unified",
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-            ),
+            legend={
+                "orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "right", "x": 1
+            },
         )
 
         st.plotly_chart(fig, width="stretch")

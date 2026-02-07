@@ -2,9 +2,10 @@
 Gemini Client wrapper.
 """
 
-import os
 import logging
+import os
 import re
+
 import google.generativeai as genai
 from langchain_google_genai import ChatGoogleGenerativeAI
 
@@ -39,7 +40,7 @@ def parse_model_version(model_name: str) -> tuple[str, tuple[int, int, int]]:
     major_str, minor_str, mtype, suffix = match.groups()
     major = int(major_str)
     minor = int(minor_str) if minor_str else 0
-    
+
     # Handle patch/suffix: preview gets high priority (999), numeric patches are lower
     if suffix == "preview":
         patch = 999  # Preview versions get highest priority

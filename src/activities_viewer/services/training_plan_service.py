@@ -6,20 +6,19 @@ and key events. Supports classic periodization with Base, Build, Specialty,
 and Taper phases.
 """
 
+import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Optional
-import json
+
 import pandas as pd
 
 from activities_viewer.domain.models import (
-    TrainingPlan,
-    TrainingPhase,
-    WeeklyPlan,
     KeyEvent,
+    TrainingPhase,
+    TrainingPlan,
+    WeeklyPlan,
 )
 from activities_viewer.services.activity_service import ActivityService
-
 
 # Standard phase templates
 PHASE_TEMPLATES = {
@@ -119,7 +118,7 @@ class TrainingPlanService:
     - Key events/races
     """
 
-    def __init__(self, activity_service: Optional[ActivityService] = None):
+    def __init__(self, activity_service: ActivityService | None = None):
         """
         Initialize the training plan service.
 
@@ -462,7 +461,7 @@ class TrainingPlanService:
 
         return plan
 
-    def get_current_week_plan(self, plan: TrainingPlan) -> Optional[WeeklyPlan]:
+    def get_current_week_plan(self, plan: TrainingPlan) -> WeeklyPlan | None:
         """Get the current week's plan."""
         current_week = plan.current_week
         if 1 <= current_week <= len(plan.weeks):
@@ -842,8 +841,8 @@ Important:
         Returns:
             Tuple of (refined_plan, analysis_text).
         """
-        import re
         import logging
+        import re
         log = logging.getLogger(__name__)
 
         refined_count = 0

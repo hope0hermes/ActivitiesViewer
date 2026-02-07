@@ -12,8 +12,7 @@ ARCHITECTURE:
 - get_help_text() generates complete help text dynamically
 """
 
-from .metric_descriptions import BASE_DESCRIPTIONS, FEATURE_DESCRIPTIONS
-
+from .metric_descriptions import BASE_DESCRIPTIONS
 
 # ═══════════════════════════════════════════════════════════════════════════
 # LEGACY HELP_TEXTS - Retained for backwards compatibility
@@ -398,12 +397,6 @@ These represent your peak performance capabilities:
     # ═══════════════════════════════════════════════════════════════════════════
     # RECOVERY & READINESS
     # ═══════════════════════════════════════════════════════════════════════════
-    "rest_days": """**Rest Days**
-Days with no activity or TSS < 20.
-Adequate recovery time prevents overtraining and allows adaptation.
-• 2+: ✅ Good recovery
-• 1: ⚠️ May need more rest
-• 0: 🔴 High overtraining risk""",
     "monotony": """**Monotony Index**
 Mean daily TSS divided by standard deviation.
 Measures training variety. Lower values indicate better variation.

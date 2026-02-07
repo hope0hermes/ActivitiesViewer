@@ -7,17 +7,15 @@ Enhanced with contextual header and metrics sections that adapt to activity type
 
 import json
 import os
+
 import pandas as pd
 import streamlit as st
 
-from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.config import Settings
-from activities_viewer.repository.csv_repo import CSVActivityRepository
-from activities_viewer.utils import get_metric_from_object
 from activities_viewer.data import HELP_TEXTS
 from activities_viewer.pages.components.activity_detail_components import (
-    render_activity_selector,
     render_activity_navigation,
+    render_activity_selector,
     render_contextual_header,
     render_contextual_metrics,
     # render_durability_tab,
@@ -27,8 +25,9 @@ from activities_viewer.pages.components.activity_detail_components import (
 )
 from activities_viewer.pages.components.detail_tabs.overview import render_overview_tab
 from activities_viewer.pages.components.detail_tabs.power import render_power_hr_tab
-from activities_viewer.pages.components.detail_tabs.fatigue import render_durability_tab
-
+from activities_viewer.repository.csv_repo import CSVActivityRepository
+from activities_viewer.services.activity_service import ActivityService
+from activities_viewer.utils import get_metric_from_object
 
 st.set_page_config(page_title="Activity Detail", page_icon="🚴", layout="wide")
 

@@ -1,7 +1,8 @@
 """Shared metric calculation utilities."""
 
-import pandas as pd
 from typing import Any
+
+import pandas as pd
 
 
 def safe_mean(series: pd.Series) -> float:

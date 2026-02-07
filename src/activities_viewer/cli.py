@@ -89,11 +89,11 @@ def run(config: Path, verbose: bool, port: int) -> None:
         logger.info("✅ All data files found")
 
         # Import streamlit here to avoid startup delay if not needed
+        import json
+        import os
         import subprocess
         import sys
-        import json
         import tempfile
-        import os
 
         app_path = Path(__file__).parent / "app.py"
         logger.info(f"Starting Streamlit dashboard on port {port}...")

@@ -6,10 +6,7 @@ refactoring plan, handling the proper aggregation of metrics across different
 time scales (activity, week, month, year).
 """
 
-from typing import List, Optional
 import pandas as pd
-import numpy as np
-from datetime import datetime
 
 
 class AnalysisService:
@@ -540,7 +537,7 @@ class AnalysisService:
     def classify_training_phase(
         self,
         activities_df: pd.DataFrame,
-        previous_period_df: Optional[pd.DataFrame] = None,
+        previous_period_df: pd.DataFrame | None = None,
     ) -> dict:
         """
         Classify the training phase based on volume and intensity trends.

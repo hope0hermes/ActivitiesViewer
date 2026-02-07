@@ -16,15 +16,15 @@ import time
 from datetime import datetime, timedelta
 from functools import lru_cache
 
-from dateutil.relativedelta import relativedelta
-import numpy as np
 import pandas as pd
+from dateutil.relativedelta import relativedelta
+
 from activities_viewer.services.activity_service import ActivityService
 
 # Optional geocoding support
 try:
+    from geopy.exc import GeocoderServiceError, GeocoderTimedOut
     from geopy.geocoders import Nominatim
-    from geopy.exc import GeocoderTimedOut, GeocoderServiceError
     GEOCODING_AVAILABLE = True
 except ImportError:
     GEOCODING_AVAILABLE = False
@@ -1049,7 +1049,7 @@ class ActivityContextBuilder:
         # Output as CSV-like format for easy parsing
         output += "      " + ",".join(col_headers) + "\n"
 
-        for idx, row in sampled.iterrows():
+        for _idx, row in sampled.iterrows():
             values = []
             for col in cols_available:
                 val = row.get(col)
@@ -1062,7 +1062,7 @@ class ActivityContextBuilder:
             output += "      " + ",".join(values) + "\n"
 
         output += "\n      Use this data for scatter plots, correlations, or trend analysis.\n"
-        output += "      Columns: " + ", ".join(f"{h}={c}" for h, c in zip(col_headers, cols_available)) + "\n"
+        output += "      Columns: " + ", ".join(f"{h}={c}" for h, c in zip(col_headers, cols_available, strict=False)) + "\n"
 
         return output
 

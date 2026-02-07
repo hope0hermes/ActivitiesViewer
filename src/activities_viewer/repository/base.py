@@ -2,8 +2,9 @@
 Repository interface definition.
 """
 
-from typing import Protocol, List, Optional
 from datetime import date
+from typing import Protocol
+
 from activities_viewer.domain.models import Activity, YearSummary
 
 
@@ -13,13 +14,13 @@ class ActivityRepository(Protocol):
     Implementations can be CSV-based, SQL-based, etc.
     """
 
-    def get_activity(self, activity_id: int) -> Optional[Activity]:
+    def get_activity(self, activity_id: int) -> Activity | None:
         """Retrieve a single activity by ID."""
         ...
 
     def get_activities(
-        self, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> List[Activity]:
+        self, start_date: date | None = None, end_date: date | None = None
+    ) -> list[Activity]:
         """
         Retrieve a list of activities, optionally filtered by date range.
         """

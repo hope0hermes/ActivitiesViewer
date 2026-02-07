@@ -15,7 +15,6 @@ from activities_viewer.utils.formatting import (
     render_metric,
 )
 
-
 ROLLING_WINDOW_SECONDS = [None, 5, 30, 60, 300]
 
 # Color scheme for metrics

@@ -4,7 +4,7 @@ Chat interface for analyzing training data with Gemini.
 """
 
 import streamlit as st
-from activities_viewer.services.activity_service import ActivityService
+
 from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
 from activities_viewer.cache import (

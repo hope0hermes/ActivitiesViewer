@@ -2,8 +2,7 @@
 Tests for configuration module.
 """
 
-import pytest
-from activities_viewer.config import Settings, load_settings
+from activities_viewer.config import Settings
 
 
 def test_settings_has_required_attributes():

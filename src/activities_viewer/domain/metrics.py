@@ -5,11 +5,13 @@ This module provides a single source of truth for all metrics displayed
 in the application, ensuring consistency across the UI.
 """
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Any
-from enum import Enum
-import pandas as pd
 from datetime import datetime
+from enum import Enum
+from typing import Any
+
+import pandas as pd
 
 
 class MetricCategory(str, Enum):
@@ -1501,7 +1503,7 @@ class MetricRegistry:
         }
 
     @classmethod
-    def get_by_id(cls, metric_id: str) -> Optional[MetricDefinition]:
+    def get_by_id(cls, metric_id: str) -> MetricDefinition | None:
         """Get a metric definition by its ID."""
         all_metrics = cls.get_all_metrics()
         return all_metrics.get(metric_id)

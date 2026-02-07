@@ -6,7 +6,6 @@ Each function handles a specific UI section to keep main() clean.
 """
 
 import ast
-from typing import Optional
 
 import folium
 import pandas as pd
@@ -18,7 +17,7 @@ from streamlit_folium import st_folium
 from activities_viewer.data.help_texts import HELP_TEXTS, get_help_text
 from activities_viewer.domain.models import Activity
 from activities_viewer.services.activity_service import ActivityService
-from activities_viewer.utils.formatting import format_duration, render_metric
+from activities_viewer.utils.formatting import render_metric
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONSTANTS & COLORS
@@ -101,7 +100,7 @@ def get_metric(activity, field: str, default=None):
     return default
 
 
-def get_workout_type_info(workout_type: Optional[float]) -> tuple[str, str]:
+def get_workout_type_info(workout_type: float | None) -> tuple[str, str]:
     """
     Get workout type label and emoji based on Strava workout_type code.
 
@@ -267,7 +266,7 @@ def render_contextual_header(
     else:
         avg_hr = get_metric(activity, "average_hr")
         elevation = get_metric(activity, "total_elevation_gain")
-        calories = get_metric(activity, "kilojoules")
+        get_metric(activity, "kilojoules")
 
         render_metric(
             col1,
@@ -487,7 +486,7 @@ def render_contextual_metrics(
 
         if avg_hr:
             st.info(
-                f"💡 Recovery rides should feel very easy. If HR was elevated, consider reducing intensity further.",
+                "💡 Recovery rides should feel very easy. If HR was elevated, consider reducing intensity further.",
                 icon="💡",
             )
 
@@ -1830,7 +1829,7 @@ def render_power_curve(
             margin={"t": 30, "b": 40},
             height=300,
             barmode="overlay",
-            legend=dict(orientation="h", y=1.15, x=0),
+            legend={"orientation": "h", "y": 1.15, "x": 0},
             hovermode="x unified",
         )
         st.plotly_chart(fig_pc, width="stretch")
@@ -2273,7 +2272,7 @@ def render_durability_tab(
         hr_tss = get_metric(activity, "hr_training_stress")
         cardiac_drift = get_metric(activity, "cardiac_drift")
         first_half_ef = get_metric(activity, "first_half_ef")
-        second_half_ef = get_metric(activity, "second_half_ef")
+        get_metric(activity, "second_half_ef")
 
         c1, c2 = st.columns(2)
         render_metric(

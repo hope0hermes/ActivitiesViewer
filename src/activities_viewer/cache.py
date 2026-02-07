@@ -8,7 +8,7 @@ survive across Streamlit sessions (chat history, geocoding cache, etc.).
 import json
 import logging
 import shutil
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -66,7 +66,7 @@ def save_chat_exchange(user_msg: str, assistant_msg: str) -> None:
     history = load_chat_history()
     history.append(
         {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "user": user_msg,
             "assistant": assistant_msg,
         }
@@ -159,7 +159,7 @@ def save_memory_summary(summary_text: str, exchanges: list[dict]) -> None:
 
     summaries.append(
         {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "period": f"{period_start} to {period_end}",
             "exchanges_consolidated": len(exchanges),
             "summary": summary_text,

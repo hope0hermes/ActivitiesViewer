@@ -4,20 +4,20 @@ Training Plan Page.
 Generate and track periodized training plans based on goals.
 """
 
-import streamlit as st
 from datetime import datetime, timedelta
 from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
-from activities_viewer.services.activity_service import ActivityService
-from activities_viewer.services.training_plan_service import TrainingPlanService
-from activities_viewer.services.analysis_service import AnalysisService
-from activities_viewer.domain.models import TrainingPlan, WeeklyPlan
-from activities_viewer.config import Settings
 from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
+from activities_viewer.config import Settings
+from activities_viewer.domain.models import TrainingPlan
+from activities_viewer.services.activity_service import ActivityService
+from activities_viewer.services.training_plan_service import TrainingPlanService
 
 st.set_page_config(page_title="Training Plan", page_icon="📋", layout="wide")
 
@@ -33,7 +33,6 @@ def get_plan_file_path(settings: Settings) -> Path:
 
 def init_services(settings: Settings) -> ActivityService:
     """Initialize activity service for plan tracking."""
-    from pathlib import Path
     from activities_viewer.repository.csv_repo import CSVActivityRepository
 
     raw_file = (
@@ -356,8 +355,8 @@ def render_plan_chart(plan: TrainingPlan):
             y=target_ctl,
             name="Target CTL",
             mode="lines+markers",
-            line=dict(color="rgba(219, 64, 82, 0.9)", width=2),
-            marker=dict(size=6),
+            line={"color": "rgba(219, 64, 82, 0.9)", "width": 2},
+            marker={"size": 6},
         ),
         row=2,
         col=1,
@@ -373,8 +372,8 @@ def render_plan_chart(plan: TrainingPlan):
                 y=actual_ctl,
                 name="Actual CTL",
                 mode="lines+markers",
-                line=dict(color="rgba(50, 171, 96, 0.9)", width=2, dash="dot"),
-                marker=dict(size=6),
+                line={"color": "rgba(50, 171, 96, 0.9)", "width": 2, "dash": "dot"},
+                marker={"size": 6},
             ),
             row=2,
             col=1,
@@ -412,7 +411,7 @@ def render_plan_chart(plan: TrainingPlan):
     fig.update_layout(
         height=500,
         barmode="group",
-        legend=dict(orientation="h", yanchor="bottom", y=1.02),
+        legend={"orientation": "h", "yanchor": "bottom", "y": 1.02},
         hovermode="x unified",
     )
 
@@ -431,7 +430,7 @@ def render_weekly_details(plan: TrainingPlan):
     phase_names = list(dict.fromkeys([w.phase for w in plan.weeks]))
     tabs = st.tabs(phase_names)
 
-    for tab, phase_name in zip(tabs, phase_names):
+    for tab, phase_name in zip(tabs, phase_names, strict=False):
         with tab:
             phase_weeks = [w for w in plan.weeks if w.phase == phase_name]
 
@@ -627,7 +626,6 @@ def render_ai_recommendations(
     # Show current status
     col1, col2, col3 = st.columns(3)
     with col1:
-        tsb_color = "green" if current_tsb > 0 else "orange" if current_tsb > -20 else "red"
         st.metric(
             "Current Form (TSB)",
             f"{current_tsb:.1f}",
@@ -879,7 +877,7 @@ def main():
                         # Auto-save
                         try:
                             plan_service.save_plan(plan, plan_file_path)
-                            st.success(f"✅ Plan generated and saved!")
+                            st.success("✅ Plan generated and saved!")
                         except Exception as save_e:
                             st.warning(f"Plan generated but save failed: {save_e}")
                         st.rerun()

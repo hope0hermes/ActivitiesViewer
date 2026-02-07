@@ -2,11 +2,10 @@
 CSV implementation of the ActivityRepository.
 """
 
-import pandas as pd
-import streamlit as st
+from datetime import date
 from pathlib import Path
-from typing import List, Optional
-from datetime import date, datetime
+
+import pandas as pd
 
 from activities_viewer.domain.models import Activity, YearSummary
 from activities_viewer.repository.base import ActivityRepository
@@ -78,7 +77,7 @@ class CSVActivityRepository(ActivityRepository):
             # Fallback: use raw data as moving data if not available
             self._df_moving = self._df_raw.copy()
 
-    def get_activity(self, activity_id: int) -> Optional[Activity]:
+    def get_activity(self, activity_id: int) -> Activity | None:
         """Get activity from raw dataset (default)."""
         self._ensure_data_loaded()
         row = self._df_raw[self._df_raw["id"] == activity_id]
@@ -87,7 +86,7 @@ class CSVActivityRepository(ActivityRepository):
 
         return Activity(**row.iloc[0].to_dict())
 
-    def get_activity_raw(self, activity_id: int) -> Optional[Activity]:
+    def get_activity_raw(self, activity_id: int) -> Activity | None:
         """Get activity from raw dataset (all data points)."""
         self._ensure_data_loaded()
         row = self._df_raw[self._df_raw["id"] == activity_id]
@@ -96,7 +95,7 @@ class CSVActivityRepository(ActivityRepository):
 
         return Activity(**row.iloc[0].to_dict())
 
-    def get_activity_moving(self, activity_id: int) -> Optional[Activity]:
+    def get_activity_moving(self, activity_id: int) -> Activity | None:
         """Get activity from moving dataset (motion only)."""
         self._ensure_data_loaded()
         row = self._df_moving[self._df_moving["id"] == activity_id]
@@ -106,39 +105,39 @@ class CSVActivityRepository(ActivityRepository):
         return Activity(**row.iloc[0].to_dict())
 
     @property
-    def all_activities(self) -> List[Activity]:
+    def all_activities(self) -> list[Activity]:
         """Get all activities from raw dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw)
 
     @property
-    def all_activities_raw(self) -> List[Activity]:
+    def all_activities_raw(self) -> list[Activity]:
         """Get all activities from raw dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw)
 
     @property
-    def all_activities_moving(self) -> List[Activity]:
+    def all_activities_moving(self) -> list[Activity]:
         """Get all activities from moving dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_moving)
 
     def get_activities(
-        self, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> List[Activity]:
+        self, start_date: date | None = None, end_date: date | None = None
+    ) -> list[Activity]:
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw, start_date, end_date)
 
     def get_activities_raw(
-        self, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> List[Activity]:
+        self, start_date: date | None = None, end_date: date | None = None
+    ) -> list[Activity]:
         """Get activities from raw (all data points) dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_raw, start_date, end_date)
 
     def get_activities_moving(
-        self, start_date: Optional[date] = None, end_date: Optional[date] = None
-    ) -> List[Activity]:
+        self, start_date: date | None = None, end_date: date | None = None
+    ) -> list[Activity]:
         """Get activities from moving (motion only) dataset."""
         self._ensure_data_loaded()
         return self._get_activities_from_df(self._df_moving, start_date, end_date)
@@ -156,9 +155,9 @@ class CSVActivityRepository(ActivityRepository):
     def _get_activities_from_df(
         self,
         df: pd.DataFrame,
-        start_date: Optional[date] = None,
-        end_date: Optional[date] = None,
-    ) -> List[Activity]:
+        start_date: date | None = None,
+        end_date: date | None = None,
+    ) -> list[Activity]:
         """Helper to get activities from a specific dataframe."""
         df_filtered = df
 

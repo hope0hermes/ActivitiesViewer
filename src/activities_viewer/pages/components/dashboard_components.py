@@ -8,22 +8,24 @@ This module provides the visual components for the new goal-driven dashboard:
 """
 
 from datetime import datetime, timedelta
-from typing import Optional
+
 import pandas as pd
-import streamlit as st
 import plotly.graph_objects as go
+import streamlit as st
 from plotly.subplots import make_subplots
 
-from activities_viewer.services.goal_service import GoalService, GoalStatus
 from activities_viewer.domain.models import Goal
-from activities_viewer.utils.formatting import format_watts, format_wkg, format_duration, render_metric
+from activities_viewer.services.goal_service import GoalService, GoalStatus
+from activities_viewer.utils.formatting import (
+    render_metric,
+)
 
 
 def render_goal_progress_card(
     goal: Goal,
     current_ftp: float,
     weight_kg: float,
-    goal_service: Optional[GoalService] = None,
+    goal_service: GoalService | None = None,
 ) -> None:
     """
     Render the hero goal progress card.
@@ -299,7 +301,7 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
                 else recent_pmc.index,
                 y=recent_pmc["ctl"],
                 name="Fitness (CTL)",
-                line=dict(color="#17a2b8", width=2),
+                line={"color": "#17a2b8", "width": 2},
                 mode="lines",
             )
         )
@@ -311,7 +313,7 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
                 else recent_pmc.index,
                 y=recent_pmc["atl"],
                 name="Fatigue (ATL)",
-                line=dict(color="#ffc107", width=2),
+                line={"color": "#ffc107", "width": 2},
                 mode="lines",
             )
         )
@@ -323,7 +325,7 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
                 else recent_pmc.index,
                 y=recent_pmc["tsb"],
                 name="Form (TSB)",
-                line=dict(color="#28a745", width=2),
+                line={"color": "#28a745", "width": 2},
                 mode="lines",
                 fill="tozeroy",
                 fillcolor="rgba(40, 167, 69, 0.1)",
@@ -332,12 +334,12 @@ def render_status_card(pmc_data: pd.DataFrame) -> None:
 
         fig.update_layout(
             height=250,
-            margin=dict(l=0, r=0, t=20, b=0),
+            margin={"l": 0, "r": 0, "t": 20, "b": 0},
             xaxis_title="",
             yaxis_title="TSS",
-            legend=dict(
-                orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5
-            ),
+            legend={
+                "orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "center", "x": 0.5
+            },
             hovermode="x unified",
         )
 
@@ -430,9 +432,9 @@ def render_recent_activity_sparklines(
             x=daily_stats["date"],
             y=daily_stats["training_stress_score"],
             name="TSS",
-            line=dict(color="#28a745", width=3),
+            line={"color": "#28a745", "width": 3},
             mode="lines+markers",
-            marker=dict(size=6),
+            marker={"size": 6},
             fill="tozeroy",
             fillcolor="rgba(40, 167, 69, 0.2)",
             hovertemplate="<b>%{x}</b><br>TSS: %{y:.0f}<extra></extra>",
@@ -449,7 +451,7 @@ def render_recent_activity_sparklines(
 
     fig.update_layout(
         height=400,
-        margin=dict(l=0, r=0, t=40, b=0),
+        margin={"l": 0, "r": 0, "t": 40, "b": 0},
         showlegend=False,
         hovermode="x unified",
     )
@@ -517,9 +519,7 @@ def render_training_calendar(
         df: DataFrame of activities with start_date_local and training_stress_score
         months: Number of months to display (default: 3)
     """
-    import numpy as np
     from datetime import date
-    import calendar
 
     st.subheader("📅 Training Calendar")
 
@@ -628,11 +628,11 @@ def render_training_calendar(
             hoverinfo="text",
             text=hover_text,
             showscale=True,
-            colorbar=dict(
-                title="TSS",
-                tickvals=[0, max_tss * 0.25, max_tss * 0.5, max_tss * 0.75, max_tss],
-                ticktext=["Rest", "Easy", "Mod", "Hard", "V.Hard"],
-            ),
+            colorbar={
+                "title": "TSS",
+                "tickvals": [0, max_tss * 0.25, max_tss * 0.5, max_tss * 0.75, max_tss],
+                "ticktext": ["Rest", "Easy", "Mod", "Hard", "V.Hard"],
+            },
             xgap=2,
             ygap=2,
         )
@@ -640,18 +640,18 @@ def render_training_calendar(
 
     fig.update_layout(
         height=200,
-        margin=dict(l=40, r=20, t=20, b=40),
-        xaxis=dict(
-            tickmode="array",
-            tickvals=month_positions,
-            ticktext=month_labels,
-            side="bottom",
-            showgrid=False,
-        ),
-        yaxis=dict(
-            showgrid=False,
-            autorange="reversed",  # Mon at top
-        ),
+        margin={"l": 40, "r": 20, "t": 20, "b": 40},
+        xaxis={
+            "tickmode": "array",
+            "tickvals": month_positions,
+            "ticktext": month_labels,
+            "side": "bottom",
+            "showgrid": False,
+        },
+        yaxis={
+            "showgrid": False,
+            "autorange": "reversed",  # Mon at top
+        },
         plot_bgcolor="white",
     )
 

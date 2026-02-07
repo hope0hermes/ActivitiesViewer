@@ -9,7 +9,6 @@ from activities_viewer.utils.formatting import (
     render_metric,
 )
 
-
 # Power zone colors (Z1-Z7)
 POWER_ZONE_COLORS = [
     "#808080",  # Z1 - Grey
@@ -139,7 +138,7 @@ def render_power_curve(
             margin={"t": 30, "b": 40},
             height=300,
             barmode="overlay",
-            legend=dict(orientation="h", y=1.15, x=0),
+            legend={"orientation": "h", "y": 1.15, "x": 0},
             hovermode="x unified",
         )
         st.plotly_chart(fig_pc, width="stretch")

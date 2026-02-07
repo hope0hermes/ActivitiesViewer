@@ -18,3 +18,5 @@ on:
 jobs:
   create-release:
     uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-create-release.yml@main
+    secrets:
+      github-token: ${{ secrets.PAT_TOKEN }}

@@ -1,9 +1,9 @@
 """Shared formatting utilities for the dashboard."""
 
+from datetime import datetime
+
 import pandas as pd
 import streamlit as st
-from datetime import datetime
-from typing import Union
 
 
 def get_metric(activity, field: str, default=None):
@@ -187,7 +187,7 @@ def format_wkg(value: float) -> str:
     return f"{value:.2f} W/kg"
 
 
-def format_date(date: Union[datetime, str, None], format_str: str = "%Y-%m-%d") -> str:
+def format_date(date: datetime | str | None, format_str: str = "%Y-%m-%d") -> str:
     """Format date to string.
 
     Args:
@@ -209,7 +209,7 @@ def format_date(date: Union[datetime, str, None], format_str: str = "%Y-%m-%d") 
             parsed = pd.to_datetime(date)
             if pd.notna(parsed):
                 return parsed.strftime(format_str)
-        except:
+        except Exception:
             # If parsing fails, return as-is if it looks like a date
             if len(date) >= 8:  # Reasonable minimum for a date string
                 return date

@@ -8,10 +8,11 @@ The file source determines whether metrics are raw (including stopped time) or m
 (excluding stopped time) - no prefixes needed since data is separated by file.
 """
 
-from datetime import datetime
-from typing import Optional, Any, Union
-from pydantic import BaseModel, Field, ConfigDict, field_validator
 import math
+from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class Activity(BaseModel):
@@ -33,64 +34,64 @@ class Activity(BaseModel):
     sport_type: str
     start_date: datetime
     start_date_local: datetime
-    workout_type: Optional[float] = Field(
+    workout_type: float | None = Field(
         default=None,
         description="Strava workout type: 10=Race, 11=Long Run, 12=Workout, etc.",
     )
 
     # Equipment & Location
-    gear_id: Optional[str] = Field(default=None, description="Strava gear identifier")
-    timezone: Optional[str] = Field(default=None, description="Activity timezone")
-    utc_offset: Optional[float] = Field(
+    gear_id: str | None = Field(default=None, description="Strava gear identifier")
+    timezone: str | None = Field(default=None, description="Activity timezone")
+    utc_offset: float | None = Field(
         default=None, description="UTC offset in seconds"
     )
-    location_city: Optional[str] = Field(default=None)
-    location_state: Optional[str] = Field(default=None)
-    location_country: Optional[str] = Field(default=None)
+    location_city: str | None = Field(default=None)
+    location_state: str | None = Field(default=None)
+    location_country: str | None = Field(default=None)
 
     # Strava Metadata
-    resource_state: Optional[int] = Field(default=None)
-    achievement_count: Optional[int] = Field(default=None)
-    kudos_count: Optional[int] = Field(default=None)
-    comment_count: Optional[int] = Field(default=None)
-    athlete_count: Optional[int] = Field(default=None)
-    photo_count: Optional[int] = Field(default=None)
-    total_photo_count: Optional[int] = Field(default=None)
-    pr_count: Optional[int] = Field(default=None)
-    trainer: Optional[bool] = Field(default=None)
-    commute: Optional[bool] = Field(default=None)
-    manual: Optional[bool] = Field(default=None)
-    private: Optional[bool] = Field(default=None)
-    visibility: Optional[str] = Field(default=None)
-    flagged: Optional[bool] = Field(default=None)
-    has_kudoed: Optional[bool] = Field(default=None)
-    from_accepted_tag: Optional[bool] = Field(default=None)
+    resource_state: int | None = Field(default=None)
+    achievement_count: int | None = Field(default=None)
+    kudos_count: int | None = Field(default=None)
+    comment_count: int | None = Field(default=None)
+    athlete_count: int | None = Field(default=None)
+    photo_count: int | None = Field(default=None)
+    total_photo_count: int | None = Field(default=None)
+    pr_count: int | None = Field(default=None)
+    trainer: bool | None = Field(default=None)
+    commute: bool | None = Field(default=None)
+    manual: bool | None = Field(default=None)
+    private: bool | None = Field(default=None)
+    visibility: str | None = Field(default=None)
+    flagged: bool | None = Field(default=None)
+    has_kudoed: bool | None = Field(default=None)
+    from_accepted_tag: bool | None = Field(default=None)
 
     # Device & Upload Info
-    device_name: Optional[str] = Field(default=None)
-    device_watts: Optional[bool] = Field(
+    device_name: str | None = Field(default=None)
+    device_watts: bool | None = Field(
         default=None, description="True if power from device"
     )
-    upload_id: Optional[int] = Field(default=None)
-    upload_id_str: Optional[Union[str, float, int]] = Field(default=None)
-    external_id: Optional[str] = Field(default=None)
+    upload_id: int | None = Field(default=None)
+    upload_id_str: str | float | int | None = Field(default=None)
+    external_id: str | None = Field(default=None)
 
     # GPS Data
-    start_latlng: Optional[str] = Field(default=None)
-    end_latlng: Optional[str] = Field(default=None)
+    start_latlng: str | None = Field(default=None)
+    end_latlng: str | None = Field(default=None)
 
     # Map Data (nested from Strava API, flattened in CSV)
-    map_id: Optional[str] = Field(default=None, validation_alias="map.id")
-    map_summary_polyline: Optional[str] = Field(
+    map_id: str | None = Field(default=None, validation_alias="map.id")
+    map_summary_polyline: str | None = Field(
         default=None, validation_alias="map.summary_polyline"
     )
-    map_resource_state: Optional[int] = Field(
+    map_resource_state: int | None = Field(
         default=None, validation_alias="map.resource_state"
     )
 
     # Athlete Reference
-    athlete_id: Optional[int] = Field(default=None, validation_alias="athlete.id")
-    athlete_resource_state: Optional[int] = Field(
+    athlete_id: int | None = Field(default=None, validation_alias="athlete.id")
+    athlete_resource_state: int | None = Field(
         default=None, validation_alias="athlete.resource_state"
     )
 
@@ -100,22 +101,22 @@ class Activity(BaseModel):
     distance: float = Field(description="Distance in meters")
     moving_time: float = Field(description="Time spent moving in seconds")
     elapsed_time: float = Field(description="Total elapsed time in seconds")
-    total_time: Optional[float] = Field(default=None, description="Total activity time")
+    total_time: float | None = Field(default=None, description="Total activity time")
     total_elevation_gain: float = Field(description="Elevation gain in meters")
-    elevation_gain: Optional[float] = Field(
+    elevation_gain: float | None = Field(
         default=None, description="Enriched elevation gain"
     )
-    elev_high: Optional[float] = Field(default=None)
-    elev_low: Optional[float] = Field(default=None)
+    elev_high: float | None = Field(default=None)
+    elev_low: float | None = Field(default=None)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # SPEED & PACE METRICS
     # ═══════════════════════════════════════════════════════════════════════════
-    average_speed: Optional[float] = Field(
+    average_speed: float | None = Field(
         default=None, description="Average speed (m/s)"
     )
-    max_speed: Optional[float] = Field(default=None, description="Maximum speed (m/s)")
-    normalized_graded_pace: Optional[float] = Field(
+    max_speed: float | None = Field(default=None, description="Maximum speed (m/s)")
+    normalized_graded_pace: float | None = Field(
         default=None, description="NGP adjusts pace for gradient"
     )
 
@@ -123,38 +124,38 @@ class Activity(BaseModel):
     # POWER METRICS
     # ═══════════════════════════════════════════════════════════════════════════
     # Strava Original
-    average_watts: Optional[float] = Field(
+    average_watts: float | None = Field(
         default=None, description="Strava average power"
     )
-    max_watts: Optional[float] = Field(default=None, description="Strava max power")
-    weighted_average_watts: Optional[float] = Field(
+    max_watts: float | None = Field(default=None, description="Strava max power")
+    weighted_average_watts: float | None = Field(
         default=None, description="Strava weighted avg power"
     )
-    kilojoules: Optional[float] = Field(
+    kilojoules: float | None = Field(
         default=None, description="Total work output (kJ)"
     )
 
     # Enriched Power Metrics
-    average_power: Optional[float] = Field(
+    average_power: float | None = Field(
         default=None, description="Average power (W)"
     )
-    max_power: Optional[float] = Field(default=None, description="Maximum power (W)")
-    power_per_kg: Optional[float] = Field(
+    max_power: float | None = Field(default=None, description="Maximum power (W)")
+    power_per_kg: float | None = Field(
         default=None, description="Power per kilogram (W/kg)"
     )
-    normalized_power: Optional[float] = Field(
+    normalized_power: float | None = Field(
         default=None,
         description="NP - physiological cost if power had been constant. Uses 30s rolling avg^4.",
     )
-    intensity_factor: Optional[float] = Field(
+    intensity_factor: float | None = Field(
         default=None,
         description="IF = NP/FTP. <0.75 recovery, 0.75-0.85 endurance, 0.85-0.95 tempo, 0.95-1.05 threshold, >1.05 VO2max",
     )
-    training_stress_score: Optional[float] = Field(
+    training_stress_score: float | None = Field(
         default=None,
         description="TSS = (duration × NP × IF) / (FTP × 3600) × 100. Quantifies total training load.",
     )
-    variability_index: Optional[float] = Field(
+    variability_index: float | None = Field(
         default=None,
         description="VI = NP/AP. 1.0 = steady (TT), >1.1 = variable (group ride, crits)",
     )
@@ -162,55 +163,55 @@ class Activity(BaseModel):
     # ═══════════════════════════════════════════════════════════════════════════
     # ADVANCED POWER METRICS (NEW)
     # ═══════════════════════════════════════════════════════════════════════════
-    time_above_90_ftp: Optional[int] = Field(
+    time_above_90_ftp: int | None = Field(
         default=None,
         description="Seconds above 90% FTP (VO2max zone). Measures high-intensity training stimulus.",
     )
-    time_sweet_spot: Optional[int] = Field(
+    time_sweet_spot: int | None = Field(
         default=None,
         description="Seconds in sweet spot (88-94% FTP). Optimal zone for FTP development.",
     )
-    w_prime_balance_min: Optional[float] = Field(
+    w_prime_balance_min: float | None = Field(
         default=None,
         description="Minimum W' balance reached (J). Shows proximity to anaerobic exhaustion.",
     )
-    w_prime_depletion: Optional[float] = Field(
+    w_prime_depletion: float | None = Field(
         default=None,
         description="W' depletion percentage. Shows how much anaerobic capacity was used.",
     )
-    match_burn_count: Optional[int] = Field(
+    match_burn_count: int | None = Field(
         default=None,
         description="Number of significant W' expenditures (>50% depletion). Quantifies hard efforts.",
     )
-    cp_config: Optional[float] = Field(
+    cp_config: float | None = Field(
         default=None,
         description="Configured Critical Power (W) used for W' balance calculations.",
     )
-    w_prime_config: Optional[float] = Field(
+    w_prime_config: float | None = Field(
         default=None,
         description="Configured W' (J) used for W' balance calculations.",
     )
-    cp_window_days: Optional[int] = Field(
+    cp_window_days: int | None = Field(
         default=None,
         description="Rolling window in days used for CP model calculations.",
     )
-    negative_split_index: Optional[float] = Field(
+    negative_split_index: float | None = Field(
         default=None,
         description="NP 2nd half / NP 1st half. <0.95=negative split, 0.95-1.05=even, >1.05=fade.",
     )
-    cardiac_drift: Optional[float] = Field(
+    cardiac_drift: float | None = Field(
         default=None,
         description="(HR 2nd - HR 1st)/HR 1st × 100%. HR-only metric. <3%=excellent, >8%=poor/dehydrated.",
     )
-    first_half_hr: Optional[float] = Field(
+    first_half_hr: float | None = Field(
         default=None,
         description="Average heart rate (BPM) during first half of ride.",
     )
-    second_half_hr: Optional[float] = Field(
+    second_half_hr: float | None = Field(
         default=None,
         description="Average heart rate (BPM) during second half of ride.",
     )
-    estimated_ftp: Optional[float] = Field(
+    estimated_ftp: float | None = Field(
         default=None,
         description="FTP estimate from best 20-min power (×0.95). Track progression ride-to-ride.",
     )
@@ -218,19 +219,19 @@ class Activity(BaseModel):
     # ═══════════════════════════════════════════════════════════════════════════
     # CLIMBING METRICS (NEW)
     # ═══════════════════════════════════════════════════════════════════════════
-    vam: Optional[float] = Field(
+    vam: float | None = Field(
         default=None,
         description="Velocità Ascensionale Media (m/h). Vertical ascent rate, the gold standard for climbing.",
     )
-    climbing_time: Optional[int] = Field(
+    climbing_time: int | None = Field(
         default=None,
         description="Seconds spent climbing (positive gradient). Quantifies climbing volume.",
     )
-    climbing_power: Optional[float] = Field(
+    climbing_power: float | None = Field(
         default=None,
         description="Average power on gradients >4% (W). Shows sustained climbing strength.",
     )
-    climbing_power_per_kg: Optional[float] = Field(
+    climbing_power_per_kg: float | None = Field(
         default=None,
         description="Climbing power / weight (W/kg). THE key metric for climbing performance.",
     )
@@ -238,246 +239,246 @@ class Activity(BaseModel):
     # ═══════════════════════════════════════════════════════════════════════════
     # HEART RATE METRICS
     # ═══════════════════════════════════════════════════════════════════════════
-    has_heartrate: Optional[bool] = Field(default=None)
-    heartrate_opt_out: Optional[bool] = Field(default=None)
-    display_hide_heartrate_option: Optional[bool] = Field(default=None)
+    has_heartrate: bool | None = Field(default=None)
+    heartrate_opt_out: bool | None = Field(default=None)
+    display_hide_heartrate_option: bool | None = Field(default=None)
 
     # Strava Original
-    average_heartrate: Optional[float] = Field(
+    average_heartrate: float | None = Field(
         default=None, description="Strava avg HR (bpm)"
     )
-    max_heartrate: Optional[float] = Field(
+    max_heartrate: float | None = Field(
         default=None, description="Strava max HR (bpm)"
     )
 
     # Enriched HR Metrics
-    average_hr: Optional[float] = Field(default=None, description="Average HR (bpm)")
-    max_hr: Optional[float] = Field(default=None, description="Maximum HR (bpm)")
-    hr_training_stress: Optional[float] = Field(
+    average_hr: float | None = Field(default=None, description="Average HR (bpm)")
+    max_hr: float | None = Field(default=None, description="Maximum HR (bpm)")
+    hr_training_stress: float | None = Field(
         default=None, description="HR-based TSS (hrTSS)"
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # CADENCE METRICS
     # ═══════════════════════════════════════════════════════════════════════════
-    average_cadence: Optional[float] = Field(
+    average_cadence: float | None = Field(
         default=None, description="Average cadence (rpm)"
     )
-    max_cadence: Optional[float] = Field(
+    max_cadence: float | None = Field(
         default=None, description="Maximum cadence (rpm)"
     )
-    average_temp: Optional[float] = Field(
+    average_temp: float | None = Field(
         default=None, description="Average temperature"
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # EFFICIENCY & COUPLING METRICS
     # ═══════════════════════════════════════════════════════════════════════════
-    efficiency_factor: Optional[float] = Field(
+    efficiency_factor: float | None = Field(
         default=None,
         description="EF = NP/Avg HR. Higher = better aerobic fitness. Track over time.",
     )
-    power_hr_decoupling: Optional[float] = Field(
+    power_hr_decoupling: float | None = Field(
         default=None,
         description="% change in EF from 1st to 2nd half. >5% = aerobic limiter.",
     )
-    first_half_ef: Optional[float] = Field(
+    first_half_ef: float | None = Field(
         default=None, description="First half efficiency factor"
     )
-    second_half_ef: Optional[float] = Field(
+    second_half_ef: float | None = Field(
         default=None, description="Second half efficiency factor"
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # FATIGUE & DURABILITY METRICS
     # ═══════════════════════════════════════════════════════════════════════════
-    fatigue_index: Optional[float] = Field(
+    fatigue_index: float | None = Field(
         default=None,
         description="% power decline from initial to final 5min. 0-5%=excellent, 5-15%=good, >25%=poor",
     )
-    initial_5min_power: Optional[float] = Field(
+    initial_5min_power: float | None = Field(
         default=None, description="First 5 minutes avg power"
     )
-    final_5min_power: Optional[float] = Field(
+    final_5min_power: float | None = Field(
         default=None, description="Last 5 minutes avg power"
     )
-    first_half_power: Optional[float] = Field(
+    first_half_power: float | None = Field(
         default=None, description="First half avg power"
     )
-    second_half_power: Optional[float] = Field(
+    second_half_power: float | None = Field(
         default=None, description="Second half avg power"
     )
-    power_drift: Optional[float] = Field(
+    power_drift: float | None = Field(
         default=None,
         description="(Power 2nd - Power 1st)/Power 1st × 100%. Negative = fading. >-5%=excellent, <-15%=poor.",
     )
-    half_power_ratio: Optional[float] = Field(
+    half_power_ratio: float | None = Field(
         default=None, description="Ratio of second half to first half power"
     )
-    power_coefficient_variation: Optional[float] = Field(
+    power_coefficient_variation: float | None = Field(
         default=None,
         description="CV = (std/mean) × 100. Lower = more consistent pacing.",
     )
-    power_sustainability_index: Optional[float] = Field(
+    power_sustainability_index: float | None = Field(
         default=None,
         description="PSI = max(0, 100-CV). >80=sustainable, <40=high variability",
     )
 
     # Interval Decay Analysis
-    interval_300s_decay_rate: Optional[float] = Field(default=None)
-    interval_300s_power_trend: Optional[float] = Field(default=None)
-    interval_300s_first_power: Optional[float] = Field(default=None)
-    interval_300s_last_power: Optional[float] = Field(default=None)
+    interval_300s_decay_rate: float | None = Field(default=None)
+    interval_300s_power_trend: float | None = Field(default=None)
+    interval_300s_first_power: float | None = Field(default=None)
+    interval_300s_last_power: float | None = Field(default=None)
 
     # ═══════════════════════════════════════════════════════════════════════════
     # POWER ZONES (Coggan 7-Zone Model)
     # ═══════════════════════════════════════════════════════════════════════════
-    power_z1_percentage: Optional[float] = Field(
+    power_z1_percentage: float | None = Field(
         default=None, description="% time in Z1 (0-55% FTP)"
     )
-    power_z2_percentage: Optional[float] = Field(
+    power_z2_percentage: float | None = Field(
         default=None, description="% time in Z2 (56-75% FTP)"
     )
-    power_z3_percentage: Optional[float] = Field(
+    power_z3_percentage: float | None = Field(
         default=None, description="% time in Z3 (76-90% FTP)"
     )
-    power_z4_percentage: Optional[float] = Field(
+    power_z4_percentage: float | None = Field(
         default=None, description="% time in Z4 (91-105% FTP)"
     )
-    power_z5_percentage: Optional[float] = Field(
+    power_z5_percentage: float | None = Field(
         default=None, description="% time in Z5 (106-120% FTP)"
     )
-    power_z6_percentage: Optional[float] = Field(
+    power_z6_percentage: float | None = Field(
         default=None, description="% time in Z6 (121-150% FTP)"
     )
-    power_z7_percentage: Optional[float] = Field(
+    power_z7_percentage: float | None = Field(
         default=None, description="% time in Z7 (>150% FTP)"
     )
 
     # Power zone time (seconds)
-    power_z1_time: Optional[float] = Field(
+    power_z1_time: float | None = Field(
         default=None, description="Seconds in Z1 (0-55% FTP)"
     )
-    power_z2_time: Optional[float] = Field(
+    power_z2_time: float | None = Field(
         default=None, description="Seconds in Z2 (56-75% FTP)"
     )
-    power_z3_time: Optional[float] = Field(
+    power_z3_time: float | None = Field(
         default=None, description="Seconds in Z3 (76-90% FTP)"
     )
-    power_z4_time: Optional[float] = Field(
+    power_z4_time: float | None = Field(
         default=None, description="Seconds in Z4 (91-105% FTP)"
     )
-    power_z5_time: Optional[float] = Field(
+    power_z5_time: float | None = Field(
         default=None, description="Seconds in Z5 (106-120% FTP)"
     )
-    power_z6_time: Optional[float] = Field(
+    power_z6_time: float | None = Field(
         default=None, description="Seconds in Z6 (121-150% FTP)"
     )
-    power_z7_time: Optional[float] = Field(
+    power_z7_time: float | None = Field(
         default=None, description="Seconds in Z7 (>150% FTP)"
     )
 
     # Power zone boundaries (watts)
-    power_zone_1: Optional[float] = Field(default=None, description="Z1 upper boundary")
-    power_zone_2: Optional[float] = Field(default=None, description="Z2 upper boundary")
-    power_zone_3: Optional[float] = Field(default=None, description="Z3 upper boundary")
-    power_zone_4: Optional[float] = Field(default=None, description="Z4 upper boundary")
-    power_zone_5: Optional[float] = Field(default=None, description="Z5 upper boundary")
-    power_zone_6: Optional[float] = Field(default=None, description="Z6 upper boundary")
+    power_zone_1: float | None = Field(default=None, description="Z1 upper boundary")
+    power_zone_2: float | None = Field(default=None, description="Z2 upper boundary")
+    power_zone_3: float | None = Field(default=None, description="Z3 upper boundary")
+    power_zone_4: float | None = Field(default=None, description="Z4 upper boundary")
+    power_zone_5: float | None = Field(default=None, description="Z5 upper boundary")
+    power_zone_6: float | None = Field(default=None, description="Z6 upper boundary")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # HEART RATE ZONES (5-Zone Model)
     # ═══════════════════════════════════════════════════════════════════════════
-    hr_z1_percentage: Optional[float] = Field(
+    hr_z1_percentage: float | None = Field(
         default=None, description="% time in HR Z1"
     )
-    hr_z2_percentage: Optional[float] = Field(
+    hr_z2_percentage: float | None = Field(
         default=None, description="% time in HR Z2"
     )
-    hr_z3_percentage: Optional[float] = Field(
+    hr_z3_percentage: float | None = Field(
         default=None, description="% time in HR Z3"
     )
-    hr_z4_percentage: Optional[float] = Field(
+    hr_z4_percentage: float | None = Field(
         default=None, description="% time in HR Z4"
     )
-    hr_z5_percentage: Optional[float] = Field(
+    hr_z5_percentage: float | None = Field(
         default=None, description="% time in HR Z5"
     )
 
     # HR zone time (seconds)
-    hr_z1_time: Optional[float] = Field(default=None, description="Seconds in HR Z1")
-    hr_z2_time: Optional[float] = Field(default=None, description="Seconds in HR Z2")
-    hr_z3_time: Optional[float] = Field(default=None, description="Seconds in HR Z3")
-    hr_z4_time: Optional[float] = Field(default=None, description="Seconds in HR Z4")
-    hr_z5_time: Optional[float] = Field(default=None, description="Seconds in HR Z5")
+    hr_z1_time: float | None = Field(default=None, description="Seconds in HR Z1")
+    hr_z2_time: float | None = Field(default=None, description="Seconds in HR Z2")
+    hr_z3_time: float | None = Field(default=None, description="Seconds in HR Z3")
+    hr_z4_time: float | None = Field(default=None, description="Seconds in HR Z4")
+    hr_z5_time: float | None = Field(default=None, description="Seconds in HR Z5")
 
     # HR zone boundaries (bpm)
-    hr_zone_1: Optional[float] = Field(default=None, description="HR Z1 upper boundary")
-    hr_zone_2: Optional[float] = Field(default=None, description="HR Z2 upper boundary")
-    hr_zone_3: Optional[float] = Field(default=None, description="HR Z3 upper boundary")
-    hr_zone_4: Optional[float] = Field(default=None, description="HR Z4 upper boundary")
+    hr_zone_1: float | None = Field(default=None, description="HR Z1 upper boundary")
+    hr_zone_2: float | None = Field(default=None, description="HR Z2 upper boundary")
+    hr_zone_3: float | None = Field(default=None, description="HR Z3 upper boundary")
+    hr_zone_4: float | None = Field(default=None, description="HR Z4 upper boundary")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # TRAINING INTENSITY DISTRIBUTION (TID) - 3-Zone Model
     # ═══════════════════════════════════════════════════════════════════════════
     # Power TID
-    power_tid_z1_percentage: Optional[float] = Field(
+    power_tid_z1_percentage: float | None = Field(
         default=None, description="% time in TID Z1 Low (<76% FTP)"
     )
-    power_tid_z2_percentage: Optional[float] = Field(
+    power_tid_z2_percentage: float | None = Field(
         default=None, description="% time in TID Z2 Moderate (76-90% FTP)"
     )
-    power_tid_z3_percentage: Optional[float] = Field(
+    power_tid_z3_percentage: float | None = Field(
         default=None, description="% time in TID Z3 High (>90% FTP)"
     )
-    power_polarization_index: Optional[float] = Field(
+    power_polarization_index: float | None = Field(
         default=None,
         description="PI = (Z1%+Z3%)/Z2%. >4.0=highly polarized, 2-4=moderate, <2=threshold-focused",
     )
-    power_tdr: Optional[float] = Field(
+    power_tdr: float | None = Field(
         default=None,
         description="Training Distribution Ratio = Z1%/Z3%. >2=polarized, <1=high-intensity",
     )
-    power_tid_classification: Optional[Union[str, float]] = Field(
+    power_tid_classification: str | float | None = Field(
         default=None, description="polarized, pyramidal, or threshold"
     )
 
     # HR TID
-    hr_tid_z1_percentage: Optional[float] = Field(
+    hr_tid_z1_percentage: float | None = Field(
         default=None, description="% time in HR TID Z1"
     )
-    hr_tid_z2_percentage: Optional[float] = Field(
+    hr_tid_z2_percentage: float | None = Field(
         default=None, description="% time in HR TID Z2"
     )
-    hr_tid_z3_percentage: Optional[float] = Field(
+    hr_tid_z3_percentage: float | None = Field(
         default=None, description="% time in HR TID Z3"
     )
-    hr_polarization_index: Optional[float] = Field(
+    hr_polarization_index: float | None = Field(
         default=None, description="HR Polarization Index"
     )
-    hr_tdr: Optional[float] = Field(
+    hr_tdr: float | None = Field(
         default=None, description="HR Training Distribution Ratio"
     )
-    hr_tid_classification: Optional[Union[str, float]] = Field(
+    hr_tid_classification: str | float | None = Field(
         default=None, description="HR TID classification"
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # TRAINING LOAD & FITNESS METRICS (Longitudinal)
     # ═══════════════════════════════════════════════════════════════════════════
-    chronic_training_load: Optional[float] = Field(
+    chronic_training_load: float | None = Field(
         default=None,
         description="CTL - 42-day EMA of TSS. Represents fitness/adaptation level.",
     )
-    acute_training_load: Optional[float] = Field(
+    acute_training_load: float | None = Field(
         default=None,
         description="ATL - 7-day EMA of TSS. Represents short-term fatigue.",
     )
-    training_stress_balance: Optional[float] = Field(
+    training_stress_balance: float | None = Field(
         default=None,
         description="TSB = CTL - ATL. >20=rested, 0-20=optimal, -10 to 0=productive, <-30=overreached",
     )
-    acwr: Optional[float] = Field(
+    acwr: float | None = Field(
         default=None,
         description="Acute:Chronic Workload Ratio. 0.8-1.3=optimal, >1.5=injury risk",
     )
@@ -485,16 +486,16 @@ class Activity(BaseModel):
     # ═══════════════════════════════════════════════════════════════════════════
     # CRITICAL POWER MODEL
     # ═══════════════════════════════════════════════════════════════════════════
-    cp: Optional[float] = Field(
+    cp: float | None = Field(
         default=None, description="Critical Power (W). Max sustainable power for >10min"
     )
-    w_prime: Optional[float] = Field(
+    w_prime: float | None = Field(
         default=None, description="W' (J). Anaerobic work capacity above CP"
     )
-    cp_r_squared: Optional[float] = Field(
+    cp_r_squared: float | None = Field(
         default=None, description="R² of CP model fit. >0.95=excellent, 0.85-0.95=good"
     )
-    aei: Optional[float] = Field(
+    aei: float | None = Field(
         default=None,
         description="Anaerobic Energy Index (J/kg). W' normalized to body weight",
     )
@@ -502,55 +503,55 @@ class Activity(BaseModel):
     # ═══════════════════════════════════════════════════════════════════════════
     # ATHLETE THRESHOLDS (from config, stored per activity)
     # ═══════════════════════════════════════════════════════════════════════════
-    ftp: Optional[float] = Field(default=None, description="FTP used for this activity")
-    fthr: Optional[float] = Field(
+    ftp: float | None = Field(default=None, description="FTP used for this activity")
+    fthr: float | None = Field(
         default=None, description="FTHR used for this activity"
     )
-    lt1_power: Optional[float] = Field(default=None, description="LT1 power threshold")
-    lt2_power: Optional[float] = Field(default=None, description="LT2 power threshold")
-    lt1_hr: Optional[float] = Field(default=None, description="LT1 heart rate")
-    lt2_hr: Optional[float] = Field(default=None, description="LT2 heart rate")
+    lt1_power: float | None = Field(default=None, description="LT1 power threshold")
+    lt2_power: float | None = Field(default=None, description="LT2 power threshold")
+    lt1_hr: float | None = Field(default=None, description="LT1 heart rate")
+    lt2_hr: float | None = Field(default=None, description="LT2 heart rate")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # POWER CURVE (Peak Powers at various durations)
     # ═══════════════════════════════════════════════════════════════════════════
-    power_curve_1sec: Optional[float] = Field(default=None, description="Peak 1s power")
-    power_curve_2sec: Optional[float] = Field(default=None, description="Peak 2s power")
-    power_curve_5sec: Optional[float] = Field(default=None, description="Peak 5s power")
-    power_curve_10sec: Optional[float] = Field(
+    power_curve_1sec: float | None = Field(default=None, description="Peak 1s power")
+    power_curve_2sec: float | None = Field(default=None, description="Peak 2s power")
+    power_curve_5sec: float | None = Field(default=None, description="Peak 5s power")
+    power_curve_10sec: float | None = Field(
         default=None, description="Peak 10s power"
     )
-    power_curve_15sec: Optional[float] = Field(
+    power_curve_15sec: float | None = Field(
         default=None, description="Peak 15s power"
     )
-    power_curve_20sec: Optional[float] = Field(
+    power_curve_20sec: float | None = Field(
         default=None, description="Peak 20s power"
     )
-    power_curve_30sec: Optional[float] = Field(
+    power_curve_30sec: float | None = Field(
         default=None, description="Peak 30s power"
     )
-    power_curve_1min: Optional[float] = Field(
+    power_curve_1min: float | None = Field(
         default=None, description="Peak 1min power"
     )
-    power_curve_2min: Optional[float] = Field(
+    power_curve_2min: float | None = Field(
         default=None, description="Peak 2min power"
     )
-    power_curve_5min: Optional[float] = Field(
+    power_curve_5min: float | None = Field(
         default=None, description="Peak 5min power"
     )
-    power_curve_10min: Optional[float] = Field(
+    power_curve_10min: float | None = Field(
         default=None, description="Peak 10min power"
     )
-    power_curve_15min: Optional[float] = Field(
+    power_curve_15min: float | None = Field(
         default=None, description="Peak 15min power"
     )
-    power_curve_20min: Optional[float] = Field(
+    power_curve_20min: float | None = Field(
         default=None, description="Peak 20min power"
     )
-    power_curve_30min: Optional[float] = Field(
+    power_curve_30min: float | None = Field(
         default=None, description="Peak 30min power"
     )
-    power_curve_1hr: Optional[float] = Field(default=None, description="Peak 1hr power")
+    power_curve_1hr: float | None = Field(default=None, description="Peak 1hr power")
 
     # ═══════════════════════════════════════════════════════════════════════════
     # VALIDATORS
@@ -596,7 +597,7 @@ class Activity(BaseModel):
         return self.distance / 1000
 
     @property
-    def speed_kmh(self) -> Optional[float]:
+    def speed_kmh(self) -> float | None:
         """Average speed in km/h."""
         if self.average_speed:
             return self.average_speed * 3.6
@@ -611,14 +612,14 @@ class YearSummary(BaseModel):
     total_time: float
     total_elevation: float
     activity_count: int
-    avg_power: Optional[float] = None
-    total_tss: Optional[float] = None
+    avg_power: float | None = None
+    total_tss: float | None = None
 
 
 class Athlete(BaseModel):
     """Represents the athlete using the dashboard."""
 
-    id: Optional[int] = None
+    id: int | None = None
     ftp: float
     weight_kg: float
     max_hr: int
