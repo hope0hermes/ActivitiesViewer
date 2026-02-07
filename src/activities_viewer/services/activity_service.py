@@ -24,9 +24,9 @@ class ActivityService:
     ) -> Activity | None:
         """Get a single activity with support for metric_view selection."""
         if metric_view == "Raw Time" and hasattr(self.repository, "get_activity_raw"):
-            return self.repository.get_activity_raw(activity_id)
+            return self.repository.get_activity_raw(activity_id)  # type: ignore[no-any-return]
         elif hasattr(self.repository, "get_activity_moving"):
-            return self.repository.get_activity_moving(activity_id)
+            return self.repository.get_activity_moving(activity_id)  # type: ignore[no-any-return]
         return self.repository.get_activity(activity_id)
 
     def get_activities_for_year(
@@ -35,9 +35,9 @@ class ActivityService:
         start_date = date(year, 1, 1)
         end_date = date(year, 12, 31)
         if metric_view == "Raw Time" and hasattr(self.repository, "get_activities_raw"):
-            return self.repository.get_activities_raw(start_date, end_date)
+            return self.repository.get_activities_raw(start_date, end_date)  # type: ignore[no-any-return]
         elif hasattr(self.repository, "get_activities_moving"):
-            return self.repository.get_activities_moving(start_date, end_date)
+            return self.repository.get_activities_moving(start_date, end_date)  # type: ignore[no-any-return]
         return self.repository.get_activities(start_date, end_date)
 
     def get_year_summary(self, year: int) -> YearSummary:

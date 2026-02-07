@@ -204,6 +204,9 @@ class TrainingPlanService:
                 if isinstance(date, str):
                     date = datetime.strptime(date, "%Y-%m-%d")
 
+                if not isinstance(date, datetime):
+                    continue
+
                 parsed.append(
                     KeyEvent(
                         name=event.get("name", "Event"),
@@ -296,7 +299,7 @@ class TrainingPlanService:
         running_tss = int(current_ctl * 7)  # Approximate weekly TSS from CTL
 
         # Create event lookup by week
-        event_lookup = {}
+        event_lookup: dict[int, list[str]] = {}
         for event in parsed_events:
             event_week = (event.date - start_date).days // 7 + 1
             if event_week not in event_lookup:
@@ -481,7 +484,7 @@ class TrainingPlanService:
             "status": "Not Started",
         }
 
-        if week.actual_tss is not None:
+        if week.actual_tss is not None and week.adherence_pct is not None:
             if week.adherence_pct >= 90:
                 summary["status"] = "✅ Complete"
             elif week.adherence_pct >= 70:

@@ -18,7 +18,7 @@ def render_metric(
     column,
     label: str,
     value: str,
-    help_text: str = None,
+    help_text: str | None = None,
     label_size: int = 12,
     value_size: int = 28,
     custom_style: bool = False,
@@ -208,7 +208,7 @@ def format_date(date: datetime | str | None, format_str: str = "%Y-%m-%d") -> st
         try:
             parsed = pd.to_datetime(date)
             if pd.notna(parsed):
-                return parsed.strftime(format_str)
+                return str(parsed.strftime(format_str))
         except Exception:
             # If parsing fails, return as-is if it looks like a date
             if len(date) >= 8:  # Reasonable minimum for a date string

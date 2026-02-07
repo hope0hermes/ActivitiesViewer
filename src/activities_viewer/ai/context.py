@@ -506,15 +506,15 @@ class ActivityContextBuilder:
                 best_ftp = ftp_vals.max() if ftp_vals.notna().any() else None
             elif "power_curve_20min" in year_data.columns:
                 p20_vals = pd.to_numeric(year_data["power_curve_20min"], errors="coerce")
-                best_ftp = p20_vals.max() * 0.95 if p20_vals.notna().any() else None
+                best_ftp = float(p20_vals.max()) * 0.95 if p20_vals.notna().any() else None
 
             # Peak CTL
             peak_ctl = year_data["chronic_training_load"].max() if "chronic_training_load" in year_data.columns else None
 
             output += f"{year}: {total_activities} rides, {total_hours:.0f}h, {total_distance:.0f}km, {total_elevation:.0f}m elev, TSS={total_tss:.0f}"
-            if pd.notna(best_ftp) and best_ftp > 0:
+            if best_ftp is not None and best_ftp > 0:
                 output += f", Best FTP={best_ftp:.0f}W ({best_ftp/weight:.2f} W/kg)"
-            if pd.notna(peak_ctl) and peak_ctl > 0:
+            if peak_ctl is not None and peak_ctl > 0:
                 output += f", Peak CTL={peak_ctl:.0f}"
             output += "\n"
 

@@ -529,16 +529,16 @@ def render_contextual_metrics(
         if avg_power and weight:
             power_value = f"{(avg_power / weight):.2f}"
             label = "⚖️ W/kg"
-            help_texts = "Power-to-weight ratio for race"
+            power_help = "Power-to-weight ratio for race"
         else:
             power_value = f"{avg_power:.0f} W" if avg_power else "-"
             label = "⚡ Avg Power"
-            help_texts = "Average power for race"
+            power_help = "Average power for race"
         render_metric(
             col4,
             label=label,
             value=power_value,
-            help_text=help_texts,
+            help_text=power_help,
         )
 
     # Context 5: Default (no specific context)
@@ -635,7 +635,7 @@ def render_activity_selector(
             if pre_selected_id in df_activities["id"].values:
                 activity_id = pre_selected_id
                 activity = service.get_activity(activity_id, metric_view)
-                return activity, activity_id
+                return activity, str(activity_id)
         except (ValueError, KeyError):
             pass
 
@@ -1545,7 +1545,7 @@ def render_power_hr_tab(
     st.subheader(f"Power & Heart Rate Analysis ({metric_view})")
 
     # ===== SECTION 1: POWER CURVE (spans both columns) =====
-    render_power_curve(activity, service)
+    render_power_curve(activity, service, help_texts)
 
     st.divider()
 
@@ -1742,7 +1742,7 @@ def render_power_hr_tab(
     st.divider()
 
     # ===== SECTION 3: Zone Distributions (two columns, aligned) =====
-    render_zone_distributions(activity)
+    render_zone_distributions(activity, help_texts)
 
 
 def render_power_curve(

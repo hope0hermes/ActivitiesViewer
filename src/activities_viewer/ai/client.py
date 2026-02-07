@@ -111,7 +111,7 @@ class GeminiClient:
         self.model = model
         self.llm = ChatGoogleGenerativeAI(
             model=model,
-            google_api_key=api_key,
+            api_key=api_key,
             temperature=0.7,
             convert_system_message_to_human=True,
         )
@@ -153,7 +153,7 @@ class GeminiClient:
         """Get a response from the LLM."""
         try:
             response = self.llm.invoke(prompt)
-            return response.content
+            return str(response.content)
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             return f"Error: {str(e)}"

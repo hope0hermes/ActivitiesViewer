@@ -8,18 +8,18 @@ import pandas as pd
 def safe_mean(series: pd.Series) -> float:
     """Calculate mean, handling NaN values. Returns 0 if empty."""
     valid = series.dropna()
-    return valid.mean() if len(valid) > 0 else 0.0
+    return float(valid.mean()) if len(valid) > 0 else 0.0
 
 
 def safe_sum(series: pd.Series) -> float:
     """Calculate sum, handling NaN values."""
-    return series.fillna(0).sum()
+    return float(series.fillna(0).sum())
 
 
 def safe_max(series: pd.Series) -> float:
     """Calculate max, handling NaN values. Returns 0 if empty."""
     valid = series.dropna()
-    return valid.max() if len(valid) > 0 else 0.0
+    return float(valid.max()) if len(valid) > 0 else 0.0
 
 
 def get_metric_from_df(
@@ -44,13 +44,13 @@ def get_metric_from_df(
         return default
 
     if agg == "sum":
-        return series.sum()
+        return float(series.sum())
     elif agg == "mean":
-        return series.mean()
+        return float(series.mean())
     elif agg == "max":
-        return series.max()
+        return float(series.max())
     elif agg == "min":
-        return series.min()
+        return float(series.min())
 
     return default
 

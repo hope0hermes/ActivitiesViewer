@@ -12,6 +12,8 @@ ARCHITECTURE:
 - get_help_text() generates complete help text dynamically
 """
 
+from typing import Any
+
 from .metric_descriptions import BASE_DESCRIPTIONS
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -690,7 +692,7 @@ Lower values indicate better power sustainability.
 # METRICS METADATA - Comprehensive structured data for all metrics
 # ═══════════════════════════════════════════════════════════════════════════
 
-METRICS_METADATA = {
+METRICS_METADATA: dict[str, dict[str, Any]] = {
     # ═══════════════════════════════════════════════════════════════════════
     # TRAINING LOAD METRICS
     # ═══════════════════════════════════════════════════════════════════════
