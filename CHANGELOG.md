@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.0.0] - 2025-07-22
 
+First working version, extensively tested locally.
+
 ### Added
 - Streamlit multi-page dashboard with 4 pages: Analysis, Detail, AI Coach, Training Planner
 - CSV-based data repository for Strava activities
