@@ -744,6 +744,46 @@ def render_ai_recommendations(
 def main():
     st.title("📋 Training Plan")
 
+    # ── Feature overview (expandable) ─────────────────────────────────
+    with st.expander("ℹ️ About Training Planner — capabilities & limitations"):
+        st.markdown("""
+**What it can do:**
+- Generate a **periodized training plan** from standard templates (Base → Build → Specialty → Taper)
+- Configure goal FTP, target W/kg, plan duration (8–24 weeks), weekly hours, and key events (A/B/C races)
+- Optionally **refine the plan with AI Coach** — the LLM tailors weekly targets, workouts, and intensity to your actual training history
+- Visualise planned vs. actual TSS, CTL progression, and phase timelines
+- Track weekly compliance and auto-sync with your real activity data
+- Save, load, and re-refine plans as your fitness evolves
+
+**What context is sent to the LLM (AI-enhanced mode only):**
+| Data block | Scope |
+|---|---|
+| Athlete profile | FTP, weight, W/kg, plan-specific goals |
+| Training status | Latest CTL, ATL, TSB, ACWR |
+| Training phase | Auto-detected from 4-week TID |
+| Yearly summaries | All years in your data |
+| FTP evolution | Quarterly FTP & W/kg across full history |
+| Monthly trends | Last 6 months of volume, intensity, load |
+| Efficiency factor | Aerobic fitness trend |
+| Weekly summaries | Last 4 weeks |
+| Training load patterns | Avg weekly hours, ride frequency, intensity distribution, long-ride habits |
+| Template plan | Full weekly breakdown with phases, TSS targets, TID, and events |
+
+**What the LLM returns:**
+- **Analysis** — observations about your history, strengths, and limiters
+- **Phase adjustments** — changes to phase duration or focus based on your data
+- **Weekly refinements** — tailored TSS, hours, zone distribution, and specific workout descriptions for every week
+- **Key recommendations** — 3–5 actionable priorities
+
+**Limitations:**
+- The template plan uses standard periodization rules — without AI refinement it is generic
+- AI refinement requires a GEMINI_API_KEY and an active internet connection
+- The LLM cannot guarantee physiological accuracy — treat suggestions as coaching input, not medical advice
+- Plans are not automatically updated when new activities are synced — re-track or re-refine manually
+- Token limits may truncate context for very large datasets or long plan durations
+- All app data (chat history, geocoding cache) is stored locally in `~/.activitiesviewer/` and can be cleared from the AI Coach sidebar
+        """)
+
     # Check for services
     if "activity_service" not in st.session_state:
         # Try to initialize from settings
