@@ -4,7 +4,7 @@
 # --- Data Directory Configuration ---
 # Path to the directory containing activities data
 # Can be absolute or relative to this config file
-data_dir: "../dev/data_enriched"
+data_dir: "../../dev/data_enriched"
 
 # New dual-file format (StravaAnalyzer v2.0+)
 # Filename of raw activities CSV - all data points (relative to data_dir)
