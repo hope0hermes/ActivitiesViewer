@@ -380,3 +380,18 @@ def load_settings(config_file: Path | None = None) -> Settings:
         return Settings(**yaml_data)
 
     return Settings()
+
+
+def load_settings_from_dict(data: dict) -> Settings:
+    """Create Settings from a pre-built dictionary (e.g., from unified config).
+
+    Unlike ``load_settings`` which reads a YAML file, this takes an already-
+    resolved dict. ``data_dir`` must be an absolute path.
+
+    Args:
+        data: Dictionary of settings values.
+
+    Returns:
+        Settings instance.
+    """
+    return Settings(**data)

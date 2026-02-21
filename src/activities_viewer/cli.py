@@ -11,7 +11,7 @@ from pathlib import Path
 import click
 import pandas as pd
 
-from .config import load_settings
+from .config import load_settings, load_settings_from_dict
 
 
 # Custom command class to show full help text
@@ -223,6 +223,132 @@ def validate(config: Path) -> None:
         raise click.Abort() from e
     except Exception as e:
         logger.error(f"❌ Validation failed: {e}")
+        raise click.Abort() from e
+
+
+@main.command()
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False, path_type=Path),
+    required=True,
+    help="Path to unified pipeline configuration YAML file",
+)
+@click.option(
+    "--full",
+    is_flag=True,
+    default=False,
+    help="Force full re-fetch of all activities from Strava API",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Force full re-analysis of all activities (delete existing enriched data)",
+)
+@click.option(
+    "--recompute-from",
+    type=str,
+    default=None,
+    help="Recompute activities from this date (ISO-8601, e.g., 2024-06-01). Superseded by --force.",
+)
+@click.option(
+    "--launch/--no-launch",
+    default=True,
+    help="Launch the Streamlit dashboard after sync (default: launch)",
+)
+@click.option(
+    "--verbose/--quiet",
+    default=False,
+    help="Enable verbose output",
+)
+@click.option(
+    "--port",
+    type=int,
+    default=8501,
+    help="Port for Streamlit dashboard (when --launch is used)",
+)
+def sync(
+    config: Path,
+    full: bool,
+    force: bool,
+    recompute_from: str | None,
+    launch: bool,
+    verbose: bool,
+    port: int,
+) -> None:
+    """Fetch, analyze, and (optionally) launch the dashboard in one command.
+
+    Reads a unified pipeline config with athlete:, fetcher:, analyzer:, and
+    viewer: sections. Runs StravaFetcher sync, then StravaAnalyzer run, then
+    launches the Streamlit dashboard.
+
+    Example:
+
+        activities-viewer sync --config unified_config.yaml
+
+        activities-viewer sync --config unified_config.yaml --full --force
+
+        activities-viewer sync --config unified_config.yaml --no-launch
+    """
+    configure_logging(verbose)
+    logger = logging.getLogger(__name__)
+
+    try:
+        from .pipeline import PipelineOrchestrator, load_unified_config
+
+        logger.info(f"Loading unified config from {config}")
+        unified = load_unified_config(config)
+        orchestrator = PipelineOrchestrator(unified, config.parent)
+
+        # Run the fetch + analyze pipeline
+        orchestrator.run_sync(
+            full=full,
+            force=force,
+            recompute_from=recompute_from if not force else None,
+        )
+
+        if launch:
+            # Generate viewer settings and launch Streamlit
+            logger.info("Launching Streamlit dashboard...")
+            viewer_dict = orchestrator.generate_viewer_settings_dict()
+            settings = load_settings_from_dict(viewer_dict)
+
+            import json
+            import os
+            import subprocess
+            import sys
+
+            app_path = Path(__file__).parent / "app.py"
+            env = os.environ.copy()
+            env["ACTIVITIES_VIEWER_CONFIG"] = json.dumps(settings.to_json_dict())
+            # Pass unified config path so the in-app sync button can use it
+            env["ACTIVITIES_VIEWER_UNIFIED_CONFIG"] = str(config.resolve())
+
+            subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "streamlit",
+                    "run",
+                    str(app_path),
+                    "--server.port",
+                    str(port),
+                    "--logger.level=error",
+                ],
+                env=env,
+                check=False,
+            )
+        else:
+            logger.info("Sync complete. Use 'activities-viewer run' to launch the dashboard.")
+
+    except FileNotFoundError as e:
+        logger.error(f"❌ {e}")
+        raise click.Abort() from e
+    except RuntimeError as e:
+        logger.error(f"❌ Pipeline error: {e}")
+        raise click.Abort() from e
+    except Exception as e:
+        logger.error(f"❌ Unexpected error: {e}")
         raise click.Abort() from e
 
 

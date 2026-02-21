@@ -4,6 +4,8 @@ Training Plan Page.
 Generate and track periodized training plans based on goals.
 """
 
+import json
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -785,20 +787,29 @@ def main():
     # Check for services
     if "activity_service" not in st.session_state:
         # Try to initialize from settings
-        if "settings" in st.session_state:
-            settings = st.session_state.settings
-            try:
-                st.session_state.activity_service = init_services(settings)
-            except Exception as e:
-                st.error(f"Failed to initialize services: {e}")
+        if "settings" not in st.session_state:
+            config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
+            if config_json:
+                try:
+                    config_data = json.loads(config_json)
+                    st.session_state.settings = Settings(**config_data)
+                except Exception as e:
+                    st.error(f"Failed to load configuration: {e}")
+                    st.stop()
+            else:
+                st.info("⏳ Waiting for configuration... Please navigate from the main page.")
                 st.stop()
-        else:
-            st.error("Service not initialized. Please run the app from the main entry point.")
+
+        settings = st.session_state.settings
+        try:
+            st.session_state.activity_service = init_services(settings)
+        except Exception as e:
+            st.error(f"Failed to initialize services: {e}")
             st.stop()
 
     settings = st.session_state.get("settings")
     if not settings:
-        st.error("Settings not found. Please configure the application.")
+        st.info("⏳ Waiting for configuration... Please navigate from the main page.")
         st.stop()
 
     # Initialize training plan service

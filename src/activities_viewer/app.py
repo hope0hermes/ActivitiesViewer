@@ -24,6 +24,7 @@ try:
         render_status_card,
         render_training_calendar,
     )
+    from activities_viewer.pages.components.sync_button import render_sync_button
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
     from activities_viewer.services.analysis_service import AnalysisService
@@ -42,6 +43,7 @@ except ImportError:
         render_status_card,
         render_training_calendar,
     )
+    from activities_viewer.pages.components.sync_button import render_sync_button
     from activities_viewer.repository.csv_repo import CSVActivityRepository
     from activities_viewer.services.activity_service import ActivityService
     from activities_viewer.services.analysis_service import AnalysisService
@@ -268,6 +270,11 @@ def main():
             - 🚴 **Activity Detail**: Individual rides
             """
         )
+
+        st.divider()
+
+        # Sync button (Phase 4)
+        render_sync_button()
 
         st.divider()
 

@@ -3,13 +3,17 @@ AI Coach Page.
 Chat interface for analyzing training data with Gemini.
 """
 
+import json
 import logging
+import os
 from pathlib import Path
 
 import streamlit as st
 
 from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
+from activities_viewer.app import init_services
+from activities_viewer.config import Settings
 from activities_viewer.services.training_plan_service import TrainingPlanService
 from activities_viewer.cache import (
     build_consolidation_prompt,
@@ -109,10 +113,26 @@ def main():
         """)
 
     if "activity_service" not in st.session_state:
-        st.error(
-            "Service not initialized. Please run the app from the main entry point."
-        )
-        return
+        # Try to initialize from settings / env config
+        if "settings" not in st.session_state:
+            config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
+            if config_json:
+                try:
+                    config_data = json.loads(config_json)
+                    st.session_state.settings = Settings(**config_data)
+                except Exception:
+                    pass
+        if "settings" in st.session_state:
+            try:
+                st.session_state.activity_service = init_services(
+                    st.session_state.settings
+                )
+            except Exception:
+                pass
+
+        if "activity_service" not in st.session_state:
+            st.info("⏳ Waiting for data services... Please navigate from the main page.")
+            return
 
     service = st.session_state.activity_service
 
