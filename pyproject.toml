@@ -149,7 +149,7 @@ exclude = ['\.venv', '\.uv', 'build', 'dist', '.*\.ipynb$']
 disable_error_code = ["call-overload", "annotation-unchecked", "arg-type", "var-annotated"]
 
 [[tool.mypy.overrides]]
-module = ["pandas.*", "streamlit.*", "plotly.*", "folium.*", "altair.*", "streamlit_folium.*", "dateutil.*", "geopy.*", "yaml.*", "scipy.*", "langchain_google_genai.*", "google.generativeai.*", "google.*"]
+module = ["pandas.*", "streamlit.*", "plotly.*", "folium.*", "altair.*", "streamlit_folium.*", "dateutil.*", "geopy.*", "yaml.*", "scipy.*", "langchain_google_genai.*", "google.generativeai.*", "google.*", "requests.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
