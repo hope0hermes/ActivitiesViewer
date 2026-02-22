@@ -21,6 +21,9 @@ on:
 jobs:
   release:
     uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-release.yml@main
+    permissions:
+      contents: write
+      pull-requests: write
     with:
       package-path: "src/activities_viewer/__init__.py"
     secrets:
