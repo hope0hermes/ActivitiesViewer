@@ -1,13 +1,22 @@
 """
 Gemini Client wrapper.
+
+Requires the 'ai' optional extras: pip install activities-viewer[ai]
 """
 
 import logging
 import os
 import re
 
-import google.generativeai as genai
-from langchain_google_genai import ChatGoogleGenerativeAI
+try:
+    import google.generativeai as genai
+    from langchain_google_genai import ChatGoogleGenerativeAI
+
+    HAS_AI_DEPS = True
+except ImportError:
+    HAS_AI_DEPS = False
+    genai = None  # type: ignore[assignment]
+    ChatGoogleGenerativeAI = None  # type: ignore[assignment,misc]
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +110,12 @@ class GeminiClient:
         Args:
             model: Model name to use. Defaults to gemini-2.5-flash.
         """
+        if not HAS_AI_DEPS:
+            raise ImportError(
+                "AI dependencies not installed. "
+                "Install with: pip install activities-viewer[ai]"
+            )
+
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             logger.error("GEMINI_API_KEY not found")

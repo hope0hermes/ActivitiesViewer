@@ -3,10 +3,16 @@ AI Coach Page.
 Chat interface for analyzing training data with Gemini.
 """
 
+import json
+import logging
+import os
+from pathlib import Path
+
 import streamlit as st
 
 from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
+from activities_viewer.app import init_services
 from activities_viewer.cache import (
     build_consolidation_prompt,
     build_history_context,
@@ -20,8 +26,46 @@ from activities_viewer.cache import (
     save_chat_exchange,
     save_memory_summary,
 )
+from activities_viewer.config import Settings
+from activities_viewer.services.training_plan_service import TrainingPlanService
+
+logger = logging.getLogger(__name__)
 
 st.set_page_config(page_title="AI Coach", page_icon="🤖", layout="wide")
+
+
+def _get_training_plan_context() -> str | None:
+    """
+    Load and serialize the training plan if one exists.
+
+    Returns:
+        Serialized plan context string, or None if no plan exists.
+    """
+    settings = st.session_state.get("settings")
+    if not settings:
+        return None
+
+    # Get plan file path from settings
+    plan_file = getattr(settings, "training_plan_file", None)
+    if plan_file:
+        plan_path = Path(plan_file)
+    else:
+        return None
+
+    if not plan_path.exists():
+        logger.debug(f"No training plan found at {plan_path}")
+        return None
+
+    try:
+        plan_service = TrainingPlanService()
+        plan = plan_service.load_plan(plan_path)
+        if plan:
+            logger.info(f"Loaded training plan '{plan.name}' for AI Coach context")
+            return plan_service.serialize_plan_for_prompt(plan)
+    except Exception as e:
+        logger.warning(f"Failed to load training plan: {e}")
+
+    return None
 
 
 def main():
@@ -44,6 +88,7 @@ def main():
 | Athlete profile | FTP, weight, W/kg, goal target & date |
 | Training status | Latest CTL, ATL, TSB, ACWR |
 | Training phase | Auto-detected from 4-week TID (Base → Peak) |
+| **Training plan** | Full periodized plan (if generated) with phases, weekly targets, key events |
 | Yearly summaries | All years in your data |
 | FTP evolution | Quarterly FTP & W/kg across full history |
 | Monthly trends | Last 6 months of volume, intensity, load |
@@ -68,10 +113,26 @@ def main():
         """)
 
     if "activity_service" not in st.session_state:
-        st.error(
-            "Service not initialized. Please run the app from the main entry point."
-        )
-        return
+        # Try to initialize from settings / env config
+        if "settings" not in st.session_state:
+            config_json = os.environ.get("ACTIVITIES_VIEWER_CONFIG")
+            if config_json:
+                try:
+                    config_data = json.loads(config_json)
+                    st.session_state.settings = Settings(**config_data)
+                except Exception:
+                    pass
+        if "settings" in st.session_state:
+            try:
+                st.session_state.activity_service = init_services(
+                    st.session_state.settings
+                )
+            except Exception:
+                pass
+
+        if "activity_service" not in st.session_state:
+            st.info("⏳ Waiting for data services... Please navigate from the main page.")
+            return
 
     service = st.session_state.activity_service
 
@@ -244,6 +305,13 @@ def main():
                 - Quarterly FTP evolution shows long-term trends
                 - Use this data to answer questions about multi-year trends
 
+                TRAINING PLAN: If a training plan is included in the context, use it to:
+                - Answer questions about upcoming workouts and weekly targets
+                - Compare actual training vs planned targets (TSS, hours, intensity distribution)
+                - Provide guidance on current training phase and periodization
+                - Reference key events and taper periods
+                If no plan is present, suggest the user generate one on the Training Plan page.
+
                 STREAM DATA: When analyzing specific activities, you have access to detailed stream data including:
                 - Power, heart rate, cadence, speed, altitude
                 - GPS coordinates (latitude/longitude) with waypoints and route analysis
@@ -261,7 +329,15 @@ def main():
                 If the user refers to something "you said before", check both memory and history.
                 """
 
+                # Build context parts
                 parts = [system_prompt, f"\nContext:\n{context}"]
+
+                # Add training plan if available
+                plan_context = _get_training_plan_context()
+                if plan_context:
+                    parts.append(f"\n=== CURRENT TRAINING PLAN ===\n{plan_context}")
+                else:
+                    parts.append("\n[No training plan currently set. User can generate one on the Training Plan page.]")
                 if memory_context:
                     parts.append(f"\n{memory_context}")
                 if history_context:

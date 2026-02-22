@@ -15,6 +15,9 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   create-release:
     uses: hope0hermes/SharedWorkflows/.github/workflows/reusable-create-release.yml@main
