@@ -14,14 +14,14 @@ import plotly.graph_objects as go
 import streamlit as st
 
 from activities_viewer.config import Settings
+from activities_viewer.repository.csv_repo import CSVActivityRepository
+from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.services.fitness_estimation import (
     compute_rolling_ftp,
     estimate_ftp_from_activities,
     estimate_max_hr_from_activities,
     estimate_weight_trend,
 )
-from activities_viewer.repository.csv_repo import CSVActivityRepository
-from activities_viewer.services.activity_service import ActivityService
 
 st.set_page_config(page_title="Fitness Estimation", page_icon="📈", layout="wide")
 
@@ -57,7 +57,7 @@ def plot_ftp_history(ftp_df: pd.DataFrame, current_ftp: float) -> go.Figure:
         y=ftp_df["estimated_ftp"],
         mode="markers",
         name="Estimated FTP (95% of 20min)",
-        marker=dict(size=8, color="#1f77b4"),
+        marker={"size": 8, "color": "#1f77b4"},
         text=ftp_df["activity_name"],
         hovertemplate="%{x|%Y-%m-%d}<br>FTP: %{y:.0f}W<br>%{text}<extra></extra>",
     ))
@@ -70,7 +70,7 @@ def plot_ftp_history(ftp_df: pd.DataFrame, current_ftp: float) -> go.Figure:
             y=rolling["rolling_ftp"],
             mode="lines",
             name="42-day rolling max",
-            line=dict(color="#ff7f0e", width=2),
+            line={"color": "#ff7f0e", "width": 2},
         ))
 
     # Current FTP reference
@@ -100,7 +100,7 @@ def plot_max_hr_history(hr_df: pd.DataFrame, current_max_hr: int) -> go.Figure:
         y=hr_df["max_hr_recorded"],
         mode="markers",
         name="Max HR recorded",
-        marker=dict(size=8, color="#d62728"),
+        marker={"size": 8, "color": "#d62728"},
         text=hr_df["activity_name"],
         hovertemplate="%{x|%Y-%m-%d}<br>Max HR: %{y} bpm<br>%{text}<extra></extra>",
     ))
@@ -299,7 +299,7 @@ def main():
             y=weight_df["weight_kg"],
             mode="lines+markers",
             name="Weight",
-            line=dict(color="#2ca02c"),
+            line={"color": "#2ca02c"},
         ))
         fig.add_hline(
             y=settings.weight_kg,

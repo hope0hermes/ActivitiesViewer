@@ -1,10 +1,8 @@
 """Tests for Fitness Auto-Estimation page functions."""
 
 import pandas as pd
-import pytest
 
 from activities_viewer.services import fitness_estimation as feh
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # Test helpers – we import from the page module directly

@@ -1,7 +1,5 @@
 """Tests for pipeline orchestration (Phase 3)."""
 
-import subprocess
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +11,6 @@ from activities_viewer.pipeline import (
     is_unified_config,
     load_unified_config,
 )
-
 
 # ─── Fixtures ────────────────────────────────────────────────────────────
 

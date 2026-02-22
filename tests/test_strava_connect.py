@@ -3,10 +3,7 @@
 import json
 import os
 import time
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from activities_viewer.services.strava_oauth import (
     _build_authorize_url,

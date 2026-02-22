@@ -13,8 +13,6 @@ import streamlit as st
 from activities_viewer.ai.client import GeminiClient, render_ai_model_selector
 from activities_viewer.ai.context import ActivityContextBuilder
 from activities_viewer.app import init_services
-from activities_viewer.config import Settings
-from activities_viewer.services.training_plan_service import TrainingPlanService
 from activities_viewer.cache import (
     build_consolidation_prompt,
     build_history_context,
@@ -28,6 +26,8 @@ from activities_viewer.cache import (
     save_chat_exchange,
     save_memory_summary,
 )
+from activities_viewer.config import Settings
+from activities_viewer.services.training_plan_service import TrainingPlanService
 
 logger = logging.getLogger(__name__)
 
