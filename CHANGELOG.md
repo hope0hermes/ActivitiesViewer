@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-02-22
+
+### Changed
+- feat: replace subprocess pipeline with direct library API calls (#6)
+- chore: remove Docker build (will rebuild after refactoring) (#5)
+
+
 ## [1.1.0] - 2026-02-22
 
 ### Changed
