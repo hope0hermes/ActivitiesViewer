@@ -1,6 +1,6 @@
-"""Tests for the sync button component (Phase 4)."""
+"""Tests for the sync button component — library API integration."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -54,52 +54,59 @@ class TestSyncMeta:
 
 
 class TestRunSyncPipeline:
-    """Tests for _run_sync_pipeline()."""
+    """Tests for _run_sync_pipeline() — calls PipelineOrchestrator directly."""
 
     def test_no_unified_config_returns_error(self):
         success, output = _run_sync_pipeline(None)
         assert success is False
         assert "No unified config available" in output
 
-    @patch("activities_viewer.pages.components.sync_button.subprocess.run")
-    def test_successful_sync(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=0, stdout="Sync done", stderr=""
-        )
+    @patch("activities_viewer.pipeline.PipelineOrchestrator")
+    @patch("activities_viewer.pipeline.load_unified_config")
+    def test_successful_sync(self, mock_load, mock_orch_cls, tmp_path):
+        mock_load.return_value = {"data_dir": "/tmp/test"}
+        mock_orch = mock_orch_cls.return_value
+
         success, output = _run_sync_pipeline("/path/to/config.yaml")
         assert success is True
-        assert "Sync done" in output
+        mock_orch.run_sync.assert_called_once_with(full=False)
         # Should have saved last_synced_at
         assert _get_last_synced() is not None
 
-    @patch("activities_viewer.pages.components.sync_button.subprocess.run")
-    def test_failed_sync(self, mock_run):
-        mock_run.return_value = MagicMock(
-            returncode=1, stdout="", stderr="auth error"
-        )
+    @patch("activities_viewer.pipeline.PipelineOrchestrator")
+    @patch("activities_viewer.pipeline.load_unified_config")
+    def test_failed_sync(self, mock_load, mock_orch_cls):
+        mock_load.return_value = {"data_dir": "/tmp/test"}
+        mock_orch = mock_orch_cls.return_value
+        mock_orch.run_sync.side_effect = RuntimeError("auth error")
+
         success, output = _run_sync_pipeline("/path/to/config.yaml")
         assert success is False
         assert "auth error" in output
 
-    @patch("activities_viewer.pages.components.sync_button.subprocess.run")
-    def test_full_flag_passed(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        _run_sync_pipeline("/path/to/config.yaml", full=True)
-        cmd = mock_run.call_args[0][0]
-        assert "--full" in cmd
+    @patch("activities_viewer.pipeline.PipelineOrchestrator")
+    @patch("activities_viewer.pipeline.load_unified_config")
+    def test_full_flag_passed(self, mock_load, mock_orch_cls):
+        mock_load.return_value = {"data_dir": "/tmp/test"}
+        mock_orch = mock_orch_cls.return_value
 
-    @patch("activities_viewer.pages.components.sync_button.subprocess.run")
-    def test_no_launch_flag(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        _run_sync_pipeline("/path/to/config.yaml")
-        cmd = mock_run.call_args[0][0]
-        assert "--no-launch" in cmd
+        _run_sync_pipeline("/path/to/config.yaml", full=True)
+        mock_orch.run_sync.assert_called_once_with(full=True)
 
     @patch(
-        "activities_viewer.pages.components.sync_button.subprocess.run",
+        "activities_viewer.pipeline.load_unified_config",
+        side_effect=FileNotFoundError("not found"),
+    )
+    def test_config_not_found(self, mock_load):
+        success, output = _run_sync_pipeline("/nonexistent/config.yaml")
+        assert success is False
+        assert "not found" in output
+
+    @patch(
+        "activities_viewer.pipeline.load_unified_config",
         side_effect=Exception("boom"),
     )
-    def test_exception_handling(self, mock_run):
+    def test_exception_handling(self, mock_load):
         success, output = _run_sync_pipeline("/path/to/config.yaml")
         assert success is False
-        assert "Failed to run sync" in output
+        assert "Sync failed" in output
