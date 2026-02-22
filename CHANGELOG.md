@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-02-22
+
+### Changed
+- ci: add permissions to release workflow
+- fix: add requests to mypy ignore_missing_imports
+- style: fix all ruff lint errors
+- chore: move AI dependencies to optional extras
+- feat: add strava-fetcher and strava-analyzer as direct dependencies
+- feat: refactor into a full pipeline
+- feat: ia-coach has access to training plan
+- docs: update changelog with first working version note
+- fix: resolve mypy type errors across codebase
+- chore: align CI/CD workflows with SharedWorkflows patterns
+- feat: add long term memory context
+- feat: add ia-assisted training plan generator
+- feat: enforce consistent metrics usage from input data table. Add calendar view, as well as CTL and FTP trends. Improve chatbot context. Add training plan generator
+- feat: add ftp trend chart
+- feat: add historical comparison
+- feat: add trend arrows and tss calendar view
+- chore: small layout refacotring (manual)
+- feat: refactor for more streamlined navigation
+- chore: minor fixes
+- feat: pages refactor, more metrics and better visialization
+- chore: add monthly page and fix yearly one
+- chore: fix activity details
+- chore: refactor to read from raw and moving input files (checkup activity details only)
+- chore: add project structure and initial implementation with help text tooltips
+- chore: initial empty commit
+
+
 ## [1.0.0] - 2025-07-22
 
 First working version, extensively tested locally.
