@@ -1,0 +1,7 @@
+# UV configuration for ActivitiesViewer
+# Private devpi index hosts strava-fetcher and strava-analyzer packages.
+# The index mirrors PyPI, so it also serves as a fallback for public packages.
+
+[[index]]
+name = "devpi"
+url = "http://144.24.233.179/hope0hermes/dev/"

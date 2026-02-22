@@ -5,7 +5,7 @@ Generates tool-specific configs from a unified config and runs StravaFetcher
 and StravaAnalyzer as subprocesses, keeping the packages decoupled.
 """
 
-import json
+import importlib.util
 import logging
 import shutil
 import subprocess
@@ -16,6 +16,26 @@ from typing import Any
 import yaml
 
 logger = logging.getLogger(__name__)
+
+# ── Library availability guards ──────────────────────────────────────────
+# Phase 1: These flags enable graceful degradation when the upstream
+# libraries are not installed (e.g. dashboard-only usage).
+# Phase 2 will use these to switch from subprocess to library API calls.
+#
+# Available imports when HAS_FETCHER is True:
+#   from strava_fetcher import (
+#       StravaSyncPipeline, StravaClient, TokenPersistence,
+#       PathSettings, SyncSettings, StravaAPISettings, load_settings,
+#   )
+#
+# Available imports when HAS_ANALYZER is True:
+#   from strava_analyzer import (
+#       Pipeline, AnalysisService, Settings, load_settings,
+#       DualAnalysisResult, AnalysisResult,
+#   )
+
+HAS_FETCHER = importlib.util.find_spec("strava_fetcher") is not None
+HAS_ANALYZER = importlib.util.find_spec("strava_analyzer") is not None
 
 
 class PipelineOrchestrator:
