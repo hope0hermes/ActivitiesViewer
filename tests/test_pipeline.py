@@ -1,7 +1,7 @@
-"""Tests for pipeline orchestration (Phase 3)."""
+"""Tests for pipeline orchestration — library API integration."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 import yaml
@@ -94,22 +94,27 @@ class TestIsUnifiedConfig:
         assert is_unified_config({"data_dir": "x", "ftp": 285}) is False
 
 
-# ─── generate_fetcher_config ─────────────────────────────────────────────
+# ─── _build_fetcher_settings ─────────────────────────────────────────────
 
 
-class TestGenerateFetcherConfig:
-    """Tests for PipelineOrchestrator.generate_fetcher_config()."""
+class TestBuildFetcherSettings:
+    """Tests for PipelineOrchestrator._build_fetcher_settings()."""
 
-    def test_includes_strava_api_credentials(self, orchestrator):
-        cfg = orchestrator.generate_fetcher_config()
-        assert cfg["strava_api"]["client_id"] == "12345"
-        assert cfg["strava_api"]["client_secret"] == "secret"
+    @patch("strava_fetcher.Settings")
+    def test_includes_strava_api_credentials(self, mock_settings_cls, orchestrator):
+        orchestrator._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["strava_api"]["client_id"] == "12345"
+        assert kw["strava_api"]["client_secret"] == "secret"
 
-    def test_paths_data_dir(self, orchestrator):
-        cfg = orchestrator.generate_fetcher_config()
-        assert cfg["paths"]["data_dir"] == str(orchestrator.data_dir)
+    @patch("strava_fetcher.Settings")
+    def test_paths_data_dir(self, mock_settings_cls, orchestrator):
+        orchestrator._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["paths"]["data_dir"] == str(orchestrator.data_dir)
 
-    def test_sync_settings_propagation(self, tmp_path):
+    @patch("strava_fetcher.Settings")
+    def test_sync_settings_propagation(self, mock_settings_cls, tmp_path):
         config = MINIMAL_UNIFIED.copy()
         config["fetcher"] = {
             **config["fetcher"],
@@ -118,51 +123,63 @@ class TestGenerateFetcherConfig:
             "skip_trainer_activities": True,
         }
         orch = PipelineOrchestrator(config, tmp_path)
-        cfg = orch.generate_fetcher_config()
-        assert cfg["sync"]["max_pages"] == 50
-        assert cfg["sync"]["retry_interval_seconds"] == 300
-        assert cfg["sync"]["skip_trainer_activities"] is True
+        orch._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["sync"]["max_pages"] == 50
+        assert kw["sync"]["retry_interval_seconds"] == 300
+        assert kw["sync"]["skip_trainer_activities"] is True
 
-    def test_no_sync_section_when_empty(self, tmp_path):
+    @patch("strava_fetcher.Settings")
+    def test_no_sync_when_empty(self, mock_settings_cls, tmp_path):
         config = MINIMAL_UNIFIED.copy()
         config["fetcher"] = {"client_id": "x", "client_secret": "y"}
         orch = PipelineOrchestrator(config, tmp_path)
-        cfg = orch.generate_fetcher_config()
-        assert "sync" not in cfg
+        orch._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["sync"] == {}
 
-    def test_no_strava_api_when_empty(self, tmp_path):
+    @patch("strava_fetcher.Settings")
+    def test_no_strava_api_when_empty(self, mock_settings_cls, tmp_path):
         config = MINIMAL_UNIFIED.copy()
         config["fetcher"] = {}
         orch = PipelineOrchestrator(config, tmp_path)
-        cfg = orch.generate_fetcher_config()
-        assert "strava_api" not in cfg
+        orch._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["strava_api"] == {}
 
 
-# ─── generate_analyzer_config ─────────────────────────────────────────────
+# ─── _build_analyzer_settings ─────────────────────────────────────────────
 
 
-class TestGenerateAnalyzerConfig:
-    """Tests for PipelineOrchestrator.generate_analyzer_config()."""
+class TestBuildAnalyzerSettings:
+    """Tests for PipelineOrchestrator._build_analyzer_settings()."""
 
-    def test_path_wiring(self, orchestrator):
-        cfg = orchestrator.generate_analyzer_config()
-        assert cfg["data_dir"] == str(orchestrator.data_dir)
-        assert cfg["activities_file"] == "activities.csv"
-        assert cfg["streams_dir"] == "Streams"
-        assert cfg["processed_data_dir"] == str(orchestrator.data_dir)
+    @patch("strava_analyzer.Settings")
+    def test_path_wiring(self, mock_settings_cls, orchestrator):
+        orchestrator._build_analyzer_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["data_dir"] == str(orchestrator.data_dir)
+        assert kw["activities_file"] == str(orchestrator.data_dir / "activities.csv")
+        assert kw["streams_dir"] == str(orchestrator.data_dir / "Streams")
+        assert kw["processed_data_dir"] == str(orchestrator.data_dir)
 
-    def test_athlete_field_mapping(self, orchestrator):
-        cfg = orchestrator.generate_analyzer_config()
-        assert cfg["ftp"] == 280.0
-        assert cfg["rider_weight_kg"] == 75.0
-        assert cfg["max_hr"] == 190
+    @patch("strava_analyzer.Settings")
+    def test_athlete_field_mapping(self, mock_settings_cls, orchestrator):
+        orchestrator._build_analyzer_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["ftp"] == 280.0
+        assert kw["rider_weight_kg"] == 75.0
+        assert kw["max_hr"] == 190
 
-    def test_analyzer_overrides(self, orchestrator):
-        cfg = orchestrator.generate_analyzer_config()
-        assert cfg["ctl_days"] == 28
-        assert cfg["atl_days"] == 7
+    @patch("strava_analyzer.Settings")
+    def test_analyzer_overrides(self, mock_settings_cls, orchestrator):
+        orchestrator._build_analyzer_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["ctl_days"] == 28
+        assert kw["atl_days"] == 7
 
-    def test_full_athlete_fields(self, tmp_path):
+    @patch("strava_analyzer.Settings")
+    def test_full_athlete_fields(self, mock_settings_cls, tmp_path):
         config = MINIMAL_UNIFIED.copy()
         config["athlete"] = {
             "ftp": 300,
@@ -177,14 +194,15 @@ class TestGenerateAnalyzerConfig:
             "lt2_hr": 160,
         }
         orch = PipelineOrchestrator(config, tmp_path)
-        cfg = orch.generate_analyzer_config()
-        assert cfg["fthr"] == 175
-        assert cfg["cp"] == 260
-        assert cfg["w_prime"] == 25000
-        assert cfg["lt1_power"] == 210
-        assert cfg["lt2_power"] == 270
-        assert cfg["lt1_hr"] == 135
-        assert cfg["lt2_hr"] == 160
+        orch._build_analyzer_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert kw["fthr"] == 175
+        assert kw["cp"] == 260
+        assert kw["w_prime"] == 25000
+        assert kw["lt1_power"] == 210
+        assert kw["lt2_power"] == 270
+        assert kw["lt1_hr"] == 135
+        assert kw["lt2_hr"] == 160
 
 
 # ─── generate_viewer_settings_dict ────────────────────────────────────────
@@ -246,36 +264,35 @@ class TestDataDirResolution:
 class TestRunFetch:
     """Tests for PipelineOrchestrator.run_fetch()."""
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_fetch_basic(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_fetch_basic(self, mock_settings_cls, mock_pipeline_cls, orchestrator):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_fetch()
-        mock_run.assert_called_once()
-        cmd = mock_run.call_args[0][0]
-        assert "sync" in cmd
-        assert "--full" not in cmd
-        mock_which.assert_called_with("strava-fetcher")
+        mock_pipeline.run.assert_called_once_with(full=False)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_fetch_full(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_fetch_full(self, mock_settings_cls, mock_pipeline_cls, orchestrator):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_fetch(full=True)
-        cmd = mock_run.call_args[0][0]
-        assert "--full" in cmd
+        mock_pipeline.run.assert_called_once_with(full=True)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_fetch_failure(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="auth error")
-        with pytest.raises(RuntimeError, match="StravaFetcher failed"):
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_fetch_failure(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
+        mock_pipeline.run.side_effect = RuntimeError("auth error")
+        with pytest.raises(RuntimeError, match="auth error"):
             orchestrator.run_fetch()
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_fetch_creates_data_dir(self, mock_run, mock_which, tmp_path):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_fetch_creates_data_dir(
+        self, mock_settings_cls, mock_pipeline_cls, tmp_path
+    ):
         data_dir = tmp_path / "new-data"
         config = {"data_dir": str(data_dir)}
         orch = PipelineOrchestrator(config, tmp_path)
@@ -290,48 +307,52 @@ class TestRunFetch:
 class TestRunAnalyze:
     """Tests for PipelineOrchestrator.run_analyze()."""
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-analyzer")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_analyze_basic(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_run_analyze_basic(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_analyze()
-        cmd = mock_run.call_args[0][0]
-        assert "run" in cmd
-        assert "--force" not in cmd
-        assert "--recompute-from" not in cmd
+        mock_pipeline.run.assert_called_once_with(recompute_from=None)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-analyzer")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_analyze_force(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_run_analyze_force(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_analyze(force=True)
-        cmd = mock_run.call_args[0][0]
-        assert "--force" in cmd
+        # force=True → recompute_from=None (ignores any date)
+        mock_pipeline.run.assert_called_once_with(recompute_from=None)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-analyzer")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_analyze_recompute_from(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_run_analyze_recompute_from(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_analyze(recompute_from="2024-06-01")
-        cmd = mock_run.call_args[0][0]
-        assert "--recompute-from" in cmd
-        assert "2024-06-01" in cmd
+        mock_pipeline.run.assert_called_once_with(recompute_from="2024-06-01")
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-analyzer")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_analyze_force_supersedes_recompute(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_run_analyze_force_supersedes_recompute(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
         orchestrator.run_analyze(force=True, recompute_from="2024-06-01")
-        cmd = mock_run.call_args[0][0]
-        assert "--force" in cmd
-        # force and recompute-from are mutually exclusive — force wins
-        assert "--recompute-from" not in cmd
+        # force=True takes precedence → recompute_from=None
+        mock_pipeline.run.assert_called_once_with(recompute_from=None)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-analyzer")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_analyze_failure(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="crash")
-        with pytest.raises(RuntimeError, match="StravaAnalyzer failed"):
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_run_analyze_failure(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
+        mock_pipeline.run.side_effect = RuntimeError("crash")
+        with pytest.raises(RuntimeError, match="crash"):
             orchestrator.run_analyze()
 
 
@@ -341,103 +362,154 @@ class TestRunAnalyze:
 class TestRunSync:
     """Tests for PipelineOrchestrator.run_sync() (full pipeline)."""
 
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_calls_both_tools(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_calls_both(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
         orchestrator.run_sync()
-        assert mock_run.call_count == 2
+        mock_f_pipeline_cls.return_value.run.assert_called_once_with(full=False)
+        mock_a_pipeline_cls.return_value.run.assert_called_once_with(
+            recompute_from=None
+        )
 
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_fetcher_runs_first(self, mock_run, mock_which, orchestrator):
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_fetcher_runs_first(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
         call_order = []
-        def record_call(*args, **kwargs):
-            cmd = args[0]
-            if "strava-fetcher" in str(cmd):
-                call_order.append("fetcher")
-            elif "strava-analyzer" in str(cmd):
-                call_order.append("analyzer")
-            return MagicMock(returncode=0, stdout="", stderr="")
-        mock_run.side_effect = record_call
+        mock_f_pipeline_cls.return_value.run.side_effect = (
+            lambda **kw: call_order.append("fetcher")
+        )
+        mock_a_pipeline_cls.return_value.run.side_effect = (
+            lambda **kw: call_order.append("analyzer")
+        )
         orchestrator.run_sync()
         assert call_order == ["fetcher", "analyzer"]
 
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_stops_on_fetch_failure(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="fail")
-        with pytest.raises(RuntimeError, match="StravaFetcher"):
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_stops_on_fetch_failure(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
+        mock_f_pipeline_cls.return_value.run.side_effect = RuntimeError("fail")
+        with pytest.raises(RuntimeError, match="fail"):
             orchestrator.run_sync()
-        assert mock_run.call_count == 1  # analyzer not called
+        # Analyzer should NOT have been called
+        mock_a_pipeline_cls.return_value.run.assert_not_called()
 
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_forwards_full_flag(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_forwards_full_flag(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
         orchestrator.run_sync(full=True)
-        first_cmd = mock_run.call_args_list[0][0][0]
-        assert "--full" in first_cmd
+        mock_f_pipeline_cls.return_value.run.assert_called_once_with(full=True)
 
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_forwards_force_flag(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_forwards_force_flag(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
         orchestrator.run_sync(force=True)
-        second_cmd = mock_run.call_args_list[1][0][0]
-        assert "--force" in second_cmd
-
-    @patch("activities_viewer.pipeline.shutil.which", side_effect=lambda name: f"/usr/local/bin/{name}")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_run_sync_forwards_recompute_from(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        orchestrator.run_sync(recompute_from="2024-01-01")
-        second_cmd = mock_run.call_args_list[1][0][0]
-        assert "--recompute-from" in second_cmd
-        assert "2024-01-01" in second_cmd
-
-
-# ─── temp config file cleanup ────────────────────────────────────────────
-
-
-class TestTempConfigCleanup:
-    """Ensure temp config files are cleaned up even on failure."""
-
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_fetcher_temp_file_cleaned_on_success(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
-        orchestrator.run_fetch()
-        # Verify that no temp files with our prefix remain
-        import glob
-        remaining = glob.glob("/tmp/fetcher_*.yaml")
-        # The file should have been deleted
-        assert len(remaining) == 0 or all(
-            "fetcher_" not in f for f in remaining
+        mock_a_pipeline_cls.return_value.run.assert_called_once_with(
+            recompute_from=None
         )
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/local/bin/strava-fetcher")
-    @patch("activities_viewer.pipeline.subprocess.run")
-    def test_fetcher_temp_file_cleaned_on_failure(self, mock_run, mock_which, orchestrator):
-        mock_run.return_value = MagicMock(returncode=1, stderr="fail")
-        with pytest.raises(RuntimeError):
-            orchestrator.run_fetch()
-        # Temp file should still be cleaned up
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_run_sync_forwards_recompute_from(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
+        orchestrator.run_sync(recompute_from="2024-01-01")
+        mock_a_pipeline_cls.return_value.run.assert_called_once_with(
+            recompute_from="2024-01-01"
+        )
 
 
-# ─── _resolve_cli ───────────────────────────────────────────────────────────
+# ─── single activity ─────────────────────────────────────────────────────
 
 
-class TestResolveCli:
-    """Tests for PipelineOrchestrator._resolve_cli()."""
+class TestSingleActivity:
+    """Tests for single activity fetch/process/sync."""
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value="/usr/bin/strava-fetcher")
-    def test_resolves_tool_on_path(self, mock_which):
-        result = PipelineOrchestrator._resolve_cli("strava-fetcher")
-        assert result == "/usr/bin/strava-fetcher"
-        mock_which.assert_called_once_with("strava-fetcher")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_fetch_single_activity(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
+        orchestrator.fetch_single_activity(123456)
+        mock_pipeline.fetch_single_activity.assert_called_once_with(123456)
 
-    @patch("activities_viewer.pipeline.shutil.which", return_value=None)
-    def test_raises_when_tool_not_found(self, mock_which):
-        with pytest.raises(RuntimeError, match="'strava-fetcher' not found on PATH"):
-            PipelineOrchestrator._resolve_cli("strava-fetcher")
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    def test_process_single_activity(
+        self, mock_settings_cls, mock_pipeline_cls, orchestrator
+    ):
+        mock_pipeline = mock_pipeline_cls.return_value
+        orchestrator.process_single_activity(123456)
+        mock_pipeline.process_single_activity.assert_called_once_with(123456)
+
+    @patch("strava_analyzer.Pipeline")
+    @patch("strava_analyzer.Settings")
+    @patch("strava_fetcher.StravaSyncPipeline")
+    @patch("strava_fetcher.Settings")
+    def test_sync_single_activity(
+        self,
+        mock_f_settings,
+        mock_f_pipeline_cls,
+        mock_a_settings,
+        mock_a_pipeline_cls,
+        orchestrator,
+    ):
+        orchestrator.sync_single_activity(123456)
+        mock_f_pipeline_cls.return_value.fetch_single_activity.assert_called_once_with(
+            123456
+        )
+        mock_a_pipeline_cls.return_value.process_single_activity.assert_called_once_with(
+            123456
+        )

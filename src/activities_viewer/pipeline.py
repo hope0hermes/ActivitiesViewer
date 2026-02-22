@@ -1,15 +1,12 @@
 """
 Pipeline orchestrator for running the full fetch → analyze → view workflow.
 
-Generates tool-specific configs from a unified config and runs StravaFetcher
-and StravaAnalyzer as subprocesses, keeping the packages decoupled.
+Constructs library Settings objects from a unified config and calls
+StravaFetcher / StravaAnalyzer Python APIs directly (no subprocesses).
 """
 
 import importlib.util
 import logging
-import shutil
-import subprocess
-import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -18,32 +15,18 @@ import yaml
 logger = logging.getLogger(__name__)
 
 # ── Library availability guards ──────────────────────────────────────────
-# Phase 1: These flags enable graceful degradation when the upstream
-# libraries are not installed (e.g. dashboard-only usage).
-# Phase 2 will use these to switch from subprocess to library API calls.
-#
-# Available imports when HAS_FETCHER is True:
-#   from strava_fetcher import (
-#       StravaSyncPipeline, StravaClient, TokenPersistence,
-#       PathSettings, SyncSettings, StravaAPISettings, load_settings,
-#   )
-#
-# Available imports when HAS_ANALYZER is True:
-#   from strava_analyzer import (
-#       Pipeline, AnalysisService, Settings, load_settings,
-#       DualAnalysisResult, AnalysisResult,
-#   )
+# These flags enable graceful degradation when the upstream libraries
+# are not installed (e.g. dashboard-only usage).
 
 HAS_FETCHER = importlib.util.find_spec("strava_fetcher") is not None
 HAS_ANALYZER = importlib.util.find_spec("strava_analyzer") is not None
 
 
 class PipelineOrchestrator:
-    """Orchestrate the StravaFetcher → StravaAnalyzer → ActivitiesViewer pipeline.
+    """Orchestrate fetch → analyze → view using library APIs.
 
-    Reads a unified YAML config with ``athlete:``, ``fetcher:``, ``analyzer:``,
-    and ``viewer:`` sections and generates tool-specific temp configs for each
-    subprocess invocation.
+    Reads a unified config dict and constructs library Settings objects for
+    StravaFetcher and StravaAnalyzer directly — no subprocesses or temp files.
 
     Args:
         unified_config: Parsed unified YAML dict.
@@ -68,56 +51,54 @@ class PipelineOrchestrator:
         self.analyzer = self.config.get("analyzer", {})
         self.viewer = self.config.get("viewer", {})
 
-    # ─── Config generators ────────────────────────────────────────────────
+    # ─── Settings construction ────────────────────────────────────────────
 
-    def generate_fetcher_config(self) -> dict[str, Any]:
-        """Build the YAML dict that StravaFetcher ``Settings.from_yaml`` expects.
+    def _build_fetcher_settings(self) -> Any:
+        """Construct a StravaFetcher ``Settings`` object from unified config.
 
         Returns:
-            dict suitable for ``yaml.dump`` → temp file → ``strava-fetcher sync --config-file``.
-        """
-        fetcher_cfg: dict[str, Any] = {}
+            A ``strava_fetcher.Settings`` instance.
 
-        # strava_api section
-        strava_api: dict[str, str] = {}
+        Raises:
+            ImportError: If ``strava-fetcher`` is not installed.
+        """
+        from strava_fetcher import Settings as FetcherSettings
+
+        strava_api: dict[str, Any] = {}
         if "client_id" in self.fetcher:
             strava_api["client_id"] = str(self.fetcher["client_id"])
         if "client_secret" in self.fetcher:
             strava_api["client_secret"] = str(self.fetcher["client_secret"])
-        if strava_api:
-            fetcher_cfg["strava_api"] = strava_api
 
-        # paths section — all tools share self.data_dir
-        fetcher_cfg["paths"] = {
-            "data_dir": str(self.data_dir),
-        }
+        sync_keys = ("max_pages", "retry_interval_seconds", "skip_trainer_activities")
+        sync_dict = {k: self.fetcher[k] for k in sync_keys if k in self.fetcher}
 
-        # sync section
-        sync: dict[str, Any] = {}
-        for key in ("max_pages", "retry_interval_seconds", "skip_trainer_activities"):
-            if key in self.fetcher:
-                sync[key] = self.fetcher[key]
-        if sync:
-            fetcher_cfg["sync"] = sync
+        return FetcherSettings(
+            strava_api=strava_api,
+            paths={"data_dir": str(self.data_dir)},
+            sync=sync_dict,
+        )
 
-        return fetcher_cfg
+    def _build_analyzer_settings(self) -> Any:
+        """Construct a StravaAnalyzer ``Settings`` object from unified config.
 
-    def generate_analyzer_config(self) -> dict[str, Any]:
-        """Build the YAML dict that StravaAnalyzer ``load_settings`` expects.
-
-        Maps unified athlete fields → analyzer field names and merges any
-        analyzer-specific overrides.
+        Maps fields from the unified config (``athlete:`` section) to
+        StravaAnalyzer's expected names (e.g. ``weight_kg`` → ``rider_weight_kg``).
 
         Returns:
-            dict suitable for ``yaml.dump`` → temp file → ``strava-analyzer run --config``.
-        """
-        analyzer_cfg: dict[str, Any] = {}
+            A ``strava_analyzer.Settings`` instance.
 
-        # Path wiring — analyzer reads from the shared data_dir and writes back to it
-        analyzer_cfg["data_dir"] = str(self.data_dir)
-        analyzer_cfg["activities_file"] = "activities.csv"
-        analyzer_cfg["streams_dir"] = "Streams"
-        analyzer_cfg["processed_data_dir"] = str(self.data_dir)
+        Raises:
+            ImportError: If ``strava-analyzer`` is not installed.
+        """
+        from strava_analyzer import Settings as AnalyzerSettings
+
+        cfg: dict[str, Any] = {
+            "data_dir": str(self.data_dir),
+            "activities_file": str(self.data_dir / "activities.csv"),
+            "streams_dir": str(self.data_dir / "Streams"),
+            "processed_data_dir": str(self.data_dir),
+        }
 
         # Athlete fields → analyzer field names
         field_map = {
@@ -125,23 +106,23 @@ class PipelineOrchestrator:
             "fthr": "fthr",
             "max_hr": "max_hr",
             "weight_kg": "rider_weight_kg",
+            "ftpace": "ftpace",
             "cp": "cp",
             "w_prime": "w_prime",
             "lt1_power": "lt1_power",
             "lt2_power": "lt2_power",
             "lt1_hr": "lt1_hr",
             "lt2_hr": "lt2_hr",
-            "ftpace": "ftpace",
         }
         for src, dst in field_map.items():
             if src in self.athlete:
-                analyzer_cfg[dst] = self.athlete[src]
+                cfg[dst] = self.athlete[src]
 
-        # Merge any analyzer-specific overrides (e.g. ctl_days, atl_days)
+        # Merge analyzer-specific overrides (ctl_days, atl_days, etc.)
         for key, value in self.analyzer.items():
-            analyzer_cfg[key] = value
+            cfg[key] = value
 
-        return analyzer_cfg
+        return AnalyzerSettings(**cfg)
 
     def generate_viewer_settings_dict(self) -> dict[str, Any]:
         """Build a flat dict suitable for ``Settings(**data)`` in ActivitiesViewer.
@@ -172,151 +153,58 @@ class PipelineOrchestrator:
 
         return viewer_cfg
 
-    # ─── Subprocess execution ─────────────────────────────────────────────
+    # ─── Internal helpers ─────────────────────────────────────────────────
 
     def _ensure_data_dir(self) -> None:
         """Create the shared data directory and Streams sub-directory if needed."""
         self.data_dir.mkdir(parents=True, exist_ok=True)
         (self.data_dir / "Streams").mkdir(parents=True, exist_ok=True)
 
-    def _write_temp_config(self, config_dict: dict[str, Any], prefix: str) -> Path:
-        """Write a config dict to a temp YAML file.
-
-        Returns:
-            Path to the temporary config file (caller should clean up).
-        """
-        tmp = tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".yaml",
-            prefix=f"{prefix}_",
-            delete=False,
-        )
-        yaml.dump(config_dict, tmp, default_flow_style=False)
-        tmp.close()
-        return Path(tmp.name)
-
-    def _run_tool(
-        self,
-        cmd: list[str],
-        tool_name: str,
-        *,
-        capture: bool = True,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run a CLI tool as a subprocess.
-
-        Args:
-            cmd: Command list (e.g. ["strava-fetcher", "sync", ...]).
-            tool_name: Human-readable name for logging.
-            capture: Whether to capture stdout/stderr (False streams to console).
-
-        Returns:
-            CompletedProcess result.
-
-        Raises:
-            RuntimeError: If the subprocess exits with a non-zero code.
-        """
-        logger.info(f"Running {tool_name}: {' '.join(cmd)}")
-
-        result = subprocess.run(
-            cmd,
-            capture_output=capture,
-            text=True,
-            check=False,
-        )
-
-        if result.returncode != 0:
-            stderr = result.stderr or "(no stderr)"
-            msg = f"{tool_name} failed (exit {result.returncode}): {stderr}"
-            logger.error(msg)
-            raise RuntimeError(msg)
-
-        if capture and result.stdout:
-            logger.info(f"{tool_name} output:\n{result.stdout}")
-
-        return result
-
-    # ─── CLI tool resolution ─────────────────────────────────────────────
-
-    @staticmethod
-    def _resolve_cli(tool_name: str) -> str:
-        """Find a CLI entry-point on PATH.
-
-        Args:
-            tool_name: CLI command name (e.g. ``strava-fetcher``).
-
-        Returns:
-            Absolute path to the executable.
-
-        Raises:
-            RuntimeError: If the tool is not found on PATH.
-        """
-        path = shutil.which(tool_name)
-        if path is None:
-            raise RuntimeError(
-                f"'{tool_name}' not found on PATH. "
-                f"Make sure the package is installed and the entry-point is "
-                f"available (e.g. activate its virtualenv or install globally)."
-            )
-        return path
-
     # ─── Public methods ───────────────────────────────────────────────────
 
-    def run_fetch(self, *, full: bool = False) -> subprocess.CompletedProcess[str]:
-        """Run ``strava-fetcher sync``.
+    def run_fetch(self, *, full: bool = False) -> None:
+        """Fetch activities via the StravaFetcher Python API.
 
         Args:
-            full: Pass ``--full`` to force a complete re-fetch.
+            full: Force a complete re-fetch of all activities.
 
-        Returns:
-            CompletedProcess result.
+        Raises:
+            ImportError: If ``strava-fetcher`` is not installed.
         """
-        self._ensure_data_dir()
-        fetcher_cfg = self.generate_fetcher_config()
-        tmp_path = self._write_temp_config(fetcher_cfg, "fetcher")
+        from strava_fetcher import StravaSyncPipeline
 
-        try:
-            cmd = [
-                self._resolve_cli("strava-fetcher"),
-                "sync",
-                "--config-file", str(tmp_path),
-            ]
-            if full:
-                cmd.append("--full")
-            return self._run_tool(cmd, "StravaFetcher")
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        self._ensure_data_dir()
+        settings = self._build_fetcher_settings()
+        pipeline = StravaSyncPipeline(settings)
+
+        logger.info("Running StravaFetcher (library mode)...")
+        pipeline.run(full=full)
+        logger.info("Fetch complete")
 
     def run_analyze(
         self,
         *,
         force: bool = False,
         recompute_from: str | None = None,
-    ) -> subprocess.CompletedProcess[str]:
-        """Run ``strava-analyzer run``.
+    ) -> None:
+        """Analyze activities via the StravaAnalyzer Python API.
 
         Args:
-            force: Pass ``--force`` to reprocess all activities.
+            force: Force full re-analysis of all activities.
             recompute_from: ISO date to selectively recompute from.
 
-        Returns:
-            CompletedProcess result.
+        Raises:
+            ImportError: If ``strava-analyzer`` is not installed.
         """
-        analyzer_cfg = self.generate_analyzer_config()
-        tmp_path = self._write_temp_config(analyzer_cfg, "analyzer")
+        from strava_analyzer import Pipeline as AnalyzerPipeline
 
-        try:
-            cmd = [
-                self._resolve_cli("strava-analyzer"),
-                "run",
-                "--config", str(tmp_path),
-            ]
-            if force:
-                cmd.append("--force")
-            elif recompute_from:
-                cmd.extend(["--recompute-from", recompute_from])
-            return self._run_tool(cmd, "StravaAnalyzer")
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        settings = self._build_analyzer_settings()
+        pipeline = AnalyzerPipeline(settings)
+
+        effective_recompute = None if force else recompute_from
+        logger.info("Running StravaAnalyzer (library mode)...")
+        pipeline.run(recompute_from=effective_recompute)
+        logger.info("Analysis complete")
 
     def run_sync(
         self,
@@ -333,7 +221,7 @@ class PipelineOrchestrator:
             recompute_from: ISO date for selective recomputation.
         """
         logger.info("=" * 60)
-        logger.info("Starting pipeline sync")
+        logger.info("Starting pipeline sync (library mode)")
         logger.info("=" * 60)
 
         logger.info("Step 1/2: Fetching activities from Strava...")
@@ -348,50 +236,36 @@ class PipelineOrchestrator:
         logger.info("Pipeline sync finished successfully")
         logger.info("=" * 60)
 
-    def fetch_single_activity(self, activity_id: int) -> subprocess.CompletedProcess[str]:
-        """Run ``strava-fetcher fetch-activity <ID>``.
+    def fetch_single_activity(self, activity_id: int) -> None:
+        """Fetch a single activity via the StravaFetcher Python API.
 
         Args:
             activity_id: Strava activity ID.
 
-        Returns:
-            CompletedProcess result.
+        Raises:
+            ImportError: If ``strava-fetcher`` is not installed.
         """
+        from strava_fetcher import StravaSyncPipeline
+
         self._ensure_data_dir()
-        fetcher_cfg = self.generate_fetcher_config()
-        tmp_path = self._write_temp_config(fetcher_cfg, "fetcher")
+        settings = self._build_fetcher_settings()
+        pipeline = StravaSyncPipeline(settings)
+        pipeline.fetch_single_activity(activity_id)
 
-        try:
-            cmd = [
-                self._resolve_cli("strava-fetcher"),
-                "fetch-activity", str(activity_id),
-                "--config-file", str(tmp_path),
-            ]
-            return self._run_tool(cmd, "StravaFetcher (single)")
-        finally:
-            tmp_path.unlink(missing_ok=True)
-
-    def process_single_activity(self, activity_id: int) -> subprocess.CompletedProcess[str]:
-        """Run ``strava-analyzer process-activity <ID>``.
+    def process_single_activity(self, activity_id: int) -> None:
+        """Process a single activity via the StravaAnalyzer Python API.
 
         Args:
             activity_id: Strava activity ID.
 
-        Returns:
-            CompletedProcess result.
+        Raises:
+            ImportError: If ``strava-analyzer`` is not installed.
         """
-        analyzer_cfg = self.generate_analyzer_config()
-        tmp_path = self._write_temp_config(analyzer_cfg, "analyzer")
+        from strava_analyzer import Pipeline as AnalyzerPipeline
 
-        try:
-            cmd = [
-                self._resolve_cli("strava-analyzer"),
-                "process-activity", str(activity_id),
-                "--config", str(tmp_path),
-            ]
-            return self._run_tool(cmd, "StravaAnalyzer (single)")
-        finally:
-            tmp_path.unlink(missing_ok=True)
+        settings = self._build_analyzer_settings()
+        pipeline = AnalyzerPipeline(settings)
+        pipeline.process_single_activity(activity_id)
 
     def sync_single_activity(self, activity_id: int) -> None:
         """Fetch and process a single activity end-to-end.

@@ -1,15 +1,14 @@
 """
 Sync button component for the Streamlit sidebar.
 
-Provides a "🔄 Sync Data" button that runs the StravaFetcher → StravaAnalyzer
-pipeline as a subprocess. Shows progress via spinner and log output.
+Provides a "🔄 Sync Data" button that calls the PipelineOrchestrator
+directly via StravaFetcher/StravaAnalyzer Python APIs. Shows progress
+via spinner and log output.
 """
 
 import json
 import logging
 import os
-import subprocess
-import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -50,26 +49,16 @@ def _run_sync_pipeline(
     *,
     full: bool = False,
 ) -> tuple[bool, str]:
-    """Run the fetch + analyze pipeline.
-
-    If a unified config path is available (stored in env/session), uses it.
-    Otherwise, runs a basic pipeline using the current settings.
+    """Run the fetch + analyze pipeline via direct library calls.
 
     Args:
         unified_config_path: Path to unified config YAML (if available).
-        full: Whether to pass --full to force complete re-fetch.
+        full: Whether to force a complete re-fetch.
 
     Returns:
         Tuple of (success: bool, output: str).
     """
-    cmd = [sys.executable, "-m", "activities_viewer", "sync"]
-
-    if unified_config_path:
-        cmd.extend(["--config", unified_config_path, "--no-launch"])
-        if full:
-            cmd.append("--full")
-    else:
-        # If no unified config, we can't run the pipeline
+    if not unified_config_path:
         return False, (
             "No unified config available. The sync button requires a unified "
             "pipeline config. Run with:\n\n"
@@ -77,30 +66,27 @@ def _run_sync_pipeline(
         )
 
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=600,  # 10 minute timeout
-        )
+        from activities_viewer.pipeline import PipelineOrchestrator, load_unified_config
 
-        output = result.stdout or ""
-        if result.stderr:
-            output += "\n" + result.stderr
+        config_path = Path(unified_config_path)
+        unified = load_unified_config(config_path)
+        orchestrator = PipelineOrchestrator(unified, config_path.parent)
 
-        if result.returncode == 0:
-            _save_sync_meta({
+        orchestrator.run_sync(full=full)
+
+        _save_sync_meta(
+            {
                 "last_synced_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            })
-            return True, output
-        else:
-            return False, output
+            }
+        )
+        return True, "Pipeline sync completed successfully."
 
-    except subprocess.TimeoutExpired:
-        return False, "Sync timed out after 10 minutes."
+    except FileNotFoundError as e:
+        return False, f"Config not found: {e}"
+    except ImportError as e:
+        return False, f"Missing dependency: {e}"
     except Exception as e:
-        return False, f"Failed to run sync: {e}"
+        return False, f"Sync failed: {e}"
 
 
 def render_sync_button() -> None:
