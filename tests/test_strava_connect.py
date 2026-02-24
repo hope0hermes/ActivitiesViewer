@@ -1,4 +1,8 @@
-"""Tests for Strava OAuth helper functions."""
+"""Tests for Strava OAuth helper functions.
+
+Delegates to StravaFetcher's Client/TokenPersistence — tests mock at
+the library boundary rather than raw HTTP calls.
+"""
 
 import json
 import os
@@ -15,18 +19,42 @@ from activities_viewer.services.strava_oauth import (
     _save_token,
 )
 
+# ─── Helpers ──────────────────────────────────────────────────────────────
+
+def _sample_token_dict(
+    access="abc123", refresh="def456", expires_at=None
+) -> dict:
+    """Return a minimal token dict for testing."""
+    return {
+        "access_token": access,
+        "refresh_token": refresh,
+        "expires_at": expires_at or int(time.time()) + 3600,
+    }
+
+
+def _mock_token(access="new_access", refresh="new_refresh", expires_at=99999):
+    """Return a MagicMock that behaves like a StravaFetcher Token."""
+    tok = MagicMock()
+    tok.access_token.get_secret_value.return_value = access
+    tok.refresh_token.get_secret_value.return_value = refresh
+    tok.expires_at = expires_at
+    return tok
+
+
+# ─── Token I/O ────────────────────────────────────────────────────────────
+
 
 class TestTokenHelpers:
-    """Tests for token load/save/validate helpers."""
+    """Tests for token load/save/validate helpers.
+
+    These write real JSON files because TokenPersistence reads the same
+    ``{access_token, refresh_token, expires_at}`` format.
+    """
 
     def test_load_token_valid(self, tmp_path):
         """Load a valid token file."""
         token_file = tmp_path / "token.json"
-        token_data = {
-            "access_token": "abc123",
-            "refresh_token": "def456",
-            "expires_at": int(time.time()) + 3600,
-        }
+        token_data = _sample_token_dict()
         token_file.write_text(json.dumps(token_data))
 
         result = _load_token(token_file)
@@ -49,11 +77,7 @@ class TestTokenHelpers:
     def test_save_token(self, tmp_path):
         """Save token creates file and directories."""
         token_file = tmp_path / "subdir" / "token.json"
-        token_data = {
-            "access_token": "abc",
-            "refresh_token": "def",
-            "expires_at": 12345,
-        }
+        token_data = _sample_token_dict(access="abc", refresh="def", expires_at=12345)
 
         _save_token(token_file, token_data)
 
@@ -61,18 +85,34 @@ class TestTokenHelpers:
         saved = json.loads(token_file.read_text())
         assert saved["access_token"] == "abc"
 
+    def test_save_then_load_roundtrip(self, tmp_path):
+        """Token survives a save → load round-trip."""
+        token_file = tmp_path / "token.json"
+        original = _sample_token_dict(access="rt_a", refresh="rt_r", expires_at=55555)
+
+        _save_token(token_file, original)
+        loaded = _load_token(token_file)
+
+        assert loaded == original
+
     def test_is_token_valid(self):
         """Token validity check."""
         # Valid token (expires in 1 hour)
-        assert _is_token_valid({"expires_at": time.time() + 3600})
+        assert _is_token_valid(_sample_token_dict(expires_at=int(time.time()) + 3600))
 
         # Expired token
-        assert not _is_token_valid({"expires_at": time.time() - 100})
+        assert not _is_token_valid(
+            _sample_token_dict(expires_at=int(time.time()) - 100)
+        )
 
         # About to expire (within buffer)
         assert not _is_token_valid(
-            {"expires_at": time.time() + 30}, buffer_seconds=60
+            _sample_token_dict(expires_at=int(time.time()) + 30),
+            buffer_seconds=60,
         )
+
+
+# ─── Authorize URL ────────────────────────────────────────────────────────
 
 
 class TestBuildAuthorizeUrl:
@@ -85,6 +125,9 @@ class TestBuildAuthorizeUrl:
         assert "response_type=code" in url
         assert "scope=profile:read_all,activity:read_all" in url
         assert "approval_prompt=force" in url
+
+
+# ─── Credentials ──────────────────────────────────────────────────────────
 
 
 class TestGetCredentials:
@@ -146,43 +189,43 @@ class TestGetCredentials:
             assert csecret == "cfg_secret"
 
 
-class TestExchangeCodeForToken:
-    """Tests for token exchange."""
+# ─── OAuth exchange / refresh ─────────────────────────────────────────────
 
-    @patch("activities_viewer.services.strava_oauth.requests")
-    def test_successful_exchange(self, mock_requests):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "access_token": "new_access",
-            "refresh_token": "new_refresh",
-            "expires_at": 99999,
-            "athlete": {"id": 1},
-        }
-        mock_resp.raise_for_status = MagicMock()
-        mock_requests.post.return_value = mock_resp
+
+class TestExchangeCodeForToken:
+    """Tests for token exchange — mocks StravaClient at the library boundary."""
+
+    @patch("strava_fetcher.StravaClient")
+    def test_successful_exchange(self, mock_client_cls):
+        mock_client = MagicMock()
+        mock_client.exchange_auth_code_for_token.return_value = _mock_token(
+            access="new_access", refresh="new_refresh", expires_at=99999,
+        )
+        mock_client_cls.return_value = mock_client
 
         result = _exchange_code_for_token("cid", "csecret", "auth_code")
+
         assert result["access_token"] == "new_access"
         assert result["refresh_token"] == "new_refresh"
         assert result["expires_at"] == 99999
+        mock_client.exchange_auth_code_for_token.assert_called_once_with(
+            "auth_code"
+        )
 
-        call_args = mock_requests.post.call_args
-        assert call_args[1]["data"]["grant_type"] == "authorization_code"
-        assert call_args[1]["data"]["code"] == "auth_code"
-
-    @patch("activities_viewer.services.strava_oauth.requests")
-    def test_successful_refresh(self, mock_requests):
-        mock_resp = MagicMock()
-        mock_resp.json.return_value = {
-            "access_token": "refreshed_access",
-            "refresh_token": "refreshed_refresh",
-            "expires_at": 88888,
-        }
-        mock_resp.raise_for_status = MagicMock()
-        mock_requests.post.return_value = mock_resp
+    @patch("strava_fetcher.StravaClient")
+    def test_successful_refresh(self, mock_client_cls):
+        mock_client = MagicMock()
+        mock_client.refresh_token.return_value = _mock_token(
+            access="refreshed_access", refresh="refreshed_refresh", expires_at=88888,
+        )
+        mock_client_cls.return_value = mock_client
 
         result = _refresh_token("cid", "csecret", "old_refresh")
-        assert result["access_token"] == "refreshed_access"
 
-        call_args = mock_requests.post.call_args
-        assert call_args[1]["data"]["grant_type"] == "refresh_token"
+        assert result["access_token"] == "refreshed_access"
+        assert result["refresh_token"] == "refreshed_refresh"
+        assert result["expires_at"] == 88888
+
+        # Verify refresh_token was called with a SecretStr wrapping the value
+        call_args = mock_client.refresh_token.call_args
+        assert call_args[0][0].get_secret_value() == "old_refresh"
