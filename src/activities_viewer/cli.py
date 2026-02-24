@@ -49,7 +49,13 @@ def configure_logging(verbose: bool = False) -> None:
 def main():
     """ActivitiesViewer - Streamlit dashboard for cycling activities analysis.
 
-    Quick start: activities-viewer run --config config.yaml
+    Quick start (viewer only, pre-analyzed data):
+
+        activities-viewer run --config examples/config.yaml
+
+    Full pipeline (fetch + analyze + view):
+
+        activities-viewer sync --config examples/unified_config.yaml
     """
 
 
@@ -72,10 +78,16 @@ def main():
     help="Port to run Streamlit on",
 )
 def run(config: Path, verbose: bool, port: int) -> None:
-    """Start the ActivitiesViewer Streamlit dashboard.
+    """Start the ActivitiesViewer Streamlit dashboard (viewer only).
 
     Loads configuration from the specified YAML file and starts the
     interactive dashboard for analyzing cycling activities.
+
+    This command only launches the viewer — it does NOT fetch or analyze data.
+    To fetch new data from Strava and run the full pipeline, use the sync
+    command with a unified config instead:
+
+        activities-viewer sync --config examples/unified_config.yaml
     """
     configure_logging(verbose)
     logger = logging.getLogger(__name__)
