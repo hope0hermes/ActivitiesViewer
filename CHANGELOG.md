@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-02-24
+
+### Changed
+- feat: align config field names and eliminate field_map (Phase 7) (#14)
+
+
 ## [1.5.0] - 2026-02-24
 
 ### Changed

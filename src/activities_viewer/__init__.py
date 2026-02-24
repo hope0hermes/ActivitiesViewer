@@ -6,7 +6,7 @@ cycling activities data from Strava, including power metrics, training load,
 and performance trends.
 """
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 __author__ = "Israel Barragan"
 __email__ = "abraham0vidal@gmail.com"
 
