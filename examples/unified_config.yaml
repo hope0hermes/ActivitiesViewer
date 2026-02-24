@@ -1,0 +1,96 @@
+# ============================================================================
+# UNIFIED PIPELINE CONFIGURATION (ActivitiesViewer)
+# ============================================================================
+#
+# This file configures the full fetch → analyze → view pipeline in a single
+# config.  Use it with the `sync` command:
+#
+#   activities-viewer sync --config unified_config.yaml
+#
+# This will:
+#   1. Fetch new activities from the Strava API (via strava-fetcher)
+#   2. Analyze and enrich the data (via strava-analyzer)
+#   3. Launch the Streamlit dashboard
+#
+# For a viewer-only config (no fetching/analysis), see config.yaml instead.
+# ============================================================================
+
+# --- Shared Data Directory ---
+# All three stages (fetch, analyze, view) share this directory.
+# Fetcher writes raw data here, Analyzer reads/writes enriched CSVs,
+# and Viewer reads the enriched data for display.
+data_dir: "~/strava-data"
+
+# ============================================================================
+# ATHLETE PROFILE
+# ============================================================================
+# Your physiological metrics — used by both the Analyzer and the Viewer.
+# Field names match StravaAnalyzer's Settings directly.
+
+athlete:
+  # Functional Threshold Power in watts (required)
+  ftp: 285.0
+
+  # Athlete weight in kilograms (required)
+  # Note: "weight_kg" is also accepted for backward compatibility.
+  rider_weight_kg: 77.0
+
+  # Maximum heart rate in bpm
+  max_hr: 185
+
+  # ---- Optional athlete fields ----
+  # Uncomment and set these if you have the data:
+  # fthr: 170            # Functional Threshold Heart Rate (bpm)
+  # ftpace: 300          # Functional Threshold Pace (sec/km, for running)
+  # cp: 260              # Critical Power (watts, typically 85-90% of FTP)
+  # w_prime: 25000       # W' anaerobic work capacity (joules, typical: 15k-30k)
+  # lt1_power: 210       # Lactate Threshold 1 power (watts)
+  # lt2_power: 270       # Lactate Threshold 2 power (watts)
+  # lt1_hr: 135          # Lactate Threshold 1 heart rate (bpm)
+  # lt2_hr: 160          # Lactate Threshold 2 heart rate (bpm)
+
+# ============================================================================
+# STRAVA FETCHER SETTINGS
+# ============================================================================
+# Credentials for the Strava API.  Get yours at:
+#   https://www.strava.com/settings/api
+#
+# IMPORTANT: Never commit real credentials to version control!
+# You can also use environment variables instead:
+#   export STRAVA_CLIENT_ID="your_id"
+#   export STRAVA_CLIENT_SECRET="your_secret"
+
+fetcher:
+  client_id: "your_client_id_here"
+  client_secret: "your_client_secret_here"
+
+  # ---- Optional sync settings ----
+  # max_pages: 50                    # Max API pages to fetch (default: unlimited)
+  # retry_interval_seconds: 300      # Seconds to wait on rate-limit (default: 300)
+  # skip_trainer_activities: false    # Skip indoor trainer rides (default: false)
+
+# ============================================================================
+# STRAVA ANALYZER SETTINGS
+# ============================================================================
+# Optional overrides for the analysis engine.
+# Most users can leave this section empty or commented out.
+
+analyzer:
+  # ctl_days: 42        # Chronic Training Load window (default: 42)
+  # atl_days: 7         # Acute Training Load window (default: 7)
+
+# ============================================================================
+# VIEWER SETTINGS
+# ============================================================================
+# Dashboard display configuration.
+
+viewer:
+  page_title: "Activities Viewer"
+  page_icon: "🚴"
+  cache_ttl: 3600       # Cache time-to-live in seconds (1 hour)
+
+  # ---- Optional goal tracking ----
+  # target_wkg: 4.0
+  # target_date: "2025-08-01"
+  # baseline_ftp: 285
+  # baseline_date: "2024-12-01"
