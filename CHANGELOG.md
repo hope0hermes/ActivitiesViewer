@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-02-24
+
+### Changed
+- fix: remove stale VERSION file and add unified config example (#16)
+
+
 ## [1.6.0] - 2026-02-24
 
 ### Changed
