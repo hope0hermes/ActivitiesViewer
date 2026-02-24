@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-02-24
+
+### Changed
+- feat: sync Activity model + add contract tests (Phase 4+5) (#9)
+
+
 ## [1.3.0] - 2026-02-24
 
 ### Changed
