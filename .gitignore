@@ -56,6 +56,7 @@ Thumbs.db
 *.json
 !tests/fixtures/*.csv
 !tests/fixtures/*.json
+!tests/fixtures/**/*.csv
 
 # Qdrant vector database
 data/segment_db/
