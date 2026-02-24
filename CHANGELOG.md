@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-02-24
+
+### Changed
+- feat: delegate OAuth to StravaFetcher library (Phase 3) (#8)
+
+
 ## [1.2.0] - 2026-02-22
 
 ### Changed
