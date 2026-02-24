@@ -512,6 +512,20 @@ class Activity(BaseModel):
     lt1_hr: float | None = Field(default=None, description="LT1 heart rate")
     lt2_hr: float | None = Field(default=None, description="LT2 heart rate")
 
+    # Settings snapshot (stamped per-activity by Analyzer)
+    rider_weight_kg: float | None = Field(
+        default=None, description="Rider weight used for analysis (kg)"
+    )
+    settings_max_hr: float | None = Field(
+        default=None, description="Max HR setting used for analysis"
+    )
+    settings_cp: float | None = Field(
+        default=None, description="Critical Power setting used for analysis (W)"
+    )
+    settings_w_prime: float | None = Field(
+        default=None, description="W' setting used for analysis (J)"
+    )
+
     # ═══════════════════════════════════════════════════════════════════════════
     # POWER CURVE (Peak Powers at various durations)
     # ═══════════════════════════════════════════════════════════════════════════
@@ -552,6 +566,9 @@ class Activity(BaseModel):
         default=None, description="Peak 30min power"
     )
     power_curve_1hr: float | None = Field(default=None, description="Peak 1hr power")
+    power_curve_90min: float | None = Field(
+        default=None, description="Peak 90min power"
+    )
 
     # ═══════════════════════════════════════════════════════════════════════════
     # VALIDATORS
