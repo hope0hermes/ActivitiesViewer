@@ -284,13 +284,13 @@ def main():
         latest = weight_df.iloc[-1]["weight_kg"]
         col1, col2 = st.columns(2)
         with col1:
-            st.metric("Current Weight (config)", f"{settings.weight_kg:.1f} kg")
+            st.metric("Current Weight (config)", f"{settings.rider_weight_kg:.1f} kg")
         with col2:
             st.metric(
                 "Latest from data",
                 f"{latest:.1f} kg",
-                delta=f"{latest - settings.weight_kg:+.1f} kg"
-                if abs(latest - settings.weight_kg) > 0.1 else None,
+                delta=f"{latest - settings.rider_weight_kg:+.1f} kg"
+                if abs(latest - settings.rider_weight_kg) > 0.1 else None,
             )
 
         fig = go.Figure()
@@ -302,10 +302,10 @@ def main():
             line={"color": "#2ca02c"},
         ))
         fig.add_hline(
-            y=settings.weight_kg,
+            y=settings.rider_weight_kg,
             line_dash="dash",
             line_color="gray",
-            annotation_text=f"Config: {settings.weight_kg:.1f} kg",
+            annotation_text=f"Config: {settings.rider_weight_kg:.1f} kg",
         )
         fig.update_layout(
             title="Weight Over Time",
@@ -350,10 +350,10 @@ def main():
 
     if not weight_df.empty:
         latest_w = weight_df.iloc[-1]["weight_kg"]
-        if abs(latest_w - settings.weight_kg) > 1.0:
+        if abs(latest_w - settings.rider_weight_kg) > 1.0:
             recommendations.append(
                 f"**Weight:** Your latest recorded weight ({latest_w:.1f} kg) "
-                f"differs from your config ({settings.weight_kg:.1f} kg) "
+                f"differs from your config ({settings.rider_weight_kg:.1f} kg) "
                 f"by more than 1 kg. Consider updating."
             )
 
@@ -368,8 +368,8 @@ def main():
         recent_ftp = ftp_df.loc[
             ftp_df["date"] >= ftp_df["date"].max() - pd.Timedelta(days=42)
         ]["estimated_ftp"].max()
-        current_wkg = settings.ftp / settings.weight_kg
-        est_wkg = recent_ftp / settings.weight_kg
+        current_wkg = settings.ftp / settings.rider_weight_kg
+        est_wkg = recent_ftp / settings.rider_weight_kg
 
         st.divider()
         st.subheader("🏋️ W/kg Summary")

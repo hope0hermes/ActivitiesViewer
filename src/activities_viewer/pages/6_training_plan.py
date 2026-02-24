@@ -81,7 +81,7 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                 "Weight (kg)",
                 min_value=40.0,
                 max_value=150.0,
-                value=settings.weight_kg if settings.weight_kg else 75.0,
+                value=settings.rider_weight_kg if settings.rider_weight_kg else 75.0,
                 step=0.5,
             )
 
@@ -871,14 +871,14 @@ def main():
                 if st.button("Generate Plan from Config"):
                     try:
                         target_date = datetime.strptime(settings.target_date, "%Y-%m-%d")
-                        target_ftp = settings.target_wkg * settings.weight_kg
+                        target_ftp = settings.target_wkg * settings.rider_weight_kg
 
                         plan = plan_service.generate_plan(
                             start_date=datetime.now(),
                             end_date=target_date,
                             start_ftp=settings.ftp,
                             target_ftp=target_ftp,
-                            weight_kg=settings.weight_kg,
+                            weight_kg=settings.rider_weight_kg,
                             hours_per_week=getattr(settings, "weekly_hours_available", 10.0),
                             key_events=getattr(settings, "key_events", []),
                             current_ctl=50.0,

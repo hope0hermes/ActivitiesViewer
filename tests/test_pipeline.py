@@ -18,7 +18,7 @@ MINIMAL_UNIFIED = {
     "data_dir": "/tmp/test-data",
     "athlete": {
         "ftp": 280.0,
-        "weight_kg": 75.0,
+        "rider_weight_kg": 75.0,
         "max_hr": 190,
     },
     "fetcher": {
@@ -185,7 +185,7 @@ class TestBuildAnalyzerSettings:
             "ftp": 300,
             "fthr": 175,
             "max_hr": 195,
-            "weight_kg": 80,
+            "rider_weight_kg": 80,
             "cp": 260,
             "w_prime": 25000,
             "lt1_power": 210,
@@ -222,7 +222,7 @@ class TestGenerateViewerSettingsDict:
     def test_athlete_fields(self, orchestrator):
         cfg = orchestrator.generate_viewer_settings_dict()
         assert cfg["ftp"] == 280.0
-        assert cfg["weight_kg"] == 75.0
+        assert cfg["rider_weight_kg"] == 75.0
         assert cfg["max_hr"] == 190
 
     def test_viewer_overrides(self, orchestrator):
