@@ -82,8 +82,8 @@ class PipelineOrchestrator:
     def _build_analyzer_settings(self) -> Any:
         """Construct a StravaAnalyzer ``Settings`` object from unified config.
 
-        Maps fields from the unified config (``athlete:`` section) to
-        StravaAnalyzer's expected names (e.g. ``weight_kg`` → ``rider_weight_kg``).
+        Passes ``athlete:`` fields directly to StravaAnalyzer's Settings — both
+        use the same field names (e.g. ``rider_weight_kg``, ``ftp``).
 
         Returns:
             A ``strava_analyzer.Settings`` instance.
@@ -100,23 +100,8 @@ class PipelineOrchestrator:
             "processed_data_dir": str(self.data_dir),
         }
 
-        # Athlete fields → analyzer field names
-        field_map = {
-            "ftp": "ftp",
-            "fthr": "fthr",
-            "max_hr": "max_hr",
-            "weight_kg": "rider_weight_kg",
-            "ftpace": "ftpace",
-            "cp": "cp",
-            "w_prime": "w_prime",
-            "lt1_power": "lt1_power",
-            "lt2_power": "lt2_power",
-            "lt1_hr": "lt1_hr",
-            "lt2_hr": "lt2_hr",
-        }
-        for src, dst in field_map.items():
-            if src in self.athlete:
-                cfg[dst] = self.athlete[src]
+        # Athlete fields pass through directly — names are aligned with Analyzer
+        cfg.update(self.athlete)
 
         # Merge analyzer-specific overrides (ctl_days, atl_days, etc.)
         for key, value in self.analyzer.items():
@@ -142,8 +127,8 @@ class PipelineOrchestrator:
         viewer_cfg["activity_summary_file"] = "activity_summary.json"
         viewer_cfg["streams_dir"] = "Streams"
 
-        # Athlete fields → viewer field names (same names for most)
-        for key in ("ftp", "max_hr", "weight_kg", "cp", "w_prime"):
+        # Athlete fields → viewer (names are aligned, pass through directly)
+        for key in ("ftp", "max_hr", "rider_weight_kg", "cp", "w_prime"):
             if key in self.athlete:
                 viewer_cfg[key] = self.athlete[key]
 

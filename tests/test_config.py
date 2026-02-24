@@ -13,7 +13,7 @@ def test_settings_has_required_attributes():
     assert hasattr(settings, "activity_summary_file")
     assert hasattr(settings, "streams_dir")
     assert hasattr(settings, "ftp")
-    assert hasattr(settings, "weight_kg")
+    assert hasattr(settings, "rider_weight_kg")
     assert hasattr(settings, "max_hr")
     assert hasattr(settings, "page_title")
     assert hasattr(settings, "page_icon")
@@ -23,8 +23,20 @@ def test_settings_user_values_are_numeric():
     """Test that user settings have correct types."""
     settings = Settings()
     assert isinstance(settings.ftp, float)
-    assert isinstance(settings.weight_kg, float)
+    assert isinstance(settings.rider_weight_kg, float)
     assert isinstance(settings.max_hr, int)
+
+
+def test_weight_kg_backward_compatibility():
+    """Test that the old 'weight_kg' key is accepted via validation alias."""
+    settings = Settings(**{"weight_kg": 80.0})
+    assert settings.rider_weight_kg == 80.0
+
+
+def test_rider_weight_kg_takes_precedence():
+    """Test that 'rider_weight_kg' is accepted directly."""
+    settings = Settings(**{"rider_weight_kg": 82.5})
+    assert settings.rider_weight_kg == 82.5
 
 
 def test_settings_get_stream_path():

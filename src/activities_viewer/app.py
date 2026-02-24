@@ -184,7 +184,7 @@ def main():
             goal = Goal(
                 target_wkg=settings.target_wkg,
                 target_date=target_date,
-                start_wkg=baseline_ftp / settings.weight_kg,
+                start_wkg=baseline_ftp / settings.rider_weight_kg,
                 start_date=baseline_date,
             )
 
@@ -195,7 +195,7 @@ def main():
             render_goal_progress_card(
                 goal=goal,
                 current_ftp=settings.ftp,
-                weight_kg=settings.weight_kg,
+                weight_kg=settings.rider_weight_kg,
                 goal_service=goal_service,
             )
 
@@ -280,7 +280,7 @@ def main():
 
         with st.expander("⚙️ Athlete Settings", expanded=False):
             st.metric("FTP", f"{settings.ftp:.0f} W")
-            st.metric("Weight", f"{settings.weight_kg:.1f} kg")
+            st.metric("Weight", f"{settings.rider_weight_kg:.1f} kg")
             st.metric("Max HR", f"{settings.max_hr} bpm")
 
         st.divider()

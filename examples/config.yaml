@@ -27,8 +27,9 @@ streams_dir: "Streams"
 # Your Functional Threshold Power in watts
 ftp: 285.0
 
-# Your body weight in kilograms
-weight_kg: 77.0
+# Athlete weight in kilograms (StravaAnalyzer field name)
+# Backward compatible: "weight_kg" is also accepted
+rider_weight_kg: 77.0
 
 # Your maximum heart rate in bpm
 max_hr: 185

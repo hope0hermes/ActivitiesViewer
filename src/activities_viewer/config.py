@@ -9,7 +9,7 @@ import logging
 from pathlib import Path
 
 import yaml
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ class Settings(BaseSettings):
         env_prefix="ACTIVITIES_VIEWER_",
         env_file=".env",
         extra="ignore",
+        populate_by_name=True,
     )
 
     # --- File Paths ---
@@ -76,9 +77,10 @@ class Settings(BaseSettings):
         ge=0,
         description="W-prime (anaerobic capacity) in joules (0 = disabled). Typical: 15,000-30,000 J",
     )
-    weight_kg: float = Field(
+    rider_weight_kg: float = Field(
         default=77.0,
         gt=0,
+        validation_alias=AliasChoices("rider_weight_kg", "weight_kg"),
         description="Athlete weight in kilograms",
     )
     max_hr: int = Field(
@@ -308,7 +310,7 @@ class Settings(BaseSettings):
             "activity_summary_file": str(self.activity_summary_file),
             "streams_dir": str(self.streams_dir),
             "ftp": self.ftp,
-            "weight_kg": self.weight_kg,
+            "rider_weight_kg": self.rider_weight_kg,
             "max_hr": self.max_hr,
             "cache_ttl": self.cache_ttl,
         }
@@ -323,7 +325,7 @@ class Settings(BaseSettings):
             "activity_summary_file": str(self.activity_summary_file),
             "streams_dir": str(self.streams_dir),
             "ftp": self.ftp,
-            "weight_kg": self.weight_kg,
+            "rider_weight_kg": self.rider_weight_kg,
             "max_hr": self.max_hr,
             "target_wkg": self.target_wkg,
             "target_date": self.target_date,
@@ -374,7 +376,9 @@ def load_settings(config_file: Path | None = None) -> Settings:
             yaml_data["training_plan_file"] = str(plan_path.resolve())
         else:
             # Default to training_plan.json in config file directory
-            yaml_data["training_plan_file"] = str((config_file.parent / "training_plan.json").resolve())
+            yaml_data["training_plan_file"] = str(
+                (config_file.parent / "training_plan.json").resolve()
+            )
 
         logger.debug(f"Loaded YAML configuration: {yaml_data}")
         return Settings(**yaml_data)
