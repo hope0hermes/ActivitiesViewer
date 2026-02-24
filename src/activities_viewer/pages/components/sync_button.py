@@ -113,8 +113,9 @@ def render_sync_button() -> None:
             st.info(
                 "💡 To enable in-app sync, launch with a unified config:\n\n"
                 "```\n"
-                "activities-viewer sync --config unified_config.yaml\n"
-                "```"
+                "activities-viewer sync --config examples/unified_config.yaml\n"
+                "```\n\n"
+                "See `examples/unified_config.yaml` for the required format."
             )
             return
 
