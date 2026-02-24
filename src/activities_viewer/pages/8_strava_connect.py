@@ -8,8 +8,8 @@ Strava's redirect and exchanges it for an access token.
 
 import time
 
-import requests
 import streamlit as st
+from strava_fetcher.exceptions import APIError as _APIError
 
 from activities_viewer.services.strava_oauth import (
     _build_authorize_url,
@@ -62,11 +62,8 @@ def main():
                     # Clear the code from URL
                     st.query_params.clear()
                     st.rerun()
-                except requests.HTTPError as e:
-                    st.error(
-                        f"Failed to exchange code: {e.response.status_code} "
-                        f"— {e.response.text}"
-                    )
+                except _APIError as e:
+                    st.error(f"Failed to exchange code: {e}")
                 except Exception as e:
                     st.error(f"Token exchange failed: {e}")
         return

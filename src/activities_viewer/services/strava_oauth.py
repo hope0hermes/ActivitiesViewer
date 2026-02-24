@@ -1,26 +1,58 @@
 """
 Strava OAuth helper functions.
 
+Delegates token I/O and OAuth exchange to StravaFetcher's library API.
 Pure functions for token management and OAuth flow, separated from
 the Streamlit page for testability.
+
+All functions maintain the same dict-based public API so callers
+(pages/8_strava_connect.py) require zero changes.
 """
 
-import json
 import os
-import time
 from pathlib import Path
-
-import requests
 
 # ─── Constants ────────────────────────────────────────────────────────────
 
-STRAVA_OAUTH_URL = "https://www.strava.com/oauth"
-STRAVA_AUTHORIZE_URL = f"{STRAVA_OAUTH_URL}/authorize"
-STRAVA_TOKEN_URL = f"{STRAVA_OAUTH_URL}/token"
+STRAVA_AUTHORIZE_URL = "https://www.strava.com/oauth/authorize"
 SCOPES = "profile:read_all,activity:read_all"
 
 
-# ─── Token helpers ────────────────────────────────────────────────────────
+# ─── Internal helpers ─────────────────────────────────────────────────────
+
+
+def _build_api_settings(client_id: str, client_secret: str):
+    """Construct a ``StravaAPISettings`` for the StravaFetcher client.
+
+    Uses lazy import so the module loads even if strava-fetcher is not installed.
+    """
+    from strava_fetcher import StravaAPISettings
+
+    return StravaAPISettings(client_id=client_id, client_secret=client_secret)
+
+
+def _token_to_dict(token) -> dict:
+    """Convert a StravaFetcher ``Token`` model to a plain dict."""
+    return {
+        "access_token": token.access_token.get_secret_value(),
+        "refresh_token": token.refresh_token.get_secret_value(),
+        "expires_at": token.expires_at,
+    }
+
+
+def _dict_to_token(token_data: dict):
+    """Convert a plain dict to a StravaFetcher ``Token`` model."""
+    from pydantic import SecretStr
+    from strava_fetcher import Token
+
+    return Token(
+        access_token=SecretStr(token_data["access_token"]),
+        refresh_token=SecretStr(token_data["refresh_token"]),
+        expires_at=token_data.get("expires_at", 0),
+    )
+
+
+# ─── Token path resolution (Viewer-specific) ─────────────────────────────
 
 
 def _get_token_path(settings=None) -> Path:
@@ -49,31 +81,46 @@ def _get_token_path(settings=None) -> Path:
     return Path.home() / ".strava_fetcher" / "data" / "token.json"
 
 
+# ─── Token I/O (delegates to StravaFetcher TokenPersistence) ──────────────
+
+
 def _load_token(token_path: Path) -> dict | None:
-    """Load token from disk. Returns None if missing or invalid."""
-    if not token_path.exists():
+    """Load token from disk using StravaFetcher's ``TokenPersistence``.
+
+    Returns:
+        Token data dict, or None if file missing/invalid.
+    """
+    from strava_fetcher import TokenPersistence
+
+    tp = TokenPersistence(token_path)
+    token = tp.read()
+    if token is None:
         return None
-    try:
-        with open(token_path) as f:
-            data = json.load(f)
-        if "access_token" in data and "refresh_token" in data:
-            return data
-    except (json.JSONDecodeError, OSError):
-        pass
-    return None
+    return _token_to_dict(token)
 
 
 def _save_token(token_path: Path, token_data: dict) -> None:
-    """Save token to disk."""
-    token_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(token_path, "w") as f:
-        json.dump(token_data, f, indent=4)
+    """Save token to disk using StravaFetcher's ``TokenPersistence``."""
+    from strava_fetcher import TokenPersistence
+
+    token = _dict_to_token(token_data)
+    tp = TokenPersistence(token_path)
+    tp.write(token)
+
+
+# ─── Token validation (delegates to Token.is_expired) ─────────────────────
 
 
 def _is_token_valid(token: dict, buffer_seconds: int = 60) -> bool:
-    """Check if token is still valid (not expired)."""
-    expires_at = token.get("expires_at", 0)
-    return time.time() < (expires_at - buffer_seconds)
+    """Check if token is still valid (not expired).
+
+    Uses StravaFetcher's ``Token.is_expired()`` for consistent logic.
+    """
+    t = _dict_to_token(token)
+    return not t.is_expired(buffer_seconds=buffer_seconds)
+
+
+# ─── OAuth exchange (delegates to StravaClient) ──────────────────────────
 
 
 def _exchange_code_for_token(
@@ -90,25 +137,14 @@ def _exchange_code_for_token(
         Token data dict with access_token, refresh_token, expires_at.
 
     Raises:
-        requests.HTTPError: If token exchange fails.
+        strava_fetcher.exceptions.APIError: If token exchange fails.
     """
-    resp = requests.post(
-        STRAVA_TOKEN_URL,
-        data={
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "code": code,
-            "grant_type": "authorization_code",
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return {
-        "access_token": data["access_token"],
-        "refresh_token": data["refresh_token"],
-        "expires_at": data["expires_at"],
-    }
+    from strava_fetcher import StravaClient
+
+    api_settings = _build_api_settings(client_id, client_secret)
+    client = StravaClient(api_settings)
+    token = client.exchange_auth_code_for_token(code)
+    return _token_to_dict(token)
 
 
 def _refresh_token(
@@ -116,26 +152,27 @@ def _refresh_token(
 ) -> dict:
     """Refresh an expired access token.
 
+    Args:
+        client_id: Strava API client ID.
+        client_secret: Strava API client secret.
+        refresh_token: Current refresh token string.
+
     Returns:
         New token data dict.
+
+    Raises:
+        strava_fetcher.exceptions.APIError: If token refresh fails.
     """
-    resp = requests.post(
-        STRAVA_TOKEN_URL,
-        data={
-            "client_id": client_id,
-            "client_secret": client_secret,
-            "refresh_token": refresh_token,
-            "grant_type": "refresh_token",
-        },
-        timeout=15,
-    )
-    resp.raise_for_status()
-    data = resp.json()
-    return {
-        "access_token": data["access_token"],
-        "refresh_token": data["refresh_token"],
-        "expires_at": data["expires_at"],
-    }
+    from pydantic import SecretStr
+    from strava_fetcher import StravaClient
+
+    api_settings = _build_api_settings(client_id, client_secret)
+    client = StravaClient(api_settings)
+    token = client.refresh_token(SecretStr(refresh_token))
+    return _token_to_dict(token)
+
+
+# ─── Credentials (Viewer-specific, unchanged) ────────────────────────────
 
 
 def _get_credentials() -> tuple[str, str]:
@@ -162,7 +199,6 @@ def _get_credentials() -> tuple[str, str]:
                 with open(config_path) as f:
                     config = yaml.safe_load(f)
                 fetcher = config.get("fetcher", {})
-                # Credentials live directly under fetcher: in the unified config
                 client_id = client_id or str(fetcher.get("client_id", ""))
                 client_secret = client_secret or str(
                     fetcher.get("client_secret", "")
@@ -173,8 +209,16 @@ def _get_credentials() -> tuple[str, str]:
     return client_id, client_secret
 
 
+# ─── Authorize URL (Viewer-specific, unchanged) ──────────────────────────
+
+
 def _build_authorize_url(client_id: str, redirect_uri: str) -> str:
-    """Build the Strava authorization URL."""
+    """Build the Strava authorization URL.
+
+    Note: StravaClient.get_authorization_url() exists but hardcodes
+    ``redirect_uri=http://localhost``. We build the URL manually to
+    support Streamlit's custom redirect URI.
+    """
     return (
         f"{STRAVA_AUTHORIZE_URL}"
         f"?client_id={client_id}"
