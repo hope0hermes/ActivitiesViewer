@@ -991,7 +991,7 @@ class ActivityContextBuilder:
                 ]
                 hist, _ = np.histogram(vals_30, bins=bins)
                 output += "\nHR DISTRIBUTION — best 30-min rolling average per activity:\n"
-                for lbl, cnt in zip(hist_labels, hist):
+                for lbl, cnt in zip(hist_labels, hist, strict=True):
                     bar = "█" * min(cnt, 40)
                     output += f"  {lbl:>8s}: {cnt:4d}  {bar}\n"
 
