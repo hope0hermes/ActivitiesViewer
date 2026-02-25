@@ -95,7 +95,8 @@ def main():
 | Efficiency factor | Aerobic fitness trend |
 | Weekly summaries | Last 4 weeks |
 | Recent activities | Last 5 activities with detailed metrics |
-| Stream data | Power/HR/cadence/speed/altitude for referenced activities |
+| **Streams overview** | Best sustained HR & power per duration (1–60 min) + HR histogram, from **all** stream files |
+| Stream deep-dive | Full second-by-second power/HR/cadence/altitude for specifically referenced activities |
 | GPS & route | Waypoints with reverse-geocoded locations (when available) |
 
 **What it retrieves:**
@@ -312,19 +313,25 @@ def main():
                 - Reference key events and taper periods
                 If no plan is present, suggest the user generate one on the Training Plan page.
 
-                STREAM DATA: You DO have access to detailed second-by-second stream data.
-                - When the user asks about heart rate, power, cadence, zones, or similar
-                  physiological metrics, the context automatically includes stream data for
-                  the most recent activity. USE this data — do not claim you cannot see it.
-                - For any other specific activity, stream data is included when the user
-                  references it (by name, date, "last ride", activity ID, etc.).
-                - Stream data includes: power, heart rate, cadence, speed, altitude, GPS.
-                - If stream data IS present in the context above, analyse it directly.
-                - If the user wants a different activity's stream, ask them to name it
-                  (e.g. "show me yesterday's ride" or the activity name/date).
-                - GPS coordinates (latitude/longitude) with waypoints and route analysis
-                - Segment analysis showing climbs with their GPS locations
-                Use this data for route-specific analysis and location-based insights.
+                STREAM DATA: You have TWO levels of stream access:
+
+                1. STREAMS DIRECTORY OVERVIEW (always present in every context):
+                   Fleet-level analytics computed from ALL activities with stream files:
+                   best sustained HR and power per duration window (1–60 min rolling
+                   averages) and HR distribution histogram. ALWAYS check the
+                   "STREAMS DIRECTORY OVERVIEW" section in the context before making
+                   any claims about physiological capacity. Use it to answer questions
+                   like "can I sustain 180 bpm for 30 min?", "what is my peak 20-min
+                   power?", "show my HR distribution", or any cross-activity comparison.
+
+                2. INDIVIDUAL STREAM DEEP-DIVE (included when an activity is referenced):
+                   Full second-by-second power, HR, cadence, speed, altitude and GPS
+                   when the user names a specific activity, date, "last ride", activity
+                   ID, OR asks a general physiological question (auto-attaches the most
+                   recent activity). USE this data — do not claim you cannot see it.
+                   - GPS coordinates with waypoints and reverse-geocoded street names
+                   - Segment analysis showing climbs and their GPS locations
+                   Use this for single-activity deep-dives and route analysis.
 
                 LONG-TERM MEMORY: You may have consolidated memory summaries from earlier
                 coaching sessions. These contain key athlete insights, prior advice, and

@@ -304,3 +304,7 @@ class CSVActivityRepository(ActivityRepository):
             return pd.read_csv(stream_file, sep=";")
         except Exception:
             return pd.DataFrame()
+
+    def get_streams_dir(self) -> Path | None:
+        """Return the configured streams directory, or None if not set."""
+        return self.streams_dir
