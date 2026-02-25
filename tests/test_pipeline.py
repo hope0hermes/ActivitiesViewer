@@ -147,6 +147,43 @@ class TestBuildFetcherSettings:
         kw = mock_settings_cls.call_args[1]
         assert kw["strava_api"] == {}
 
+    @patch("strava_fetcher.Settings")
+    def test_token_file_forwarded(self, mock_settings_cls, tmp_path):
+        """Explicit fetcher.token_file is forwarded to paths to avoid re-auth."""
+        config = MINIMAL_UNIFIED.copy()
+        config["fetcher"] = {
+            "client_id": "x",
+            "client_secret": "y",
+            "token_file": "~/.strava_fetcher/data/token.json",
+        }
+        orch = PipelineOrchestrator(config, tmp_path)
+        orch._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        expected = str(Path("~/.strava_fetcher/data/token.json").expanduser())
+        assert kw["paths"]["token_file"] == expected
+
+    @patch("strava_fetcher.Settings")
+    def test_no_token_file_when_not_specified(self, mock_settings_cls, tmp_path):
+        """When token_file is absent the paths dict only contains data_dir."""
+        config = MINIMAL_UNIFIED.copy()
+        config["fetcher"] = {"client_id": "x", "client_secret": "y"}
+        orch = PipelineOrchestrator(config, tmp_path)
+        orch._build_fetcher_settings()
+        kw = mock_settings_cls.call_args[1]
+        assert "token_file" not in kw["paths"]
+
+    def test_default_data_dir_matches_strava_fetcher(self, tmp_path):
+        """When data_dir is omitted the default equals StravaFetcher's own default."""
+        config = {
+            "athlete": {"ftp": 280.0},
+            "fetcher": {},
+            "analyzer": {},
+            "viewer": {},
+        }
+        orch = PipelineOrchestrator(config, tmp_path)
+        expected = Path("~/.strava_fetcher/data").expanduser()
+        assert orch.data_dir == expected
+
 
 # ─── _build_analyzer_settings ─────────────────────────────────────────────
 
@@ -255,7 +292,8 @@ class TestDataDirResolution:
     def test_default_data_dir(self, tmp_path):
         config = {}  # no data_dir key
         orch = PipelineOrchestrator(config, tmp_path)
-        assert orch.data_dir == Path.home() / "strava-data"
+        # Default matches StravaFetcher's own default so existing tokens are found
+        assert orch.data_dir == Path.home() / ".strava_fetcher" / "data"
 
 
 # ─── run_fetch ────────────────────────────────────────────────────────────

@@ -37,8 +37,10 @@ class PipelineOrchestrator:
         self.config = unified_config
         self.config_dir = config_dir.resolve()
 
-        # Resolve the shared data directory
-        raw_data_dir = self.config.get("data_dir", "~/strava-data")
+        # Resolve the shared data directory.
+        # Default matches StravaFetcher's own default so the cached token at
+        # ~/.strava_fetcher/data/token.json is found without re-authorization.
+        raw_data_dir = self.config.get("data_dir", "~/.strava_fetcher/data")
         self.data_dir = Path(raw_data_dir).expanduser()
         if not self.data_dir.is_absolute():
             self.data_dir = (self.config_dir / self.data_dir).resolve()
@@ -55,6 +57,12 @@ class PipelineOrchestrator:
 
     def _build_fetcher_settings(self) -> Any:
         """Construct a StravaFetcher ``Settings`` object from unified config.
+
+        The ``paths.data_dir`` is taken from the top-level ``data_dir`` key
+        (defaulting to ``~/.strava_fetcher/data`` — StravaFetcher's own
+        default).  An explicit ``fetcher.token_file`` override is forwarded
+        so users who keep the token outside ``data_dir`` don't have to
+        re-authorize on every launch.
 
         Returns:
             A ``strava_fetcher.Settings`` instance.
@@ -73,9 +81,18 @@ class PipelineOrchestrator:
         sync_keys = ("max_pages", "retry_interval_seconds", "skip_trainer_activities")
         sync_dict = {k: self.fetcher[k] for k in sync_keys if k in self.fetcher}
 
+        # Build paths dict, forwarding an explicit token_file if provided so
+        # the pipeline finds an already-authorized token rather than prompting
+        # for a new authorization code every time.
+        paths: dict[str, Any] = {"data_dir": str(self.data_dir)}
+        if "token_file" in self.fetcher:
+            paths["token_file"] = str(
+                Path(str(self.fetcher["token_file"])).expanduser()
+            )
+
         return FetcherSettings(
             strava_api=strava_api,
-            paths={"data_dir": str(self.data_dir)},
+            paths=paths,
             sync=sync_dict,
         )
 
