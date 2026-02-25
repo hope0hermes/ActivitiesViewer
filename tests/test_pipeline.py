@@ -94,6 +94,30 @@ class TestIsUnifiedConfig:
         assert is_unified_config({"data_dir": "x", "ftp": 285}) is False
 
 
+# ─── PipelineOrchestrator init ───────────────────────────────────────────
+
+
+class TestPipelineOrchestratorInit:
+    """Tests for PipelineOrchestrator.__init__() — null-section handling."""
+
+    def test_none_sections_treated_as_empty(self, tmp_path):
+        """PyYAML parses 'analyzer:' with only comments as None (not {}).
+        PipelineOrchestrator must treat them as empty dicts to avoid
+        'NoneType has no attribute items' errors downstream."""
+        config = {
+            "data_dir": "/tmp/x",
+            "athlete": None,
+            "fetcher": None,
+            "analyzer": None,
+            "viewer": None,
+        }
+        orch = PipelineOrchestrator(config, tmp_path)
+        assert orch.athlete == {}
+        assert orch.fetcher == {}
+        assert orch.analyzer == {}
+        assert orch.viewer == {}
+
+
 # ─── _build_fetcher_settings ─────────────────────────────────────────────
 
 

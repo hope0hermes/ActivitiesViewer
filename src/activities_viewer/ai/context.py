@@ -156,7 +156,7 @@ class ActivityContextBuilder:
 
         if self.settings:
             ftp = getattr(self.settings, 'ftp', None)
-            weight = getattr(self.settings, 'weight_kg', None)
+            weight = getattr(self.settings, 'rider_weight_kg', None)
             if ftp and weight:
                 context += f"Current FTP: {ftp:.0f}W, Weight: {weight:.1f}kg, W/kg: {ftp/weight:.2f}\n"
             target_wkg = getattr(self.settings, 'target_wkg', None)
@@ -279,7 +279,7 @@ class ActivityContextBuilder:
 
         if self.settings:
             ftp = getattr(self.settings, 'ftp', None)
-            weight = getattr(self.settings, 'weight_kg', None)
+            weight = getattr(self.settings, 'rider_weight_kg', None)
             if ftp and weight:
                 context += f"Current FTP: {ftp:.0f}W, Weight: {weight:.1f}kg, W/kg: {ftp/weight:.2f}\n"
 
@@ -486,7 +486,7 @@ class ActivityContextBuilder:
         activities["year"] = activities["start_date_local"].dt.year
         years = sorted(activities["year"].unique(), reverse=True)
 
-        weight = getattr(self.settings, 'weight_kg', 75.0) if self.settings else 75.0
+        weight = getattr(self.settings, 'rider_weight_kg', 75.0) if self.settings else 75.0
 
         for year in years:
             year_data = activities[activities["year"] == year]
@@ -538,7 +538,7 @@ class ActivityContextBuilder:
         if ftp_data.empty:
             return "No valid FTP estimates.\n"
 
-        weight = getattr(self.settings, 'weight_kg', 75.0) if self.settings else 75.0
+        weight = getattr(self.settings, 'rider_weight_kg', 75.0) if self.settings else 75.0
 
         # Create quarter column
         ftp_data["quarter"] = ftp_data["start_date_local"].dt.to_period("Q")
@@ -695,7 +695,7 @@ class ActivityContextBuilder:
 
         ftp_est = row.get("estimated_ftp")
         if pd.notna(ftp_est) and ftp_est > 0:
-            weight = getattr(self.settings, 'weight_kg', 75.0) if self.settings else 75.0
+            weight = getattr(self.settings, 'rider_weight_kg', 75.0) if self.settings else 75.0
             output += f", Est.FTP={ftp_est:.0f}W ({ftp_est/weight:.2f} W/kg)"
 
         output += "\n"
@@ -780,6 +780,25 @@ class ActivityContextBuilder:
             for _, row in name_matches.head(3).iterrows():  # Limit to 3 matches
                 matched.append((row.get("id"), row))
 
+        # 6. Physiological / stream keyword fallback
+        # When the query clearly asks about stream-level data (HR, power zones,
+        # cadence, etc.) but doesn't reference any specific activity, auto-attach
+        # the most recent activity so the AI has real data rather than claiming
+        # it has "no access to stream data".
+        if not matched:
+            stream_keywords = (
+                "heart rate", "heartrate", " hr ", "bpm", " hr,", "hr.",
+                "power zone", "power distribution", "watt zone",
+                "cadence", "cardiac drift", "aerobic decoupling",
+                "vo2", "interval", "effort", "segment",
+                "altitude", "elevation", "climb",
+                "zone distribution", "training zone",
+            )
+            if any(kw in query_lower for kw in stream_keywords):
+                if not activities.empty:
+                    latest = activities.iloc[0]
+                    matched.append((latest.get("id"), latest))
+
         # Deduplicate by activity ID
         seen_ids = set()
         unique_matched = []
@@ -831,7 +850,7 @@ class ActivityContextBuilder:
         """Analyze stream data and return formatted analysis."""
         output = ""
         ftp = getattr(self.settings, 'ftp', 285.0) if self.settings else 285.0
-        weight = getattr(self.settings, 'weight_kg', 77.0) if self.settings else 77.0
+        weight = getattr(self.settings, 'rider_weight_kg', 77.0) if self.settings else 77.0
 
         # Available columns
         has_power = "watts" in stream.columns or "power" in stream.columns
