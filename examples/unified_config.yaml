@@ -19,7 +19,11 @@
 # All three stages (fetch, analyze, view) share this directory.
 # Fetcher writes raw data here, Analyzer reads/writes enriched CSVs,
 # and Viewer reads the enriched data for display.
-data_dir: "~/strava-data"
+#
+# This default matches StravaFetcher's own default so that tokens cached
+# by a prior `strava-fetcher sync` (or the Strava Connect page) are
+# found automatically — no re-authorization needed on each launch.
+data_dir: "~/.strava_fetcher/data"
 
 # ============================================================================
 # ATHLETE PROFILE
@@ -63,6 +67,12 @@ athlete:
 fetcher:
   client_id: "your_client_id_here"
   client_secret: "your_client_secret_here"
+
+  # ---- Optional path overrides ----
+  # Uncomment to point to a token stored outside data_dir (e.g. if you use
+  # a different directory for the dashboard data but want to reuse the token
+  # created by a standalone `strava-fetcher` install).
+  # token_file: "~/.strava_fetcher/data/token.json"
 
   # ---- Optional sync settings ----
   # max_pages: 50                    # Max API pages to fetch (default: unlimited)
