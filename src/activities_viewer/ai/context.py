@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timedelta
 from functools import lru_cache
 
+import numpy as np
 import pandas as pd
 from dateutil.relativedelta import relativedelta
 
@@ -141,6 +142,12 @@ class ActivityContextBuilder:
             context += "=== REFERENCED ACTIVITY STREAM DATA ===\n"
             context += self._build_stream_context(referenced_activities)
             context += "\n"
+
+        # ═══════════════════════════════════════════════════════════════════════
+        # STREAMS DIRECTORY OVERVIEW (fleet analytics across ALL stream files)
+        # ═══════════════════════════════════════════════════════════════════════
+        context += self._build_streams_overview_context(activities)
+        context += "\n"
 
         # ═══════════════════════════════════════════════════════════════════════
         # DATA RANGE & ATHLETE PROFILE
@@ -844,6 +851,171 @@ class ActivityContextBuilder:
             # Analyze stream data
             output += self._analyze_stream(stream, activity_row)
 
+        return output
+
+    def _build_streams_overview_context(self, activities: pd.DataFrame) -> str:
+        """
+        Compute cross-activity stream analytics by scanning the full streams directory.
+
+        Instead of pre-processing a single activity's stream, iterates all
+        available stream files and computes fleet-level physiological metrics:
+        - Best sustained HR per duration window (rolling avg, 1–60 min)
+        - HR distribution histogram (best 30-min avg per activity)
+        - Best sustained power per duration window (power curve)
+        - Data coverage and recency
+
+        Results are cached per-instance keyed on stream file count to avoid
+        re-scanning 1000+ files on every query.
+        """
+        from pathlib import Path
+
+        streams_dir = self.service.get_streams_dir()
+        if streams_dir is None:
+            return ""
+
+        streams_dir = Path(streams_dir)
+        if not streams_dir.exists():
+            return ""
+
+        stream_files = sorted(streams_dir.glob("stream_*.csv"))
+        if not stream_files:
+            return ""
+
+        # Instance-level cache keyed on file count (cheap staleness check)
+        cache_key = len(stream_files)
+        if getattr(self, "_streams_overview_cache_key", None) == cache_key:
+            cached: str = getattr(self, "_streams_overview_cache", "")
+            if cached:
+                return cached
+
+        # Build activity id → (date, name) lookup from the pre-loaded DataFrame
+        id_to_meta: dict[str, tuple] = {}
+        if not activities.empty and "id" in activities.columns:
+            for _, row in activities.iterrows():
+                try:
+                    id_to_meta[str(int(row["id"]))] = (
+                        row["start_date_local"],
+                        row.get("name", "Unknown"),
+                    )
+                except (ValueError, TypeError):
+                    pass
+
+        WINDOWS: dict[str, int] = {
+            "1 min":  60,
+            "5 min":  300,
+            "10 min": 600,
+            "20 min": 1200,
+            "30 min": 1800,
+            "45 min": 2700,
+            "60 min": 3600,
+        }
+
+        hr_results:  list[dict] = []
+        pwr_results: list[dict] = []
+
+        for sf in stream_files:
+            act_id = sf.stem.replace("stream_", "")
+            try:
+                df = pd.read_csv(sf, sep=";")
+            except Exception:
+                continue
+
+            pwr_col = (
+                "watts" if "watts" in df.columns
+                else "power" if "power" in df.columns
+                else None
+            )
+
+            # Heart rate
+            if "heartrate" in df.columns:
+                hr = pd.to_numeric(df["heartrate"], errors="coerce").dropna()
+                if len(hr) >= 60:
+                    hr_s = pd.Series(hr.values)
+                    row_hr: dict = {"id": act_id}
+                    for label, w in WINDOWS.items():
+                        if len(hr_s) >= w:
+                            row_hr[label] = round(float(hr_s.rolling(w).mean().max()), 1)
+                    hr_results.append(row_hr)
+
+            # Power
+            if pwr_col:
+                pwr = pd.to_numeric(df[pwr_col], errors="coerce").dropna()
+                if len(pwr) >= 60:
+                    pwr_s = pd.Series(pwr.values)
+                    row_pwr: dict = {"id": act_id}
+                    for label, w in WINDOWS.items():
+                        if len(pwr_s) >= w:
+                            row_pwr[label] = round(float(pwr_s.rolling(w).mean().max()), 1)
+                    pwr_results.append(row_pwr)
+
+        output = "=== STREAMS DIRECTORY OVERVIEW ===\n"
+        output += (
+            f"Scanned {len(stream_files)} stream files: "
+            f"{len(hr_results)} with HR data, {len(pwr_results)} with power data.\n"
+        )
+
+        def _best(results: list[dict], label: str) -> tuple:
+            best_val: float | None = None
+            best_date = ""
+            best_name = ""
+            for r in results:
+                v = r.get(label)
+                if v is not None and (best_val is None or v > best_val):
+                    best_val = v
+                    meta = id_to_meta.get(r["id"])
+                    if meta:
+                        dt = meta[0]
+                        best_date = (
+                            dt.strftime("%Y-%m-%d")
+                            if hasattr(dt, "strftime")
+                            else str(dt)[:10]
+                        )
+                        best_name = str(meta[1])
+            return best_val, best_date, best_name
+
+        # ── Best sustained HR per window ──────────────────────────────────────
+        if hr_results:
+            output += "\nBEST SUSTAINED HEART RATE (rolling-window best across all activities):\n"
+            for label in WINDOWS:
+                val, d, name = _best(hr_results, label)
+                if val is not None:
+                    output += f"  {label:8s}: {val:.1f} bpm   [{d}  {name}]\n"
+
+            # HR distribution histogram over best 30-min average per activity
+            vals_30 = [r["30 min"] for r in hr_results if r.get("30 min") is not None]
+            if vals_30:
+                bins = [0, 130, 140, 150, 155, 160, 165, 170, 175, 180, 185, 300]
+                hist_labels = [
+                    "<130", "130-139", "140-149", "150-154", "155-159",
+                    "160-164", "165-169", "170-174", "175-179", "180-184", "185+",
+                ]
+                hist, _ = np.histogram(vals_30, bins=bins)
+                output += "\nHR DISTRIBUTION — best 30-min rolling average per activity:\n"
+                for lbl, cnt in zip(hist_labels, hist):
+                    bar = "█" * min(cnt, 40)
+                    output += f"  {lbl:>8s}: {cnt:4d}  {bar}\n"
+
+        # ── Best sustained power per window ───────────────────────────────────
+        if pwr_results:
+            ftp = getattr(self.settings, "ftp", 285.0) if self.settings else 285.0
+            weight = getattr(self.settings, "rider_weight_kg", 77.0) if self.settings else 77.0
+            output += (
+                f"\nBEST SUSTAINED POWER (power curve, FTP={ftp:.0f}W, "
+                f"{ftp/weight:.2f} W/kg):\n"
+            )
+            for label in WINDOWS:
+                val, d, name = _best(pwr_results, label)
+                if val is not None:
+                    wkg = val / weight
+                    pct = val / ftp * 100
+                    output += (
+                        f"  {label:8s}: {val:.0f}W  ({wkg:.2f} W/kg, {pct:.0f}% FTP)"
+                        f"   [{d}  {name}]\n"
+                    )
+
+        # Cache result
+        self._streams_overview_cache_key = cache_key
+        self._streams_overview_cache = output
         return output
 
     def _analyze_stream(self, stream: pd.DataFrame, activity_row: pd.Series) -> str:

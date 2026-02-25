@@ -96,13 +96,15 @@ class ActivityService:
         """
         Get the stream data for an activity.
         """
-        # This requires the repository to support streams, which the base protocol
-        # currently doesn't show.
-        # Assuming the underlying repository might have it or we need to add it.
-        # For now, let's check the repository implementation.
         if hasattr(self.repository, "get_activity_stream"):
             return self.repository.get_activity_stream(activity_id)
         return pd.DataFrame()
+
+    def get_streams_dir(self) -> "Path | None":
+        """Return the path to the streams directory, or None if not configured."""
+        if hasattr(self.repository, "get_streams_dir"):
+            return self.repository.get_streams_dir()
+        return None
 
     def get_activities_in_range(
         self, start_date: datetime, end_date: datetime, metric_view: str = "Moving Time"
