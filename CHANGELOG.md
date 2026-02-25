@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-02-25
+
+### Changed
+- fix: align default data_dir with StravaFetcher to avoid re-auth on sync (#19)
+
+
 ## [1.6.1] - 2026-02-24
 
 ### Changed
