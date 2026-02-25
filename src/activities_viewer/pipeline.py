@@ -48,10 +48,13 @@ class PipelineOrchestrator:
             self.data_dir = self.data_dir.resolve()
 
         # Sub-sections (default to empty dicts)
-        self.athlete = self.config.get("athlete", {})
-        self.fetcher = self.config.get("fetcher", {})
-        self.analyzer = self.config.get("analyzer", {})
-        self.viewer = self.config.get("viewer", {})
+        # Sub-sections (default to empty dicts).
+        # Use `or {}` so a section that is present but empty in YAML
+        # (parsed as None) is treated the same as a missing section.
+        self.athlete: dict[str, Any] = self.config.get("athlete") or {}
+        self.fetcher: dict[str, Any] = self.config.get("fetcher") or {}
+        self.analyzer: dict[str, Any] = self.config.get("analyzer") or {}
+        self.viewer: dict[str, Any] = self.config.get("viewer") or {}
 
     # ─── Settings construction ────────────────────────────────────────────
 
