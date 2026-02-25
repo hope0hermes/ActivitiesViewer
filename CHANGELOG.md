@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.3] - 2026-02-25
+
+### Changed
+- fix: None YAML sections crash + AI stream data access (#21)
+
+
 ## [1.6.2] - 2026-02-25
 
 ### Changed
