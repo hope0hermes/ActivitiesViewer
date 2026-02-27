@@ -81,7 +81,8 @@ def main():
 
     # Detect whether this is a unified config (has top-level 'athlete:' key)
     is_unified = "athlete" in raw
-    athlete_section = raw.get("athlete", {}) if is_unified else raw
+    # Use `or {}` because a YAML section with all keys commented out parses as None
+    athlete_section = (raw.get("athlete") or {}) if is_unified else raw
 
     # ── Athlete Parameters ────────────────────────────────────────────
     st.header("🏋️ Athlete Parameters")
@@ -206,7 +207,7 @@ def main():
     st.markdown("---")
 
     # ── Analyzer Settings (if unified config) ─────────────────────────
-    analyzer_section = raw.get("analyzer", {}) if is_unified else {}
+    analyzer_section = (raw.get("analyzer") or {}) if is_unified else {}
 
     if is_unified:
         st.header("📊 Analyzer Settings")
@@ -218,9 +219,9 @@ def main():
                 "CTL Time Constant (days)",
                 min_value=7,
                 max_value=120,
-                value=int(analyzer_section.get("ctl_days", 42)),
+                value=int(analyzer_section.get("ctl_days", 28)),
                 step=1,
-                help="Chronic Training Load exponential decay constant (default 42).",
+                help="Chronic Training Load exponential decay constant (default 28).",
             )
             atl_days = st.number_input(
                 "ATL Time Constant (days)",
