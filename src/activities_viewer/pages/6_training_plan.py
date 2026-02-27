@@ -902,6 +902,12 @@ def main():
             plan = plan_service.update_actuals(plan, activities_df)
             st.session_state.training_plan = plan
 
+            # Auto-save actuals so they persist across page loads
+            try:
+                plan_service.save_plan(plan, plan_file_path)
+            except Exception:
+                pass  # Non-critical — user can still Save manually
+
             # Render plan views
             render_plan_overview(plan)
 

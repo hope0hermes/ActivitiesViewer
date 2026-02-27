@@ -85,6 +85,32 @@ def init_session_state():
         st.session_state.analysis_metric_view = "Moving Time"
 
 
+def _get_current_week_bounds() -> tuple[datetime, datetime]:
+    """Return (start, end) of the current training week.
+
+    If a training plan is loaded in session state, use the plan's week
+    boundaries (which may start on Saturday).  Otherwise, default to
+    ISO week (Monday start).
+    """
+    now = datetime.now()
+    plan = st.session_state.get("training_plan")
+    if plan is not None:
+        for week in plan.weeks:
+            ws = week.start_date
+            we = week.end_date
+            # Normalise to naive
+            if hasattr(ws, "tzinfo") and ws.tzinfo is not None:
+                ws = ws.replace(tzinfo=None)
+            if hasattr(we, "tzinfo") and we.tzinfo is not None:
+                we = we.replace(tzinfo=None)
+            we_eod = we.replace(hour=23, minute=59, second=59)
+            if ws <= now <= we_eod:
+                return (ws, now)
+    # Fallback: ISO week (Monday)
+    monday = now - timedelta(days=now.weekday())
+    return (datetime(monday.year, monday.month, monday.day), now)
+
+
 def get_date_range(
     range_type: str, custom_start: datetime, custom_end: datetime
 ) -> tuple[datetime, datetime]:
@@ -92,7 +118,8 @@ def get_date_range(
     Convert range type to actual start/end dates.
 
     Args:
-        range_type: One of "Last 4 Weeks", "Last 12 Weeks", "This Year", "All Time", "Custom"
+        range_type: One of "Current Week", "Last 4 Weeks", "Last 12 Weeks",
+                    "This Year", "All Time", "Custom"
         custom_start: Custom start date (used if range_type is "Custom")
         custom_end: Custom end date (used if range_type is "Custom")
 
@@ -101,7 +128,9 @@ def get_date_range(
     """
     now = datetime.now()
 
-    if range_type == "Last 4 Weeks":
+    if range_type == "Current Week":
+        return _get_current_week_bounds()
+    elif range_type == "Last 4 Weeks":
         return (now - timedelta(weeks=4), now)
     elif range_type == "Last 12 Weeks":
         return (now - timedelta(weeks=12), now)
@@ -2775,6 +2804,7 @@ def main():
         # Calculate current index
         current_range = st.session_state.analysis_date_range
         range_options = [
+            "Current Week",
             "Last 4 Weeks",
             "Last 12 Weeks",
             "This Year",

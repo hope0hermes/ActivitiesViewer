@@ -108,6 +108,10 @@ def main():
                 config_data = json.loads(config_json)
                 settings = Settings(**config_data)
                 st.session_state.settings = settings
+                # Store unified config path for settings editor
+                unified = os.environ.get("ACTIVITIES_VIEWER_UNIFIED_CONFIG")
+                if unified:
+                    st.session_state.config_file_path = unified
             except Exception as e:
                 st.error(f"Failed to load configuration from CLI: {e}")
                 st.stop()
@@ -118,6 +122,7 @@ def main():
                 try:
                     settings = load_settings(config_file)
                     st.session_state.settings = settings
+                    st.session_state.config_file_path = str(config_file.resolve())
                 except Exception as e:
                     st.error(f"Failed to load configuration: {e}")
                     st.stop()

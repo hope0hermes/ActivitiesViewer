@@ -67,7 +67,7 @@ def estimate_max_hr_from_activities(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns:
         DataFrame with columns: date, max_hr_recorded, activity_name.
-        Sorted by max_hr_recorded descending, limited to top 50.
+        Sorted by date descending (same as FTP estimation).
     """
     hr_col = None
     for col in ("max_heartrate", "max_hr", "max_heart_rate"):
@@ -93,8 +93,7 @@ def estimate_max_hr_from_activities(df: pd.DataFrame) -> pd.DataFrame:
 
     result = (
         data[["date", "max_hr_recorded", "activity_name"]]
-        .sort_values("max_hr_recorded", ascending=False)
-        .head(50)
+        .sort_values("date", ascending=False)
         .reset_index(drop=True)
     )
     return result
