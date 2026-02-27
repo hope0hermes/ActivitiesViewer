@@ -251,6 +251,13 @@ def compute_physiology_deltas(
     if prev_df.empty:
         return deltas
 
+    # Filter previous period to same sport types as current period (rides only)
+    if "type" in prev_df.columns and "type" in df.columns:
+        sport_types = df["type"].unique()
+        prev_df = prev_df[prev_df["type"].isin(sport_types)]
+        if prev_df.empty:
+            return deltas
+
     # Get previous period physiology stats
     prev_stats = analysis_service.aggregate_physiology(prev_df, filter_steady_state=True)
 
@@ -891,11 +898,16 @@ def render_physiology_view(
     # AGGREGATED PHYSIOLOGY METRICS (with smart filtering)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    physio_stats = analysis_service.aggregate_physiology(df, filter_steady_state=True)
+    # Filter to cycling rides only — EF is a power:HR metric that isn't
+    # comparable across sport types (running EF has a different scale).
+    # This keeps the metric card consistent with the trend chart below.
+    df_rides = df[df["type"].isin(["Ride", "VirtualRide"])].copy()
 
-    # Compute trend deltas vs previous period
+    physio_stats = analysis_service.aggregate_physiology(df_rides, filter_steady_state=True)
+
+    # Compute trend deltas vs previous period (also rides-only)
     physio_deltas = compute_physiology_deltas(
-        physio_stats, df, activity_service, analysis_service
+        physio_stats, df_rides, activity_service, analysis_service
     )
 
     col1, col2, col3 = st.columns(3)
@@ -940,8 +952,7 @@ def render_physiology_view(
 
     st.subheader("📈 Efficiency Factor Trend")
 
-    # Filter to Rides only (exclude Runs and other activity types)
-    df_rides = df[df["type"] == "Ride"].copy()
+    # df_rides already filtered above (Ride + VirtualRide)
 
     if df_rides.empty:
         st.info("No cycling rides available for efficiency trend analysis. Try adjusting your filters.")
