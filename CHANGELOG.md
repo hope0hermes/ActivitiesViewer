@@ -21,6 +21,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Remove stale `tool.black` config from pyproject.toml (project uses ruff)
 - Remove dead `deployment` optional deps (gunicorn, psycopg2, redis)
 
+## [1.7.1] - 2026-03-06
+
+### Changed
+- fix: training plan TSS boundary, analysis config, and device color-coding (#25)
+
 ## [1.7.0] - 2026-02-25
 
 ### Changed
@@ -135,7 +140,8 @@ First working version, extensively tested locally.
 - GitHub configuration: CODEOWNERS, PR template
 - Comprehensive test scaffolding with pytest + coverage
 
-[Unreleased]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.7.1...HEAD
+[1.7.1]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.7.0...v1.7.1
 [1.7.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.3...v1.7.0
 [1.6.3]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.2...v1.6.3
 [1.6.2]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.1...v1.6.2
