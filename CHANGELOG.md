@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-03-06
+
+### Changed
+- fix: training plan analysis config (#27)
+
+
 ### Added
 - Dockerfile and docker-compose.yml for sharing via GHCR
 - `docs/SHARING.md` — guide for distributing to friends via Docker
