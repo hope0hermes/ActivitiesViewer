@@ -380,7 +380,7 @@ class AnalysisService:
             filter_steady_state: If True, filter for Z2 rides only
 
         Returns:
-            DataFrame with date, efficiency_factor, decoupling columns
+            DataFrame with date, efficiency_factor, decoupling, device_name columns
         """
         if activities_df.empty:
             return pd.DataFrame(columns=["date", "efficiency_factor", "decoupling"])
@@ -403,10 +403,14 @@ class AnalysisService:
         if df.empty:
             return pd.DataFrame(columns=["date", "efficiency_factor", "decoupling", "cardiac_drift"])
 
-        # Select relevant columns
-        result = df[
-            ["start_date_local", "efficiency_factor", "power_hr_decoupling", "cardiac_drift"]
-        ].copy()
+        # Select relevant columns (include device_name if available)
+        cols_to_select = [
+            "start_date_local", "efficiency_factor", "power_hr_decoupling", "cardiac_drift"
+        ]
+        if "device_name" in df.columns:
+            cols_to_select.append("device_name")
+
+        result = df[cols_to_select].copy()
         result = result.rename(
             columns={"start_date_local": "date", "power_hr_decoupling": "decoupling"}
         )

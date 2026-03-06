@@ -22,6 +22,7 @@ from activities_viewer.services.fitness_estimation import (
     estimate_max_hr_from_activities,
     estimate_weight_trend,
 )
+from activities_viewer.utils.device_utils import create_device_legend, get_device_color
 
 st.set_page_config(page_title="Fitness Estimation", page_icon="📈", layout="wide")
 
@@ -92,17 +93,33 @@ def plot_ftp_history(ftp_df: pd.DataFrame, current_ftp: float) -> go.Figure:
 
 
 def plot_max_hr_history(hr_df: pd.DataFrame, current_max_hr: int) -> go.Figure:
-    """Plot max HR observations across activities."""
+    """Plot max HR observations across activities, color-coded by device."""
     fig = go.Figure()
 
+    # Add colors based on device
+    hr_df_sorted = hr_df.sort_values("date")  # Sort by date for plotting
+
+    # Color code by device
+    if "device_name" in hr_df_sorted.columns:
+        hr_df_sorted["color"] = hr_df_sorted["device_name"].apply(get_device_color)
+    else:
+        hr_df_sorted["color"] = get_device_color(None)
+
+    # Clean device_name for display (replace NaN with readable label)
+    if "device_name" in hr_df_sorted.columns:
+        hr_df_sorted["device_label"] = hr_df_sorted["device_name"].fillna("Unknown")
+    else:
+        hr_df_sorted["device_label"] = "Unknown"
+
     fig.add_trace(go.Scatter(
-        x=hr_df["date"],
-        y=hr_df["max_hr_recorded"],
+        x=hr_df_sorted["date"],
+        y=hr_df_sorted["max_hr_recorded"],
         mode="markers",
         name="Max HR recorded",
-        marker={"size": 8, "color": "#d62728"},
-        text=hr_df["activity_name"],
-        hovertemplate="%{x|%Y-%m-%d}<br>Max HR: %{y} bpm<br>%{text}<extra></extra>",
+        marker={"size": 8, "color": hr_df_sorted["color"]},
+        text=hr_df_sorted["activity_name"],
+        customdata=hr_df_sorted["device_label"],
+        hovertemplate="<b>%{x|%Y-%m-%d}</b><br>Max HR: %{y} bpm<br>Device: %{customdata}<br>%{text}<extra></extra>",
     ))
 
     fig.add_hline(
@@ -112,8 +129,29 @@ def plot_max_hr_history(hr_df: pd.DataFrame, current_max_hr: int) -> go.Figure:
         annotation_text=f"Current Max HR: {current_max_hr} bpm",
     )
 
+    # Add legend for devices if available
+    if "device_name" in hr_df_sorted.columns:
+        has_unknown = hr_df_sorted["device_name"].isna().any()
+        devices_in_data = hr_df_sorted["device_name"].dropna().unique()
+        legend_items = create_device_legend(devices_in_data)
+
+        # Add "Unknown / No Device" entry if there are NaN values
+        if has_unknown and not any(d["name"] == "Unknown / No Device" for d in legend_items):
+            legend_items.append({"name": "Unknown / No Device", "color": "#7f7f7f"})
+
+        # Add traces for legend (invisible, just for legend)
+        for item in legend_items:
+            fig.add_trace(go.Scatter(
+                x=[None], y=[None],
+                mode='markers',
+                name=item["name"],
+                marker={"size": 8, "color": item["color"]},
+                showlegend=True,
+                hoverinfo='skip'
+            ))
+
     fig.update_layout(
-        title="Max Heart Rate Observations",
+        title="Max Heart Rate Observations (Color-coded by Device)",
         xaxis_title="Date",
         yaxis_title="Heart Rate (bpm)",
         height=400,
@@ -263,7 +301,12 @@ def main():
         with st.expander("📋 Top heart rate observations", expanded=False):
             display_df = hr_df.head(20).copy()
             display_df["date"] = display_df["date"].dt.strftime("%Y-%m-%d")
-            display_df.columns = ["Date", "Max HR (bpm)", "Activity"]
+            # device_name may be present from device tracking
+            if "device_name" in display_df.columns:
+                display_df["device_name"] = display_df["device_name"].fillna("—")
+                display_df.columns = ["Date", "Max HR (bpm)", "Activity", "Device"]
+            else:
+                display_df.columns = ["Date", "Max HR (bpm)", "Activity"]
             st.dataframe(display_df, use_container_width=True, hide_index=True)
 
     st.divider()

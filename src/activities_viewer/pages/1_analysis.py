@@ -24,6 +24,7 @@ from activities_viewer.data import HELP_TEXTS
 from activities_viewer.repository.csv_repo import CSVActivityRepository
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.services.analysis_service import AnalysisService
+from activities_viewer.utils.device_utils import create_device_legend, get_device_color
 from activities_viewer.utils.formatting import format_watts, render_metric
 
 st.set_page_config(page_title="Training Analysis", page_icon="📈", layout="wide")
@@ -994,6 +995,13 @@ def render_physiology_view(
 
         ef_trends["color"] = ef_trends["ef_category"].map(ef_color_map)
 
+        # Apply device colors if available
+        if "device_name" in ef_trends.columns:
+            ef_trends["device_color"] = ef_trends["device_name"].apply(get_device_color)
+        else:
+            # Fallback to category colors if device_name not available
+            ef_trends["device_color"] = ef_trends["color"]
+
         # Create scatter plot with discrete colors
         fig = go.Figure()
 
@@ -1003,10 +1011,27 @@ def render_physiology_view(
                 y=ef_trends["efficiency_factor"],
                 mode="markers",
                 name="Efficiency Factor",
-                marker={"size": 8, "color": ef_trends["color"]},
-                hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
+                marker={"size": 8, "color": ef_trends["device_color"]},
+                customdata=ef_trends["device_name"] if "device_name" in ef_trends.columns else None,
+                hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<br>Device: %{customdata}<extra></extra>" if "device_name" in ef_trends.columns else "<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
             )
         )
+
+        # Add device legend if device color coding is available
+        if "device_name" in ef_trends.columns and not ef_trends["device_name"].isna().all():
+            device_legend = create_device_legend(ef_trends["device_name"].unique())
+            for device_name, color in device_legend.items():
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None],
+                        y=[None],
+                        mode="markers",
+                        name=device_name,
+                        marker={"size": 8, "color": color},
+                        showlegend=True,
+                        hoverinfo="skip",
+                    )
+                )
 
         # Add threshold reference lines (using dynamic thresholds)
         fig.add_hline(
