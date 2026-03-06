@@ -18,7 +18,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 WORKDIR /app
 
 # Copy dependency files first (cache layer)
-COPY pyproject.toml uv.lock uv.toml ./
+COPY pyproject.toml uv.lock uv.toml LICENSE README.md ./
 
 # Install dependencies (without the project itself yet)
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -39,6 +39,9 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.12-slim AS runtime
 
 WORKDIR /app
+
+# Copy UV from base stage
+COPY --from=base /usr/local/bin/uv /usr/local/bin/uv
 
 # Copy the entire venv and app from build stage
 COPY --from=base /app /app
