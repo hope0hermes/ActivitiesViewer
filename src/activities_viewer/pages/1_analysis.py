@@ -24,6 +24,7 @@ from activities_viewer.data import HELP_TEXTS
 from activities_viewer.repository.csv_repo import CSVActivityRepository
 from activities_viewer.services.activity_service import ActivityService
 from activities_viewer.services.analysis_service import AnalysisService
+from activities_viewer.utils.device_utils import create_device_legend, get_device_color
 from activities_viewer.utils.formatting import format_watts, render_metric
 
 st.set_page_config(page_title="Training Analysis", page_icon="📈", layout="wide")
@@ -85,6 +86,32 @@ def init_session_state():
         st.session_state.analysis_metric_view = "Moving Time"
 
 
+def _get_current_week_bounds() -> tuple[datetime, datetime]:
+    """Return (start, end) of the current training week.
+
+    If a training plan is loaded in session state, use the plan's week
+    boundaries (which may start on Saturday).  Otherwise, default to
+    ISO week (Monday start).
+    """
+    now = datetime.now()
+    plan = st.session_state.get("training_plan")
+    if plan is not None:
+        for week in plan.weeks:
+            ws = week.start_date
+            we = week.end_date
+            # Normalise to naive
+            if hasattr(ws, "tzinfo") and ws.tzinfo is not None:
+                ws = ws.replace(tzinfo=None)
+            if hasattr(we, "tzinfo") and we.tzinfo is not None:
+                we = we.replace(tzinfo=None)
+            we_eod = we.replace(hour=23, minute=59, second=59)
+            if ws <= now <= we_eod:
+                return (ws, now)
+    # Fallback: ISO week (Monday)
+    monday = now - timedelta(days=now.weekday())
+    return (datetime(monday.year, monday.month, monday.day), now)
+
+
 def get_date_range(
     range_type: str, custom_start: datetime, custom_end: datetime
 ) -> tuple[datetime, datetime]:
@@ -92,7 +119,8 @@ def get_date_range(
     Convert range type to actual start/end dates.
 
     Args:
-        range_type: One of "Last 4 Weeks", "Last 12 Weeks", "This Year", "All Time", "Custom"
+        range_type: One of "Current Week", "Last 4 Weeks", "Last 12 Weeks",
+                    "This Year", "All Time", "Custom"
         custom_start: Custom start date (used if range_type is "Custom")
         custom_end: Custom end date (used if range_type is "Custom")
 
@@ -101,7 +129,9 @@ def get_date_range(
     """
     now = datetime.now()
 
-    if range_type == "Last 4 Weeks":
+    if range_type == "Current Week":
+        return _get_current_week_bounds()
+    elif range_type == "Last 4 Weeks":
         return (now - timedelta(weeks=4), now)
     elif range_type == "Last 12 Weeks":
         return (now - timedelta(weeks=12), now)
@@ -221,6 +251,13 @@ def compute_physiology_deltas(
 
     if prev_df.empty:
         return deltas
+
+    # Filter previous period to same sport types as current period (rides only)
+    if "type" in prev_df.columns and "type" in df.columns:
+        sport_types = df["type"].unique()
+        prev_df = prev_df[prev_df["type"].isin(sport_types)]
+        if prev_df.empty:
+            return deltas
 
     # Get previous period physiology stats
     prev_stats = analysis_service.aggregate_physiology(prev_df, filter_steady_state=True)
@@ -862,11 +899,16 @@ def render_physiology_view(
     # AGGREGATED PHYSIOLOGY METRICS (with smart filtering)
     # ═══════════════════════════════════════════════════════════════════════════
 
-    physio_stats = analysis_service.aggregate_physiology(df, filter_steady_state=True)
+    # Filter to cycling rides only — EF is a power:HR metric that isn't
+    # comparable across sport types (running EF has a different scale).
+    # This keeps the metric card consistent with the trend chart below.
+    df_rides = df[df["type"].isin(["Ride", "VirtualRide"])].copy()
 
-    # Compute trend deltas vs previous period
+    physio_stats = analysis_service.aggregate_physiology(df_rides, filter_steady_state=True)
+
+    # Compute trend deltas vs previous period (also rides-only)
     physio_deltas = compute_physiology_deltas(
-        physio_stats, df, activity_service, analysis_service
+        physio_stats, df_rides, activity_service, analysis_service
     )
 
     col1, col2, col3 = st.columns(3)
@@ -911,8 +953,7 @@ def render_physiology_view(
 
     st.subheader("📈 Efficiency Factor Trend")
 
-    # Filter to Rides only (exclude Runs and other activity types)
-    df_rides = df[df["type"] == "Ride"].copy()
+    # df_rides already filtered above (Ride + VirtualRide)
 
     if df_rides.empty:
         st.info("No cycling rides available for efficiency trend analysis. Try adjusting your filters.")
@@ -954,6 +995,13 @@ def render_physiology_view(
 
         ef_trends["color"] = ef_trends["ef_category"].map(ef_color_map)
 
+        # Apply device colors if available
+        if "device_name" in ef_trends.columns:
+            ef_trends["device_color"] = ef_trends["device_name"].apply(get_device_color)
+        else:
+            # Fallback to category colors if device_name not available
+            ef_trends["device_color"] = ef_trends["color"]
+
         # Create scatter plot with discrete colors
         fig = go.Figure()
 
@@ -963,10 +1011,27 @@ def render_physiology_view(
                 y=ef_trends["efficiency_factor"],
                 mode="markers",
                 name="Efficiency Factor",
-                marker={"size": 8, "color": ef_trends["color"]},
-                hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
+                marker={"size": 8, "color": ef_trends["device_color"]},
+                customdata=ef_trends["device_name"] if "device_name" in ef_trends.columns else None,
+                hovertemplate="<b>%{x}</b><br>EF: %{y:.2f}<br>Device: %{customdata}<extra></extra>" if "device_name" in ef_trends.columns else "<b>%{x}</b><br>EF: %{y:.2f}<extra></extra>",
             )
         )
+
+        # Add device legend if device color coding is available
+        if "device_name" in ef_trends.columns and not ef_trends["device_name"].isna().all():
+            device_legend = create_device_legend(ef_trends["device_name"].unique())
+            for item in device_legend:
+                fig.add_trace(
+                    go.Scatter(
+                        x=[None],
+                        y=[None],
+                        mode="markers",
+                        name=item["name"],
+                        marker={"size": 8, "color": item["color"]},
+                        showlegend=True,
+                        hoverinfo="skip",
+                    )
+                )
 
         # Add threshold reference lines (using dynamic thresholds)
         fig.add_hline(
@@ -2775,6 +2840,7 @@ def main():
         # Calculate current index
         current_range = st.session_state.analysis_date_range
         range_options = [
+            "Current Week",
             "Last 4 Weeks",
             "Last 12 Weeks",
             "This Year",

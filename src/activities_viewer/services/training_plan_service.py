@@ -429,10 +429,14 @@ class TrainingPlanService:
             if hasattr(week_end, "tzinfo") and week_end.tzinfo is not None:
                 week_end = week_end.replace(tzinfo=None)
 
+            # Extend week_end to end-of-day so activities on the last day
+            # of the week are included (end_date is stored as midnight 00:00).
+            week_end_eod = week_end.replace(hour=23, minute=59, second=59)
+
             # Filter activities for this week
             week_activities = activities_df[
                 (activities_df["start_date_local"] >= week_start)
-                & (activities_df["start_date_local"] <= week_end)
+                & (activities_df["start_date_local"] <= week_end_eod)
             ]
 
             if not week_activities.empty:

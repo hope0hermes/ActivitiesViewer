@@ -61,13 +61,14 @@ def estimate_max_hr_from_activities(df: pd.DataFrame) -> pd.DataFrame:
     """Estimate max HR from the highest heart rates recorded in activities.
 
     Looks at ``max_heartrate``, ``max_hr``, or ``max_heart_rate`` columns.
+    Includes ``device_name`` for color-coding by HR data source.
 
     Args:
         df: Activities DataFrame.
 
     Returns:
-        DataFrame with columns: date, max_hr_recorded, activity_name.
-        Sorted by max_hr_recorded descending, limited to top 50.
+        DataFrame with columns: date, max_hr_recorded, activity_name, device_name.
+        Sorted by date descending (same as FTP estimation).
     """
     hr_col = None
     for col in ("max_heartrate", "max_hr", "max_heart_rate"):
@@ -90,11 +91,12 @@ def estimate_max_hr_from_activities(df: pd.DataFrame) -> pd.DataFrame:
 
     data["max_hr_recorded"] = pd.to_numeric(data[hr_col], errors="coerce").astype(int)
     data["activity_name"] = data.get("name", "")
+    # Include device_name for color-coding (will be NaN if not present)
+    data["device_name"] = data.get("device_name", None)
 
     result = (
-        data[["date", "max_hr_recorded", "activity_name"]]
-        .sort_values("max_hr_recorded", ascending=False)
-        .head(50)
+        data[["date", "max_hr_recorded", "activity_name", "device_name"]]
+        .sort_values("date", ascending=False)
         .reset_index(drop=True)
     )
     return result

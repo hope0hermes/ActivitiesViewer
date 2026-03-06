@@ -83,8 +83,9 @@ class TestEstimateMaxHRFromActivities:
         df = self._make_df()
         result = feh.estimate_max_hr_from_activities(df)
         assert not result.empty
-        # Sorted by max HR, highest first
-        assert result.iloc[0]["max_hr_recorded"] == 185
+        # Sorted by date descending (most recent first)
+        assert result.iloc[0]["max_hr_recorded"] == 180  # 2024-03-01
+        assert result.iloc[1]["max_hr_recorded"] == 185  # 2024-02-01
 
     def test_missing_hr_column(self):
         df = pd.DataFrame({"start_date_local": ["2024-01-01"], "name": ["Ride"]})
@@ -108,7 +109,8 @@ class TestEstimateMaxHRFromActivities:
             "name": [f"Activity {i}" for i in range(72)],
         })
         result = feh.estimate_max_hr_from_activities(df)
-        assert len(result) <= 50
+        # No longer capped — returns all activities with HR data
+        assert len(result) == 72
 
 
 class TestEstimateWeightTrend:
