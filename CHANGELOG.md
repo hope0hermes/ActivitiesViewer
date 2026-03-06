@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Dockerfile and docker-compose.yml for sharing via GHCR
+- `docs/SHARING.md` — guide for distributing to friends via Docker
+
+### Changed
+- Rewrite README.md with accurate features, structure, and quick start
+- Rewrite all docs/ files (QUICK_START, SETUP, DATA_STRUCTURE, CLI_CONFIGURATION, DEVELOPMENT) to reflect current architecture
+- Remove obsolete `CONFIGURATION_UPGRADE.md` (pre-Pydantic migration doc)
+- Update pyproject.toml classifiers from Alpha to Beta
+
+### Fixed
+- Remove stale `tool.black` config from pyproject.toml (project uses ruff)
+- Remove dead `deployment` optional deps (gunicorn, psycopg2, redis)
+
 ## [1.7.0] - 2026-02-25
 
 ### Changed
@@ -121,5 +135,15 @@ First working version, extensively tested locally.
 - GitHub configuration: CODEOWNERS, PR template
 - Comprehensive test scaffolding with pytest + coverage
 
-[Unreleased]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.3...v1.7.0
+[1.6.3]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.2...v1.6.3
+[1.6.2]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.1...v1.6.2
+[1.6.1]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.3.0...v1.4.0
+[1.3.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/hope0hermes/ActivitiesViewer/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/hope0hermes/ActivitiesViewer/releases/tag/v1.0.0

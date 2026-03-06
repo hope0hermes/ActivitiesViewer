@@ -14,7 +14,7 @@ authors = [
     { name = "Israel Barragan", email = "abraham0vidal@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: End Users/Desktop",
     "Intended Audience :: Developers",
     "License :: OSI Approved :: MIT License",
@@ -30,12 +30,10 @@ dependencies = [
     "pandas>=2.1.0",
     "numpy>=1.25.0",
     "plotly>=5.17.0",
-    "altair>=5.1.0",
     "folium>=0.15.0",
     "streamlit-folium>=0.15.0",
     "geopy>=2.4.0",
     "pyyaml>=6.0.1",
-    "python-dotenv>=1.0.0",
     "click>=8.1.0",
     "pydantic>=2.9,<3",
     "pydantic-settings>=2.6,<3",
@@ -86,12 +84,6 @@ dev = [
     "ruff>=0.9.1",
 ]
 
-# Deployment dependencies
-deployment = [
-    "gunicorn>=21.2.0",
-    "psycopg2-binary>=2.9.0",
-    "redis>=5.0.0",
-]
 
 [tool.hatch.metadata]
 
@@ -122,22 +114,6 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = true
 
-[tool.black]
-line-length = 88
-target-version = ['py312']
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.git
-  | \.mypy_cache
-  | \.pytest_cache
-  | \.ruff_cache
-  | \.venv
-  | \.uv
-  | build
-  | dist
-)/
-'''
 
 [tool.mypy]
 python_version = "3.12"
