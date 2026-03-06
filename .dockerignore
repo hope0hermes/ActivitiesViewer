@@ -1,0 +1,23 @@
+# Docker ignore - keep image small
+.git
+.github
+.venv
+.uv
+.mypy_cache
+.pytest_cache
+.ruff_cache
+__pycache__
+*.pyc
+dist/
+build/
+htmlcov/
+coverage.xml
+*.egg-info
+tests/
+docs/
+dev/
+dev_docs/
+private_index/
+*.md.bak
+*.md
+!README.md

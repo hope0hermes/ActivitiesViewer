@@ -1,169 +1,86 @@
-# ActivitiesViewer - Quick Reference
+# Quick Start
 
-## Installation & Setup
+Get up and running in 5 minutes.
+
+## 1. Install
 
 ```bash
-# Clone the repository
 git clone https://github.com/hope0hermes/ActivitiesViewer.git
 cd ActivitiesViewer
 
-# Create virtual environment and install
-uv sync
+# Install UV if you don't have it
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Install with dev dependencies
-uv pip install -e ".[dev]"
+# Install dependencies
+uv sync
 ```
 
-## Configuration
+## 2. Configure
 
 ```bash
-# Create config from example
 cp examples/config.yaml config.yaml
-
-# Edit config with your paths and settings
-nano config.yaml
 ```
 
-**Minimal config.yaml:**
+Edit `config.yaml` with your settings:
 
 ```yaml
-data_dir: "../dev/data_enriched"
-activities_enriched_file: "activities_enriched.csv"
-activity_summary_file: "activity_summary.json"
+# Data paths (point to your StravaAnalyzer output)
+data_dir: "/path/to/your/data"
+activities_raw_file: "activities_raw.csv"
+activities_moving_file: "activities_moving.csv"
 streams_dir: "Streams"
 
+# Athlete profile
 ftp: 285.0
-weight_kg: 77.0
+rider_weight_kg: 77.0
 max_hr: 185
 ```
 
-## Running the Dashboard
+## 3. Run
 
 ```bash
-# Validate configuration first
+# Validate config first
 activities-viewer validate --config config.yaml
 
-# Start the dashboard
-activities-viewer run --config config.yaml
-
-# Custom port
-activities-viewer run --config config.yaml --port 8502
-
-# Verbose output
-activities-viewer run --config config.yaml --verbose
-```
-
-## Development
-
-```bash
-# Run tests
-uv run pytest
-
-# Run with coverage
-uv run pytest --cov=src/activities_viewer
-
-# Format code
-uv run black src/ tests/
-uv run ruff format src/ tests/
-
-# Lint code
-uv run ruff check src/ tests/
-
-# Type checking
-uv run mypy src/activities_viewer
-```
-
-## Environment Variables
-
-```bash
-export ACTIVITIES_VIEWER_DATA_DIR=/path/to/data
-export ACTIVITIES_VIEWER_FTP=285
-export ACTIVITIES_VIEWER_WEIGHT_KG=77
-export ACTIVITIES_VIEWER_MAX_HR=185
-
+# Launch dashboard
 activities-viewer run --config config.yaml
 ```
 
-## Required Data Files
+Open http://localhost:8501 in your browser.
 
-```
-data_enriched/
-├── activities_enriched.csv     # from StravaAnalyzer
-├── activity_summary.json       # from StravaAnalyzer
-└── Streams/
-    └── stream_*.csv            # activity streams
-```
+## Full Pipeline (Optional)
 
-## Useful Commands
+To fetch from Strava + analyze + view in one step:
 
 ```bash
-# Show help
-activities-viewer --help
-activities-viewer run --help
-activities-viewer validate --help
+cp examples/unified_config.yaml config.yaml
+# Edit with your Strava API credentials + athlete settings
 
-# Show version
-activities-viewer version
+activities-viewer sync --config config.yaml
+```
 
-# Run tests
-uv run pytest tests/ -v
+## CLI Commands
 
-# Check for issues
-uv run mypy src/
-uv run ruff check src/
+```bash
+activities-viewer run      --config config.yaml   # Launch dashboard
+activities-viewer sync     --config config.yaml   # Full pipeline
+activities-viewer validate --config config.yaml   # Check config
+activities-viewer version                          # Show version
+activities-viewer --help                           # All options
 ```
 
 ## Common Issues
 
 | Issue | Solution |
 |-------|----------|
-| Port 8501 in use | Use `--port 8502` flag |
-| Files not found | Check `data_dir` path in config |
-| Import errors | Run `uv sync` to install dependencies |
-| Type errors | Run `uv run mypy src/` to check |
+| Port 8501 in use | `activities-viewer run --config config.yaml --port 8502` |
+| Files not found | Check `data_dir` path in `config.yaml` |
+| Import errors | Run `uv sync` to reinstall dependencies |
+| No activities shown | Ensure `activities_raw_file` points to a valid CSV |
 
-## Documentation
+## What's Next
 
-- [CLI & Configuration Guide](CLI_CONFIGURATION.md) - Detailed CLI reference
-- [Setup Guide](SETUP.md) - Installation and environment setup
-- [Implementation Plan](../DASHBOARD_IMPLEMENTATION_PLAN.md) - Features and roadmap
-- [README](../README.md) - General information
-
-## Project Structure
-
-```
-ActivitiesViewer/
-├── src/activities_viewer/
-│   ├── app.py          # Main Streamlit app
-│   ├── cli.py          # CLI commands
-│   ├── config.py       # Configuration & Settings
-│   ├── pages/          # Streamlit pages
-│   ├── components/     # Reusable components
-│   ├── data/           # Data loading
-│   ├── analytics/      # Business logic
-│   └── viz/            # Visualizations
-├── tests/              # Test suite
-├── examples/           # Example configs
-├── docs/               # Documentation
-└── pyproject.toml      # Dependencies
-```
-
-## Next Steps
-
-1. Copy `examples/config.yaml` to `config.yaml`
-2. Update paths to your data directory
-3. Run `activities-viewer validate --config config.yaml`
-4. Run `activities-viewer run --config config.yaml`
-5. Open browser at `http://localhost:8501`
-
-## Integration with StravaAnalyzer
-
-```bash
-# Generate enriched data
-cd ../StravaAnalyzer
-strava-analyzer run --config config.yaml
-
-# Then run ActivitiesViewer with the output
-cd ../ActivitiesViewer
-activities-viewer run --config config.yaml
-```
+- [SETUP.md](SETUP.md) — Detailed setup with prerequisites
+- [DATA_STRUCTURE.md](DATA_STRUCTURE.md) — Expected data format
+- [CLI_CONFIGURATION.md](CLI_CONFIGURATION.md) — Full configuration reference
+- [SHARING.md](SHARING.md) — Share with friends via Docker

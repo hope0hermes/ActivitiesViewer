@@ -1,336 +1,164 @@
-# ActivitiesViewer CLI & Configuration Guide
-
-## Quick Start
-
-### 1. Create a Configuration File
-
-Copy the example configuration and update it with your data paths:
-
-```bash
-cp examples/config.yaml config.yaml
-```
-
-Edit `config.yaml` with your settings:
-
-```yaml
-# Path to your enriched activities data directory
-data_dir: "../dev/data_enriched"
-
-# Data files within that directory
-activities_enriched_file: "activities_enriched.csv"
-activity_summary_file: "activity_summary.json"
-streams_dir: "Streams"
-
-# Your athlete profile
-ftp: 285.0
-weight_kg: 77.0
-max_hr: 185
-```
-
-### 2. Run the Dashboard
-
-```bash
-# Using the CLI with a config file
-activities-viewer run --config config.yaml
-
-# Or with UV
-uv run activities-viewer run --config config.yaml
-
-# Custom port
-activities-viewer run --config config.yaml --port 8502
-
-# Verbose output
-activities-viewer run --config config.yaml --verbose
-```
-
-### 3. Validate Configuration
-
-Before running the dashboard, validate your setup:
-
-```bash
-activities-viewer validate --config config.yaml
-```
-
-This will check:
-- Configuration file syntax
-- All required data files exist
-- File counts and basic statistics
-
-## Configuration File Format
-
-The configuration uses YAML format with the following structure:
-
-### Required Sections
-
-```yaml
-# Path to data directory (absolute or relative to config file)
-data_dir: "../dev/data_enriched"
-
-# File paths within data_dir (relative paths)
-activities_enriched_file: "activities_enriched.csv"
-activity_summary_file: "activity_summary.json"
-streams_dir: "Streams"
-```
-
-### Athlete Profile
-
-```yaml
-ftp: 285.0              # Functional Threshold Power in watts
-weight_kg: 77.0         # Body weight in kilograms
-max_hr: 185             # Maximum heart rate in bpm
-```
-
-### Optional: Application Settings
-
-```yaml
-verbose: false          # Enable debug logging
-cache_ttl: 3600         # Cache time-to-live in seconds
-page_title: "Activities Viewer"
-page_icon: "🚴"
-```
-
-### Optional: AI Features (Phase 2)
-
-```yaml
-google_api_key: "your-api-key"      # Gemini API key
-qdrant_url: "http://localhost:6333"  # Vector DB URL
-```
-
-### Optional: Database (Phase 3)
-
-```yaml
-database_url: "postgresql://user:pass@localhost:5432/db"
-redis_url: "redis://localhost:6379/0"
-```
-
-## Environment Variables
-
-Configuration can also be set via environment variables with the `ACTIVITIES_VIEWER_` prefix:
-
-```bash
-export ACTIVITIES_VIEWER_DATA_DIR=/path/to/data
-export ACTIVITIES_VIEWER_FTP=285
-export ACTIVITIES_VIEWER_WEIGHT_KG=77
-
-activities-viewer run --config config.yaml
-```
-
-### Variable Naming Convention
-
-- YAML: `ftp`
-- Env: `ACTIVITIES_VIEWER_FTP`
-
-- YAML: `weight_kg`
-- Env: `ACTIVITIES_VIEWER_WEIGHT_KG`
-
-- YAML: `activities_enriched_file`
-- Env: `ACTIVITIES_VIEWER_ACTIVITIES_ENRICHED_FILE`
+# CLI & Configuration Reference
 
 ## CLI Commands
 
-### `run` - Start the Dashboard
+### `activities-viewer run`
 
-Start the Streamlit dashboard with the specified configuration.
+Launch the Streamlit dashboard.
 
 ```bash
 activities-viewer run --config config.yaml [OPTIONS]
-
-Options:
-  --config PATH              Path to configuration YAML file (required)
-  --port INTEGER             Port to run Streamlit on (default: 8501)
-  --verbose/--quiet          Enable verbose output (default: quiet)
-  -h, --help                 Show help message
 ```
 
-**Example:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config` | Required | Path to YAML config file |
+| `--port` | 8501 | Streamlit server port |
+| `--verbose` | false | Enable debug logging |
+
+### `activities-viewer sync`
+
+Run the full pipeline: fetch from Strava → analyze → launch dashboard.
 
 ```bash
-# Start dashboard with config validation
-activities-viewer run --config config.yaml --verbose
-
-# Run on custom port
-activities-viewer run --config config.yaml --port 8502
-
-# Quiet mode (suppress logs)
-activities-viewer run --config config.yaml --quiet
+activities-viewer sync --config unified_config.yaml [OPTIONS]
 ```
 
-### `validate` - Check Configuration
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--config` | Required | Path to unified YAML config |
+| `--port` | 8501 | Streamlit server port |
+| `--skip-fetch` | false | Skip Strava API fetch step |
+| `--skip-analyze` | false | Skip analysis step |
+| `--verbose` | false | Enable debug logging |
 
-Validate that all configuration and data files are correct.
+Requires the unified config format with `fetcher`, `analyzer`, and `athlete` sections. See [`examples/unified_config.yaml`](../examples/unified_config.yaml).
+
+### `activities-viewer validate`
+
+Check that a config file is valid and data files are accessible.
 
 ```bash
 activities-viewer validate --config config.yaml
-
-Options:
-  --config PATH    Path to configuration YAML file (required)
-  -h, --help       Show help message
 ```
 
-**Output:**
+### `activities-viewer version`
 
-```
-Configuration Validation Summary
-============================================================
-  data_dir: /path/to/data_enriched
-  activities_enriched_file: /path/to/data_enriched/activities_enriched.csv
-  activity_summary_file: /path/to/data_enriched/activity_summary.json
-  streams_dir: /path/to/data_enriched/Streams
-  ftp: 285.0
-  weight_kg: 77.0
-  max_hr: 185
-  cache_ttl: 3600
-
-  Activities loaded: 1812 records
-  Columns: 140
-  Summary data: 25 keys
-  Stream files: 1812 found
-
-============================================================
-✅ All validations passed!
-============================================================
-```
-
-### `version` - Show Version
-
-Display the installed version of ActivitiesViewer.
+Print the installed version.
 
 ```bash
 activities-viewer version
 ```
 
-## Configuration Loading Order
+## Configuration File
 
-Settings are loaded with the following precedence (highest to lowest):
+ActivitiesViewer uses YAML configuration with [Pydantic](https://docs.pydantic.dev/) validation.
 
-1. **Environment Variables** (e.g., `ACTIVITIES_VIEWER_FTP=290`)
-2. **YAML Configuration File** (passed via `--config` option)
-3. **Default Values** (built-in defaults)
+### Viewer-Only Config (`config.yaml`)
 
-Example with precedence:
+For use with `activities-viewer run`. Requires pre-generated data from StravaAnalyzer.
+
+```yaml
+# ── Data Paths (required) ──
+data_dir: "/path/to/your/data"
+activities_raw_file: "activities_raw.csv"       # Elapsed-time metrics
+activities_moving_file: "activities_moving.csv"  # Moving-time metrics
+streams_dir: "Streams"                           # Per-activity streams
+
+# Legacy single-file (if you don't have the dual-file format)
+# activities_enriched_file: "activities_enriched.csv"
+
+# ── Athlete Profile (required) ──
+ftp: 285.0              # Functional Threshold Power (watts)
+rider_weight_kg: 77.0   # Weight (kg)
+max_hr: 185             # Maximum heart rate (bpm)
+
+# ── Optional: Critical Power ──
+# Typically computed from data; set manually if you have lab values
+# cp: 260               # Critical Power (watts)
+# w_prime: 25000         # W' anaerobic capacity (joules)
+
+# ── Optional: Goal Tracking ──
+# target_wkg: 4.0
+# target_date: "2026-06-01"
+# baseline_ftp: 285
+# baseline_date: "2025-12-01"
+
+# ── Optional: AI Coach ──
+# google_api_key: "your-gemini-api-key"
+
+# ── App Settings ──
+verbose: false
+cache_ttl: 3600         # Cache TTL in seconds
+page_title: "Activities Viewer"
+page_icon: "🚴"
+```
+
+### Unified Pipeline Config (`unified_config.yaml`)
+
+For use with `activities-viewer sync`. Includes Strava API credentials.
+
+```yaml
+data_dir: "~/.strava_fetcher/data"
+
+athlete:
+  ftp: 285.0
+  rider_weight_kg: 77.0
+  max_hr: 185
+
+fetcher:
+  client_id: "your_client_id"
+  client_secret: "your_client_secret"
+
+analyzer:
+  # ctl_days: 42
+  # atl_days: 7
+
+viewer:
+  page_title: "Activities Viewer"
+  cache_ttl: 3600
+```
+
+See [`examples/unified_config.yaml`](../examples/unified_config.yaml) for the fully annotated version.
+
+### Environment Variables
+
+Any config field can be overridden via environment variable with the `ACTIVITIES_VIEWER_` prefix:
 
 ```bash
-# File has ftp: 285, env has ACTIVITIES_VIEWER_FTP=290
-# Result: ftp = 290 (env wins)
 export ACTIVITIES_VIEWER_FTP=290
-activities-viewer run --config config.yaml
+export ACTIVITIES_VIEWER_DATA_DIR=/data/strava
+export ACTIVITIES_VIEWER_GOOGLE_API_KEY=your-key
 ```
+
+Environment variables take precedence over the config file.
 
 ## Data Directory Structure
 
-ActivitiesViewer expects the following directory structure:
+The `data_dir` should contain the output from StravaAnalyzer:
 
 ```
-data_enriched/
-├── activities_enriched.csv      # Main enriched activities file
-├── activity_summary.json        # Summary statistics
-└── Streams/                     # Activity stream files
-    ├── stream_1001301785.csv
-    ├── stream_10017325050.csv
-    ├── stream_10017325928.csv
-    └── ... (one per activity)
+data_dir/
+├── activities_raw.csv
+├── activities_moving.csv
+├── activity_summary.json    # optional
+├── token.json               # auto-created by Strava OAuth
+└── Streams/
+    ├── stream_12345678.csv
+    └── ...
 ```
 
-### File Specifications
+See [DATA_STRUCTURE.md](DATA_STRUCTURE.md) for column details.
 
-**activities_enriched.csv:**
-- CSV file with enriched activity metrics
-- Generated by StravaAnalyzer
-- Expected columns: start_date, distance, normalized_power, etc.
+## Dashboard Pages
 
-**activity_summary.json:**
-- JSON file with aggregate statistics
-- Contains per-athlete performance data
-- Updated after running StravaAnalyzer
-
-**Streams/stream_*.csv:**
-- Individual activity stream files
-- Naming format: `stream_{activity_id}.csv`
-- Contains time-series data: power, HR, GPS, etc.
-
-## Troubleshooting
-
-### "Configuration file not found"
-
-```
-FileNotFoundError: Configuration file not found: config.yaml
-```
-
-**Solution:** Make sure the config file exists in the current directory or provide the full path:
-
-```bash
-activities-viewer run --config /full/path/to/config.yaml
-```
-
-### "Activities file not found"
-
-```
-Configuration validation failed:
-  - Activities file not found: /path/to/activities_enriched.csv
-```
-
-**Solution:** Check that `data_dir` in your config points to the correct directory with all required files:
-
-```bash
-ls -la /path/to/data_enriched/
-```
-
-### "Streams directory not found"
-
-**Solution:** Ensure the `Streams` subdirectory exists and contains stream files:
-
-```bash
-ls -la /path/to/data_enriched/Streams/ | head
-```
-
-### Port Already in Use
-
-```
-Address already in use
-```
-
-**Solution:** Use a different port:
-
-```bash
-activities-viewer run --config config.yaml --port 8502
-```
-
-### Validation Passes But Dashboard Won't Start
-
-- Check internet connection (for Streamlit initialization)
-- Verify all dependencies are installed: `uv sync`
-- Try with `--verbose` flag for more information:
-
-```bash
-activities-viewer run --config config.yaml --verbose
-```
-
-## Integration with StravaAnalyzer
-
-ActivitiesViewer is designed to work with data from [StravaAnalyzer](https://github.com/hope0hermes/StravaAnalyzer).
-
-### Workflow
-
-1. **Generate enriched data:**
-   ```bash
-   cd ../StravaAnalyzer
-   strava-analyzer run --config config.yaml
-   ```
-
-2. **Create ActivitiesViewer config:**
-   ```bash
-   cd ../ActivitiesViewer
-   cp examples/config.yaml config.yaml
-   # Edit config.yaml to point to StravaAnalyzer's output
-   ```
-
-3. **Run dashboard:**
-   ```bash
-   activities-viewer run --config config.yaml
-   ```
-
-## Next Steps
-
-- See [README.md](../README.md) for general information
-- Check [SETUP.md](../docs/SETUP.md) for detailed setup instructions
-- Review the [Implementation Plan](../DASHBOARD_IMPLEMENTATION_PLAN.md) for features and roadmap
+| Page | Description |
+|------|-------------|
+| **Home** | Goal tracking, PMC, recent activities |
+| **Analysis** | Fluid explorer with Overview / Physiology / Power Profile / Recovery modes |
+| **Activity Detail** | Single activity deep dive with route map |
+| **AI Coach** | Natural language training queries (requires Gemini API key) |
+| **Training Plan** | AI-generated periodized plans with TSS tracking |
+| **Fitness Estimation** | Auto-estimate FTP and max HR from your data |
+| **Strava Connect** | Browser-based OAuth (for Docker deployments) |
+| **Settings** | Edit athlete profile and config from the UI |
