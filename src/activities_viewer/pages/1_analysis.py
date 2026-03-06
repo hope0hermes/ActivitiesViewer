@@ -1020,14 +1020,14 @@ def render_physiology_view(
         # Add device legend if device color coding is available
         if "device_name" in ef_trends.columns and not ef_trends["device_name"].isna().all():
             device_legend = create_device_legend(ef_trends["device_name"].unique())
-            for device_name, color in device_legend.items():
+            for item in device_legend:
                 fig.add_trace(
                     go.Scatter(
                         x=[None],
                         y=[None],
                         mode="markers",
-                        name=device_name,
-                        marker={"size": 8, "color": color},
+                        name=item["name"],
+                        marker={"size": 8, "color": item["color"]},
                         showlegend=True,
                         hoverinfo="skip",
                     )
