@@ -6,6 +6,7 @@ Chat interface for analyzing training data with Gemini.
 import json
 import logging
 import os
+import re
 from pathlib import Path
 
 import streamlit as st
@@ -68,6 +69,212 @@ def _get_training_plan_context() -> str | None:
     return None
 
 
+def _parse_plan_modifications(response: str) -> tuple[dict | None, str]:
+    """
+    Extract a plan_update JSON block from the LLM response.
+
+    The LLM is instructed to embed modifications in a fenced code block:
+
+        ```plan_update
+        {"weeks": {...}, "plan": {...}, "summary": "..."}
+        ```
+
+    Args:
+        response: Raw LLM response text.
+
+    Returns:
+        Tuple of (parsed modifications dict or None, display text with block removed).
+    """
+    pattern = r"```plan_update\s*\n(.*?)\n\s*```"
+    match = re.search(pattern, response, re.DOTALL)
+
+    if not match:
+        return None, response
+
+    json_str = match.group(1).strip()
+    try:
+        modifications = json.loads(json_str)
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse plan_update JSON: {e}")
+        return None, response
+
+    if not isinstance(modifications, dict):
+        logger.warning("plan_update block is not a JSON object")
+        return None, response
+
+    # Remove the fenced block from the displayed text
+    display_text = response[: match.start()] + response[match.end() :]
+    display_text = display_text.strip()
+
+    return modifications, display_text
+
+
+def _response_describes_plan_changes(response: str) -> bool:
+    """
+    Heuristic check: does the LLM response describe concrete plan modifications?
+
+    Looks for patterns like "Week 5 ... TSS", "reduce volume", "adjust the plan",
+    "here is the plan update", etc. Returns True only when multiple signals are
+    present to avoid false positives on purely advisory answers.
+    """
+    response_lower = response.lower()
+
+    # Strong signals that the LLM is presenting concrete changes
+    strong_signals = [
+        r"here\s+is\s+the\s+plan\s+update",
+        r"(?:i(?:'ve|'ll| have| will)\s+)?(?:adjust|modif|updat|chang)\w*\s+(?:the\s+)?(?:plan|week)",
+        r"week\s+\d+.*?(?:tss|hours|recovery|taper|workouts?)\s*[=:]",
+        r"(?:new|updated|revised|modified)\s+(?:plan|week|target|tss|hours)",
+    ]
+
+    # Contextual signals
+    contextual_signals = [
+        r"reduce\s+(?:volume|tss|hours|load)",
+        r"increase\s+(?:volume|tss|hours|load)",
+        r"(?:swap|replace|change)\s+(?:the\s+)?workouts?",
+        r"recovery\s+week",
+        r"maintenance\s+(?:and|&)\s+mobility",
+        r"tss\s*(?:=|:|\bto\b)\s*\d+",
+        r"hours?\s*(?:=|:|\bto\b)\s*\d+",
+    ]
+
+    strong_count = sum(1 for p in strong_signals if re.search(p, response_lower))
+    contextual_count = sum(1 for p in contextual_signals if re.search(p, response_lower))
+
+    # Need at least 1 strong signal + 1 contextual, or 3+ contextual
+    return (strong_count >= 1 and contextual_count >= 1) or contextual_count >= 3
+
+
+def _extract_modifications_via_llm(
+    client: GeminiClient,
+    coaching_response: str,
+    plan_context: str,
+) -> dict | None:
+    """
+    Second-pass LLM call: extract structured plan modifications from a
+    conversational coaching response that describes changes but didn't
+    include the structured block.
+
+    Args:
+        client: The GeminiClient to use.
+        coaching_response: The LLM's conversational response describing changes.
+        plan_context: Serialized current training plan.
+
+    Returns:
+        Parsed modifications dict, or None on failure.
+    """
+    extraction_prompt = f"""You are a JSON extraction assistant. Your ONLY job is to read the
+coaching response below and produce a single JSON object that captures
+the concrete training plan modifications described in it.
+
+=== CURRENT TRAINING PLAN ===
+{plan_context}
+
+=== COACHING RESPONSE (describes the desired changes) ===
+{coaching_response}
+
+=== YOUR TASK ===
+Output ONLY a valid JSON object (no markdown, no explanation, no extra text)
+with this exact structure:
+
+{{
+  "weeks": {{
+    "<week_number>": {{
+      "target_tss": <int or omit>,
+      "target_hours": <float or omit>,
+      "tid_z1": <float or omit>,
+      "tid_z2": <float or omit>,
+      "tid_z3": <float or omit>,
+      "key_workouts": [<list of strings> or omit],
+      "recovery_notes": "<string or omit>",
+      "is_recovery_week": <bool or omit>,
+      "is_taper_week": <bool or omit>
+    }}
+  }},
+  "plan": {{
+    "name": "<string or omit>",
+    "goal": "<string or omit>",
+    "target_ftp": <float or omit>
+  }},
+  "summary": "<one-line description of all changes>"
+}}
+
+Rules:
+- Only include fields that are being changed (omit unchanged fields).
+- Week numbers are 1-based integers used as string keys.
+- "plan" and "weeks" keys are optional — only include what's changing.
+- "summary" is always required.
+- Output ONLY the JSON object, nothing else."""
+
+    try:
+        raw = client.get_response(extraction_prompt)
+    except Exception as e:
+        logger.warning(f"Extraction LLM call failed: {e}")
+        return None
+
+    # Strip any markdown fencing the LLM might have wrapped around it
+    cleaned = raw.strip()
+    cleaned = re.sub(r"^```(?:json)?\s*\n?", "", cleaned)
+    cleaned = re.sub(r"\n?\s*```$", "", cleaned)
+    cleaned = cleaned.strip()
+
+    try:
+        modifications = json.loads(cleaned)
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse extraction response as JSON: {e}\nRaw: {cleaned[:500]}")
+        return None
+
+    if not isinstance(modifications, dict):
+        return None
+
+    # Sanity: must have at least "weeks" or "plan" key
+    if "weeks" not in modifications and "plan" not in modifications:
+        logger.warning("Extraction produced JSON with neither 'weeks' nor 'plan' keys")
+        return None
+
+    return modifications
+
+
+def _apply_and_save_plan_modifications(modifications: dict) -> list[str] | None:
+    """
+    Load the current plan, apply modifications, and save back to disk.
+
+    Args:
+        modifications: Parsed modification dict from the LLM.
+
+    Returns:
+        List of change descriptions, or None on failure.
+    """
+    settings = st.session_state.get("settings")
+    if not settings:
+        logger.warning("No settings in session — cannot modify plan")
+        return None
+
+    plan_file = getattr(settings, "training_plan_file", None)
+    if not plan_file:
+        logger.warning("No training_plan_file configured")
+        return None
+
+    plan_path = Path(plan_file)
+    plan_service = TrainingPlanService()
+    plan = plan_service.load_plan(plan_path)
+
+    if plan is None:
+        logger.warning(f"No training plan found at {plan_path}")
+        return None
+
+    plan, changes = plan_service.apply_modifications(plan, modifications)
+    plan_service.save_plan(plan, plan_path)
+    logger.info(f"Saved modified training plan to {plan_path}")
+
+    # Update session state so the Training Plan page picks up changes
+    # without needing a full session restart.
+    st.session_state.training_plan = plan
+    st.session_state.pop("plan_load_attempted", None)
+
+    return changes
+
+
 def main():
     st.title("🤖 AI Coach")
 
@@ -80,6 +287,7 @@ def main():
 - Review **recent trends**: monthly progression (last 6 months), weekly summaries (last 4 weeks), efficiency factor trends
 - Deep-dive into **specific activities**: power, HR, cadence, speed, altitude streams
 - **GPS route analysis** with reverse-geocoded street names and waypoints
+- **Modify your training plan** when asked (e.g. swap workouts, adjust TSS targets, mark recovery weeks)
 - Quick-prompt shortcuts for common questions (weekly summary, FTP trend, goal progress, etc.)
 
 **What context is sent to the LLM:**
@@ -108,7 +316,7 @@ def main():
 - GPS reverse geocoding is rate-limited (1 req/sec via Nominatim) and may time out
 - **Conversation memory**: the last 10 exchanges from previous sessions are injected as context so the LLM can reference earlier advice (stored in `~/.activitiesviewer/chat_history.json`, max 50 exchanges)
 - **Long-term memory**: when raw history reaches 50 exchanges, the LLM consolidates them into a structured summary capturing key insights, advice, and progress — these summaries persist indefinitely (up to 20 blocks) and are always included as context
-- Cannot modify your data or trigger Strava syncs
+- Cannot trigger Strava syncs or modify activity data
 - Token limits may truncate context for very large datasets
 - Use the **Clear** buttons in the sidebar to reset stored conversations or memory
         """)
@@ -269,6 +477,13 @@ def main():
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
+            # Show plan modification notification inline after the message
+            notification = message.get("plan_notification")
+            if notification:
+                if notification["type"] == "success":
+                    st.success(notification["text"], icon="📝")
+                else:
+                    st.warning(notification["text"])
 
     # Handle quick prompts or chat input
     prompt = None
@@ -312,6 +527,46 @@ def main():
                 - Provide guidance on current training phase and periodization
                 - Reference key events and taper periods
                 If no plan is present, suggest the user generate one on the Training Plan page.
+
+                TRAINING PLAN MODIFICATIONS: You can modify the training plan when the user
+                asks you to. Examples: "make week 5 a recovery week", "increase TSS for the
+                build phase", "swap workouts in week 3", "reduce hours next week", etc.
+
+                When you modify the plan, you MUST:
+                1. Explain the changes conversationally in your response.
+                2. Include a ```plan_update``` fenced code block with a JSON object describing
+                   the exact changes. This block will be parsed and applied automatically.
+
+                The JSON format is:
+                ```plan_update
+                {
+                  "weeks": {
+                    "<week_number>": {
+                      "target_tss": <int>,
+                      "target_hours": <float>,
+                      "tid_z1": <float>, "tid_z2": <float>, "tid_z3": <float>,
+                      "key_workouts": ["workout 1", "workout 2"],
+                      "recovery_notes": "notes",
+                      "is_recovery_week": <bool>,
+                      "is_taper_week": <bool>
+                    }
+                  },
+                  "plan": {
+                    "name": "...", "goal": "...", "target_ftp": <float>
+                  },
+                  "summary": "Brief description of all changes made"
+                }
+                ```
+
+                Rules for the plan_update block:
+                - Only include fields you are actually changing (omit unchanged fields).
+                - Week numbers are 1-based integers (use as string keys in the JSON).
+                - "plan" key is optional — only include it for plan-level changes.
+                - "weeks" key is optional — only include it for week-level changes.
+                - tid_z1 + tid_z2 + tid_z3 should equal 100 when you change intensity distribution.
+                - Always include "summary" with a brief description.
+                - Do NOT modify the plan unless the user explicitly asks for a change.
+                - When suggesting changes, first explain your reasoning, then include the block.
 
                 STREAM DATA: You have TWO levels of stream access:
 
@@ -363,11 +618,47 @@ def main():
                 # Get response
                 response = client.get_response(final_prompt)
 
-            message_placeholder.markdown(response)
-            st.session_state.messages.append({"role": "assistant", "content": response})
+            # Check for plan modifications in the response
+            modifications, display_text = _parse_plan_modifications(response)
+
+            # Fallback: if no structured block but the response describes
+            # plan changes, do a focused extraction call
+            if modifications is None and _response_describes_plan_changes(response):
+                plan_ctx = _get_training_plan_context()
+                if plan_ctx:
+                    with st.spinner("Applying plan modifications..."):
+                        modifications = _extract_modifications_via_llm(
+                            client, response, plan_ctx,
+                        )
+                    # display_text is unchanged (the full conversational response)
+
+            plan_notification = None
+            if modifications:
+                changes = _apply_and_save_plan_modifications(modifications)
+                if changes:
+                    message_placeholder.markdown(display_text)
+                    change_list = "\n".join(f"- {c}" for c in changes)
+                    notification_text = f"✅ Training plan updated!\n\n{change_list}"
+                    st.success(notification_text, icon="📝")
+                    plan_notification = {"type": "success", "text": notification_text}
+                else:
+                    message_placeholder.markdown(display_text)
+                    notification_text = (
+                        "⚠️ Plan modification was suggested but could not be applied. "
+                        "Make sure you have an active training plan."
+                    )
+                    st.warning(notification_text)
+                    plan_notification = {"type": "warning", "text": notification_text}
+            else:
+                message_placeholder.markdown(display_text)
+
+            msg = {"role": "assistant", "content": display_text}
+            if plan_notification:
+                msg["plan_notification"] = plan_notification
+            st.session_state.messages.append(msg)
 
             # Persist exchange to disk
-            save_chat_exchange(prompt, response)
+            save_chat_exchange(prompt, display_text)
 
             # Consolidate memory if threshold reached
             if needs_consolidation():

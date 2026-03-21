@@ -932,6 +932,104 @@ Important:
 
         return plan, analysis
 
+    def apply_modifications(
+        self,
+        plan: TrainingPlan,
+        modifications: dict,
+    ) -> tuple[TrainingPlan, list[str]]:
+        """
+        Apply structured modifications from the AI Coach to a training plan.
+
+        Accepts a dict with optional keys:
+        - "weeks": dict mapping week number (str) to field changes
+        - "plan": dict of plan-level field changes (goal, target_ftp, name)
+        - "summary": human-readable summary of the changes
+
+        Args:
+            plan: The training plan to modify.
+            modifications: Parsed modification dict from LLM output.
+
+        Returns:
+            Tuple of (modified plan, list of change descriptions).
+        """
+        import logging
+        log = logging.getLogger(__name__)
+        changes: list[str] = []
+
+        # Allowed week-level fields (prevent arbitrary attribute writes)
+        allowed_week_fields = {
+            "target_tss", "target_hours", "target_ctl",
+            "tid_z1", "tid_z2", "tid_z3",
+            "key_workouts", "recovery_notes",
+            "is_recovery_week", "is_taper_week",
+        }
+
+        # Allowed plan-level fields
+        allowed_plan_fields = {"name", "goal", "target_ftp"}
+
+        # ── Plan-level changes ────────────────────────────────────────
+        plan_changes = modifications.get("plan", {})
+        if isinstance(plan_changes, dict):
+            for field, value in plan_changes.items():
+                if field not in allowed_plan_fields:
+                    log.warning(f"Ignoring disallowed plan field: {field}")
+                    continue
+                old_value = getattr(plan, field, None)
+                setattr(plan, field, value)
+                changes.append(f"Plan {field}: {old_value} → {value}")
+
+        # ── Week-level changes ────────────────────────────────────────
+        week_changes = modifications.get("weeks", {})
+        if isinstance(week_changes, dict):
+            week_lookup = {w.week_number: w for w in plan.weeks}
+            for week_num_str, week_mods in week_changes.items():
+                try:
+                    week_num = int(week_num_str)
+                except (ValueError, TypeError):
+                    log.warning(f"Invalid week number: {week_num_str}")
+                    continue
+
+                week = week_lookup.get(week_num)
+                if not week:
+                    log.warning(f"Week {week_num} not found in plan (1-{len(plan.weeks)})")
+                    continue
+
+                if not isinstance(week_mods, dict):
+                    continue
+
+                for field, value in week_mods.items():
+                    if field not in allowed_week_fields:
+                        log.warning(f"Ignoring disallowed week field: {field}")
+                        continue
+
+                    old_value = getattr(week, field, None)
+
+                    # Type coercion for known fields
+                    if field == "target_tss" and isinstance(value, (int, float)):
+                        value = int(value)
+                    elif field == "target_hours" and isinstance(value, (int, float)):
+                        value = round(float(value), 1)
+                    elif field in ("tid_z1", "tid_z2", "tid_z3") and isinstance(value, (int, float)):
+                        value = float(value)
+                    elif field == "key_workouts" and isinstance(value, list):
+                        value = [str(w) for w in value]
+                    elif field in ("is_recovery_week", "is_taper_week"):
+                        value = bool(value)
+
+                    setattr(week, field, value)
+                    changes.append(f"Week {week_num} {field}: {old_value} → {value}")
+
+        # ── Recalculate CTL after TSS changes ─────────────────────────
+        if any("target_tss" in c for c in changes):
+            self._recalculate_ctl_progression(plan)
+
+        summary = modifications.get("summary", "")
+        if summary:
+            changes.insert(0, f"Summary: {summary}")
+
+        log.info(f"Applied {len(changes)} plan modifications")
+        return plan, changes
+
     def _recalculate_ctl_progression(self, plan: TrainingPlan) -> None:
         """Recalculate target CTL after AI-adjusted TSS values."""
         # Start from whatever the first week's CTL is
