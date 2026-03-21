@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-03-21
+
+### Changed
+- feat(ai-coach): enable training plan modification from chat (#29)
+
+
 ## [1.7.2] - 2026-03-06
 
 ### Changed
