@@ -163,13 +163,20 @@ class TestBuildFetcherSettings:
         assert kw["sync"] == {}
 
     @patch("strava_fetcher.Settings")
+    @patch.dict("os.environ", {}, clear=False)
     def test_no_strava_api_when_empty(self, mock_settings_cls, tmp_path):
         config = MINIMAL_UNIFIED.copy()
         config["fetcher"] = {}
-        orch = PipelineOrchestrator(config, tmp_path)
-        orch._build_fetcher_settings()
-        kw = mock_settings_cls.call_args[1]
-        assert kw["strava_api"] == {}
+        import os
+        # Ensure env-var fallback is also absent so strava_api stays empty
+        env_backup = {k: os.environ.pop(k) for k in ("STRAVA_CLIENT_ID", "STRAVA_CLIENT_SECRET") if k in os.environ}
+        try:
+            orch = PipelineOrchestrator(config, tmp_path)
+            orch._build_fetcher_settings()
+            kw = mock_settings_cls.call_args[1]
+            assert kw["strava_api"] == {}
+        finally:
+            os.environ.update(env_backup)
 
     @patch("strava_fetcher.Settings")
     def test_token_file_forwarded(self, mock_settings_cls, tmp_path):

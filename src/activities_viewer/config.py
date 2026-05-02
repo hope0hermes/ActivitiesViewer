@@ -237,6 +237,15 @@ class Settings(BaseSettings):
         else:
             self.streams_dir = self.streams_dir.resolve()
 
+        # Resolve training_plan_file relative to data_dir so the path is
+        # invariant to the working directory at Streamlit startup.
+        if self.training_plan_file is not None:
+            plan_path = Path(self.training_plan_file).expanduser()
+            if not plan_path.is_absolute():
+                self.training_plan_file = str(self.data_dir / plan_path)
+            else:
+                self.training_plan_file = str(plan_path.resolve())
+
     @field_validator("data_dir", mode="before")
     @classmethod
     def expand_user_path(cls, v: str | Path) -> Path:

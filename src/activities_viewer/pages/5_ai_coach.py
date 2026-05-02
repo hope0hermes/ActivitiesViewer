@@ -235,7 +235,7 @@ Rules:
     return modifications
 
 
-def _apply_and_save_plan_modifications(modifications: dict) -> list[str] | None:
+def _apply_and_save_plan_modifications(modifications: dict) -> tuple[list[str] | None, str | None]:
     """
     Load the current plan, apply modifications, and save back to disk.
 
@@ -243,25 +243,33 @@ def _apply_and_save_plan_modifications(modifications: dict) -> list[str] | None:
         modifications: Parsed modification dict from the LLM.
 
     Returns:
-        List of change descriptions, or None on failure.
+        Tuple of (list of change descriptions or None on failure, failure reason string or None).
     """
     settings = st.session_state.get("settings")
     if not settings:
-        logger.warning("No settings in session — cannot modify plan")
-        return None
+        reason = "No settings found in session state."
+        logger.warning(f"Cannot modify plan: {reason}")
+        return None, reason
 
     plan_file = getattr(settings, "training_plan_file", None)
     if not plan_file:
-        logger.warning("No training_plan_file configured")
-        return None
+        reason = "No training_plan_file configured in settings."
+        logger.warning(f"Cannot modify plan: {reason}")
+        return None, reason
 
     plan_path = Path(plan_file)
+    if not plan_path.exists():
+        reason = f"Plan file not found at `{plan_path}`. Generate a plan on the Training Plan page first."
+        logger.warning(f"Cannot modify plan: {reason}")
+        return None, reason
+
     plan_service = TrainingPlanService()
     plan = plan_service.load_plan(plan_path)
 
     if plan is None:
-        logger.warning(f"No training plan found at {plan_path}")
-        return None
+        reason = f"Failed to parse the training plan at `{plan_path}`. The file may be corrupted."
+        logger.warning(f"Cannot modify plan: {reason}")
+        return None, reason
 
     plan, changes = plan_service.apply_modifications(plan, modifications)
     plan_service.save_plan(plan, plan_path)
@@ -272,7 +280,7 @@ def _apply_and_save_plan_modifications(modifications: dict) -> list[str] | None:
     st.session_state.training_plan = plan
     st.session_state.pop("plan_load_attempted", None)
 
-    return changes
+    return changes, None
 
 
 def main():
@@ -634,7 +642,7 @@ def main():
 
             plan_notification = None
             if modifications:
-                changes = _apply_and_save_plan_modifications(modifications)
+                changes, failure_reason = _apply_and_save_plan_modifications(modifications)
                 if changes:
                     message_placeholder.markdown(display_text)
                     change_list = "\n".join(f"- {c}" for c in changes)
@@ -644,10 +652,14 @@ def main():
                 else:
                     message_placeholder.markdown(display_text)
                     notification_text = (
-                        "⚠️ Plan modification was suggested but could not be applied. "
-                        "Make sure you have an active training plan."
+                        "⚠️ Plan modification was suggested but could not be applied.\n\n"
+                        f"Reason: {failure_reason}"
                     )
                     st.warning(notification_text)
+                    st.toast(
+                        "💡 Go to the **Training Plan** page to generate or load a plan first.",
+                        icon="📋",
+                    )
                     plan_notification = {"type": "warning", "text": notification_text}
             else:
                 message_placeholder.markdown(display_text)

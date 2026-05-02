@@ -220,7 +220,7 @@ class ActivityContextBuilder:
         context += "\n"
 
         # ═══════════════════════════════════════════════════════════════════════
-        # LAST 4 WEEKS SUMMARY
+        # LAST 4 WEEKS SUMMARY (chat context: week-level detail)
         # ═══════════════════════════════════════════════════════════════════════
         context += "=== LAST 4 WEEKS SUMMARY ===\n"
         context += self._build_weekly_summaries(activities, weeks=4)
@@ -248,7 +248,7 @@ class ActivityContextBuilder:
         - Quarterly FTP/W/kg evolution (long-term trajectory)
         - 6-month monthly trends (recent load & intensity)
         - Efficiency Factor trends (aerobic fitness arc)
-        - Last 4 weeks summary (current training pattern)
+        - Last 26 weeks summary (6-month training pattern)
 
         Excludes stream data and GPS — not needed for plan-level decisions.
 
@@ -343,9 +343,9 @@ class ActivityContextBuilder:
         context += self._build_ef_trends(activities)
         context += "\n"
 
-        # ─── LAST 4 WEEKS ───────────────────────────────────────────────
-        context += "=== LAST 4 WEEKS SUMMARY ===\n"
-        context += self._build_weekly_summaries(activities, weeks=4)
+        # ─── LAST 26 WEEKS (detailed recent pattern for plan design) ────
+        context += "=== LAST 26 WEEKS SUMMARY (Recent Training Pattern) ===\n"
+        context += self._build_weekly_summaries(activities, weeks=26)
         context += "\n"
 
         # ─── TRAINING LOAD PATTERNS ─────────────────────────────────────
@@ -676,7 +676,15 @@ class ActivityContextBuilder:
             tss_col = "moving_training_stress_score" if "moving_training_stress_score" in week_data.columns else "training_stress_score"
             total_tss = week_data[tss_col].sum() if tss_col in week_data.columns else 0
 
-            output += f"{week_label}: {total_activities} rides, {total_hours:.1f}h, TSS={total_tss:.0f}\n"
+            line = f"{week_label}: {total_activities} rides, {total_hours:.1f}h, TSS={total_tss:.0f}"
+
+            # Append average Intensity Factor if available
+            if "intensity_factor" in week_data.columns:
+                avg_if = week_data["intensity_factor"].dropna()
+                if not avg_if.empty:
+                    line += f", avg IF={avg_if.mean():.2f}"
+
+            output += line + "\n"
 
         return output
 
