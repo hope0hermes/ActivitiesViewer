@@ -59,14 +59,26 @@ athlete:
 # Credentials for the Strava API.  Get yours at:
 #   https://www.strava.com/settings/api
 #
-# IMPORTANT: Never commit real credentials to version control!
-# You can also use environment variables instead:
-#   export STRAVA_CLIENT_ID="your_id"
-#   export STRAVA_CLIENT_SECRET="your_secret"
+# RECOMMENDED: Use environment variables — never put real credentials in files
+# you might accidentally commit to version control.
+#
+#   export STRAVA_CLIENT_ID="your_numeric_client_id"
+#   export STRAVA_CLIENT_SECRET="your_secret_string"
+#
+# If the fields below are commented out (or the section is empty), the pipeline
+# will automatically fall back to the STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET
+# environment variables.  No YAML change needed once the env vars are set.
+#
+# If you prefer to store credentials here instead, uncomment and fill in:
+#   client_id: "your_client_id_here"
+#   client_secret: "your_client_secret_here"
 
 fetcher:
-  client_id: "your_client_id_here"
-  client_secret: "your_client_secret_here"
+  # client_id and client_secret are read from STRAVA_CLIENT_ID /
+  # STRAVA_CLIENT_SECRET environment variables (see comment above).
+  # Uncomment the lines below only if you prefer file-based credentials:
+  # client_id: "your_client_id_here"
+  # client_secret: "your_client_secret_here"
 
   # ---- Optional path overrides ----
   # Uncomment to point to a token stored outside data_dir (e.g. if you use

@@ -22,6 +22,16 @@ from activities_viewer.services.activity_service import ActivityService
 
 # Standard phase templates
 PHASE_TEMPLATES = {
+    "foundation": TrainingPhase(
+        name="Foundation",
+        weeks=4,
+        description="Establish consistent training habits and aerobic base with low intensity",
+        tid_z1=88,
+        tid_z2=10,
+        tid_z3=2,
+        intensity_factor_target=0.60,
+        tss_ramp_rate=3.0,
+    ),
     "base": TrainingPhase(
         name="Base",
         weeks=8,
@@ -76,6 +86,12 @@ PHASE_TEMPLATES = {
 
 # Key workout templates by phase
 WORKOUT_TEMPLATES = {
+    "foundation": [
+        "Easy aerobic ride (Z1 only, 60-90min)",
+        "Long easy ride (Z1-Z2, 2-3h)",
+        "Technique & cadence drills (Z1, 45-60min)",
+        "Active recovery or rest",
+    ],
     "base": [
         "Long endurance ride (Z1-Z2, 3-4h)",
         "Sweet spot intervals (2x20min @ 88-93% FTP)",
@@ -263,8 +279,27 @@ class TrainingPlanService:
             phases.append(PHASE_TEMPLATES["base"].model_copy(update={"weeks": base_weeks}))
             phases.append(PHASE_TEMPLATES["build"].model_copy(update={"weeks": build_weeks}))
             phases.append(PHASE_TEMPLATES["taper"].model_copy(update={"weeks": taper_weeks}))
+        elif total_weeks >= 36:
+            # Long plan (36+ weeks) — split Base into Foundation + Base sub-phases
+            # so a single 14+ week aerobic block doesn't become monotonous.
+            total_base_weeks = int(total_weeks * 0.40)
+            foundation_weeks = total_base_weeks // 2
+            base_weeks = total_base_weeks - foundation_weeks
+            build_weeks = int(total_weeks * 0.30)
+            specialty_weeks = int(total_weeks * 0.20)
+            taper_weeks = total_weeks - total_base_weeks - build_weeks - specialty_weeks
+
+            if taper_weeks < 1:
+                taper_weeks = 1
+                specialty_weeks -= 1
+
+            phases.append(PHASE_TEMPLATES["foundation"].model_copy(update={"weeks": foundation_weeks}))
+            phases.append(PHASE_TEMPLATES["base"].model_copy(update={"weeks": base_weeks}))
+            phases.append(PHASE_TEMPLATES["build"].model_copy(update={"weeks": build_weeks}))
+            phases.append(PHASE_TEMPLATES["specialty"].model_copy(update={"weeks": specialty_weeks}))
+            phases.append(PHASE_TEMPLATES["taper"].model_copy(update={"weeks": taper_weeks}))
         else:
-            # Full periodization
+            # Full periodization (13–35 weeks)
             base_weeks = int(total_weeks * 0.40)
             build_weeks = int(total_weeks * 0.30)
             specialty_weeks = int(total_weeks * 0.20)
@@ -722,6 +757,7 @@ class TrainingPlanService:
         self,
         plan: TrainingPlan,
         athlete_context: str,
+        user_instructions: str | None = None,
     ) -> str:
         """
         Build a prompt that asks the LLM to refine a static training plan
@@ -730,6 +766,8 @@ class TrainingPlanService:
         Args:
             plan: The template-generated plan to refine.
             athlete_context: Output of ActivityContextBuilder.build_training_plan_context().
+            user_instructions: Optional free-text constraints/preferences from the athlete
+                (e.g. "I can only train 3 days a week", "no intervals, keep it aerobic").
 
         Returns:
             Full prompt string for the LLM.
@@ -783,7 +821,7 @@ Important:
 (3-5 bullet points with the most important things for this athlete)
 """
 
-        return f"{system_prompt}\n\n## Athlete Training History\n{athlete_context}\n\n## Template Plan to Refine\n{plan_summary}"
+        return f"{system_prompt}\n\n## Athlete Training History\n{athlete_context}\n\n## Athlete-Specific Instructions\n{user_instructions.strip()}\n\n## Template Plan to Refine\n{plan_summary}" if user_instructions and user_instructions.strip() else f"{system_prompt}\n\n## Athlete Training History\n{athlete_context}\n\n## Template Plan to Refine\n{plan_summary}"
 
     def serialize_plan_for_prompt(self, plan: TrainingPlan) -> str:
         """Serialize a TrainingPlan into a readable prompt section."""
@@ -993,6 +1031,13 @@ Important:
                 if not week:
                     log.warning(f"Week {week_num} not found in plan (1-{len(plan.weeks)})")
                     continue
+
+                # Warn (but still apply) when the week has already been completed
+                if week.actual_tss is not None and week.actual_tss > 0:
+                    changes.append(
+                        f"Week {week_num}: ⚠️ modifying an already-completed week "
+                        f"(actual TSS={week.actual_tss} was logged)"
+                    )
 
                 if not isinstance(week_mods, dict):
                     continue

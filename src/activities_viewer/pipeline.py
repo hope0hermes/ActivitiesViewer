@@ -7,6 +7,7 @@ StravaFetcher / StravaAnalyzer Python APIs directly (no subprocesses).
 
 import importlib.util
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -78,8 +79,14 @@ class PipelineOrchestrator:
         strava_api: dict[str, Any] = {}
         if "client_id" in self.fetcher:
             strava_api["client_id"] = str(self.fetcher["client_id"])
+        elif env_id := os.getenv("STRAVA_CLIENT_ID"):
+            strava_api["client_id"] = env_id
+            logger.debug("Using STRAVA_CLIENT_ID from environment")
         if "client_secret" in self.fetcher:
             strava_api["client_secret"] = str(self.fetcher["client_secret"])
+        elif env_secret := os.getenv("STRAVA_CLIENT_SECRET"):
+            strava_api["client_secret"] = env_secret
+            logger.debug("Using STRAVA_CLIENT_SECRET from environment")
 
         sync_keys = ("max_pages", "retry_interval_seconds", "skip_trainer_activities")
         sync_dict = {k: self.fetcher[k] for k in sync_keys if k in self.fetcher}

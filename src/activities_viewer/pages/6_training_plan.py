@@ -101,12 +101,23 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                 value=datetime.now().date(),
             )
 
-            plan_duration = st.selectbox(
-                "Plan Duration",
-                options=[8, 12, 16, 20, 24],
-                index=2,
-                format_func=lambda x: f"{x} weeks ({x // 4} months)",
-            )
+            use_custom_duration = st.checkbox("Custom duration", key="custom_dur_form")
+            if use_custom_duration:
+                plan_duration = st.number_input(
+                    "Plan Duration (weeks)",
+                    min_value=4,
+                    max_value=104,
+                    value=24,
+                    step=1,
+                    help="Enter any number of weeks (4–104). 52 weeks = full year.",
+                )
+            else:
+                plan_duration = st.selectbox(
+                    "Plan Duration",
+                    options=[8, 12, 16, 20, 24, 36, 48, 52],
+                    index=4,
+                    format_func=lambda x: f"{x} weeks (~{x / 4.33:.0f} months)",
+                )
 
             end_date = start_date + timedelta(weeks=plan_duration)
             st.write(f"**End Date:** {end_date.strftime('%Y-%m-%d')}")
@@ -139,6 +150,20 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                 "Select the AI model in the sidebar."
             ),
         )
+        if ai_enhanced:
+            refinement_instructions = st.text_area(
+                "💬 Additional instructions for AI (optional)",
+                placeholder=(
+                    "E.g. 'I can only train 3 days/week (Mon, Wed, Sat)', "
+                    "'focus on long aerobic rides, no short intervals', "
+                    "'I have a stage race in week 10 — add a light week before it', "
+                    "'keep it simple, I\'m coming back from injury'"
+                ),
+                height=80,
+                key="refinement_instructions_form",
+            )
+        else:
+            refinement_instructions = None
 
         st.markdown("#### Key Events (Optional)")
         st.caption("Add A-races (peak events), B-races (important), or C-races (training)")
@@ -198,7 +223,9 @@ def render_plan_generator(settings: Settings) -> TrainingPlan | None:
                             athlete_context = context_builder.build_training_plan_context(plan=plan)
 
                             # Build refinement prompt
-                            prompt = service.build_plan_refinement_prompt(plan, athlete_context)
+                            prompt = service.build_plan_refinement_prompt(
+                                plan, athlete_context, refinement_instructions
+                            )
 
                             # Call LLM
                             client = GeminiClient(model=ai_model)
@@ -533,6 +560,17 @@ def render_ai_plan_refinement(
     """Render AI plan refinement section with re-run capability."""
     st.subheader("🤖 AI Coach Plan Analysis")
 
+    refinement_instructions = st.text_area(
+        "💬 Additional instructions for AI (optional)",
+        placeholder=(
+            "E.g. 'I can only train 3 days/week (Mon, Wed, Sat)', "
+            "'focus on long aerobic rides, no short intervals', "
+            "'I have a stage race in week 10 — add a light week before it'"
+        ),
+        height=80,
+        key="refinement_instructions_standalone",
+    )
+
     col_run, col_clear = st.columns([1, 1])
     with col_run:
         run_refinement = st.button("🧠 Run AI Plan Refinement", type="primary")
@@ -559,7 +597,9 @@ def render_ai_plan_refinement(
                 context_builder = ActivityContextBuilder(activity_service, settings)
                 athlete_context = context_builder.build_training_plan_context(plan=plan)
 
-                prompt = plan_service.build_plan_refinement_prompt(plan, athlete_context)
+                prompt = plan_service.build_plan_refinement_prompt(
+                    plan, athlete_context, refinement_instructions or None
+                )
 
                 client = GeminiClient(model=selected_model)
                 ai_response = client.get_response(prompt)
